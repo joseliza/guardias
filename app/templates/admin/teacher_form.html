@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if teacher else 'Nuevo' }} profesor{% endblock %}
+{% block content %}
+<h4><i class="bi bi-person"></i> {{ 'Editar' if teacher else 'Nuevo' }} profesor</h4>
+<div class="card mt-3">
+  <div class="card-body">
+    <form method="POST">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Nombre</label>
+          <input type="text" name="name" class="form-control" value="{{ teacher.name if teacher else '' }}" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Apellidos</label>
+          <input type="text" name="surname" class="form-control" value="{{ teacher.surname if teacher else '' }}" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Email</label>
+          <input type="email" name="email" class="form-control" value="{{ teacher.email if teacher else '' }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Rol</label>
+          <select name="role" class="form-select">
+            <option value="teacher" {% if teacher and teacher.role=='teacher' %}selected{% endif %}>Profesorado</option>
+            <option value="extracurricular" {% if teacher and teacher.role=='extracurricular' %}selected{% endif %}>Extraescolares</option>
+            <option value="management" {% if teacher and teacher.role=='management' %}selected{% endif %}>Equipo directivo</option>
+          </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+          {% if teacher %}
+          <div class="form-check mb-2">
+            <input type="checkbox" class="form-check-input" name="active" id="active" {% if teacher.active %}checked{% endif %}>
+            <label class="form-check-label" for="active">Activo</label>
+          </div>
+          {% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Contraseña {{ '(dejar vacío para no cambiar)' if teacher else '' }}</label>
+          <input type="password" name="password" class="form-control" {% if not teacher %}required{% endif %}>
+        </div>
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <a href="{{ url_for('admin.teachers') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

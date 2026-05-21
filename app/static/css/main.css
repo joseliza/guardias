@@ -1,0 +1,5 @@
+body { background-color: #f0f2f5; }
+.navbar-brand { font-size: 1.1rem; }
+.card { border-radius: .5rem; }
+.table th { font-size: .85rem; }
+#chat-box div { border-bottom: 1px solid #e9ecef; padding-bottom: .4rem; }

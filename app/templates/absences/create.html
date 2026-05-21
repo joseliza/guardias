@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Nueva ausencia{% endblock %}
+{% block content %}
+<h4><i class="bi bi-calendar-plus"></i> Registrar ausencia</h4>
+<div class="card mt-3">
+  <div class="card-body">
+    <form method="POST">
+      {% if current_user.is_management %}
+      <div class="mb-3">
+        <label class="form-label">Profesor/a</label>
+        <select name="teacher_id" class="form-select" required>
+          {% for t in teachers %}
+          <option value="{{ t.id }}" {% if t.id == current_user.id %}selected{% endif %}>{{ t.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% else %}
+      <input type="hidden" name="teacher_id" value="{{ current_user.id }}">
+      {% endif %}
+
+      <div class="mb-3">
+        <label class="form-label">Fecha</label>
+        <input type="date" name="date" class="form-control" value="{{ today }}" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Tramos afectados</label>
+        <div class="row g-2">
+          {% for slot in slots %}
+          <div class="col-auto">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="slot_ids" value="{{ slot.id }}" id="slot{{ slot.id }}">
+              <label class="form-check-label" for="slot{{ slot.id }}">{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</label>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Motivo</label>
+        <input type="text" name="reason" class="form-control" placeholder="Enfermedad, formación, etc.">
+      </div>
+
+      <button type="submit" class="btn btn-warning">Registrar ausencia</button>
+      <a href="{{ url_for('absences.index') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Canal de incidencias{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8 offset-md-2">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-chat-dots"></i> Incidencias — {{ channel }}</span>
+      </div>
+      <div class="card-body p-0">
+        <div id="chat-box" class="p-3" style="height:420px;overflow-y:auto;background:#f8f9fa;">
+          {% for msg in messages %}
+          <div class="mb-2">
+            <strong>{{ msg.author.full_name }}</strong>
+            <small class="text-muted ms-2">{{ msg.created_at.strftime('%H:%M') }}</small>
+            <div>{{ msg.message }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-footer">
+        <form id="chat-form" class="d-flex gap-2">
+          <input type="text" id="msg-input" class="form-control" placeholder="Escribe una incidencia..." autocomplete="off">
+          <button class="btn btn-primary" type="submit"><i class="bi bi-send"></i></button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const channel = {{ channel | tojson }};
+const socket = io();
+
+socket.emit('join', { channel });
+
+socket.on('new_message', (data) => {
+  const box = document.getElementById('chat-box');
+  const div = document.createElement('div');
+  div.className = 'mb-2';
+  div.innerHTML = `<strong>${data.author}</strong> <small class="text-muted ms-2">${data.timestamp}</small><div>${data.message}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+});
+
+document.getElementById('chat-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = document.getElementById('msg-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  socket.emit('send_message', { channel, message: msg });
+  input.value = '';
+});
+
+// Scroll al final al cargar
+document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
+</script>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Ausencias{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4><i class="bi bi-calendar-x"></i> Ausencias</h4>
+  <a href="{{ url_for('absences.create') }}" class="btn btn-warning"><i class="bi bi-plus-lg"></i> Nueva ausencia</a>
+</div>
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light"><tr><th>Fecha</th><th>Profesor/a</th><th>Tramo</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+        {% for a in absences %}
+        {% set slot = slots | selectattr('id','eq', a.slot_id) | first %}
+        <tr>
+          <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
+          <td>{{ a.teacher.full_name }}</td>
+          <td>{{ slot.label if slot else a.slot_id }}</td>
+          <td>{{ a.reason or '—' }}</td>
+          <td><span class="badge bg-{{ 'success' if a.status=='returned' else 'warning text-dark' if a.status=='pending' else 'secondary' }}">{{ a.status }}</span></td>
+          <td><a href="{{ url_for('absences.tasks', absence_id=a.id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-list-task"></i> Tareas</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-3">Sin ausencias registradas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

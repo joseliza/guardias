@@ -1,0 +1,37 @@
+Epecificaciones programa guardias:
+
+Profesores deben tener un horario (cargar profesores y horario desde archivo)
+
+Existen diferentes perfiles:
+
+PROFESORADO (cualquier profesor puede:)
+
+Comunicar ausencias
+
+Poner tareas para el grupo/tramo horario en el que faltará.
+
+PROFESORADO DE GUARDIA (cualquier profesor que está de guardia en un tramo horario puede:)
+
+Registra con qué grupo estará en ese tramo horario.
+
+Comunica ausencias detectadas en ese tramo horario.
+
+Informa a equipo directivo si el profesor o profesora se ha incorporado.
+
+Cada profesor tendrá un "carnet de puntos".
+
+En función de los puntos se generará una asignación de profesorado a grupo/tramo de guardia.
+
+EXTRAESCOLARES (los responsables de actividades extraescolares pueden:)
+
+Registro de actividad.
+
+Registro de grupo/día/hora de actividad (así como si afecta a grupo completo o no).
+
+Registro de profesorado acompañante (que debe crear entrada en ausencias de profesorado para ese día) --> Email automático a profesorado acompañante pidiendo que registren las tareas para el grupo/tramo horario en el que faltará.
+
+Si un grupo completo realiza una actividad, entonces el profesorado que quede en el instituto estará disponible en los tramos horarios afectados como profesorado de apoyo en las guardias.
+
+EQUIPO DIRECTIVO
+
+Puede hacer todo lo anterior.

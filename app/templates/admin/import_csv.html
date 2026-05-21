@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Importar CSV{% endblock %}
+{% block content %}
+<h4><i class="bi bi-file-earmark-arrow-up"></i> Importar {{ target }} desde CSV</h4>
+
+{% if target == 'profesores' %}
+<div class="alert alert-info mt-3">
+  <strong>Formato esperado:</strong> El CSV debe tener cabecera con las columnas:<br>
+  <code>email, nombre, apellidos, rol, contraseña</code><br>
+  <small>El rol puede ser: <code>teacher</code>, <code>extracurricular</code>, <code>management</code>. Si se omite la contraseña se asigna <code>cambiar123</code>.</small>
+</div>
+{% else %}
+<div class="alert alert-info mt-3">
+  <strong>Formato esperado:</strong> El CSV debe tener cabecera con las columnas:<br>
+  <code>email_profesor, dia, tramo, grupo, es_guardia</code><br>
+  <small>día: 0=Lunes…4=Viernes | tramo: 1–7 | es_guardia: true/false</small>
+</div>
+{% endif %}
+
+<div class="card mt-3">
+  <div class="card-body">
+    <form method="POST" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label class="form-label">Fichero CSV</label>
+        <input type="file" name="csv_file" class="form-control" accept=".csv" required>
+      </div>
+      <button type="submit" class="btn btn-primary">Importar</button>
+      <a href="{{ url_for('admin.teachers') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

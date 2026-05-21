@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+instance/
+migrations/versions/
+*.db
+*.sqlite
+.DS_Store

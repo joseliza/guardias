@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Actividades extraescolares{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4><i class="bi bi-backpack"></i> Actividades extraescolares</h4>
+  <a href="{{ url_for('activities.create') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nueva actividad</a>
+</div>
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light"><tr><th>Fecha</th><th>Nombre</th><th>Tramos</th><th>Grupos</th><th>Acompañantes</th></tr></thead>
+      <tbody>
+        {% for a in activities %}
+        <tr>
+          <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
+          <td>{{ a.name }}</td>
+          <td>{{ a.slot_ids }}</td>
+          <td>{% for ag in a.groups %}{{ ag.group.name }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+          <td>{% for at in a.accompanying_teachers %}{{ at.teacher.full_name }} {% if at.email_sent %}<i class="bi bi-envelope-check text-success"></i>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-3">Sin actividades registradas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

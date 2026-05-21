@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Nueva actividad extraescolar{% endblock %}
+{% block content %}
+<h4><i class="bi bi-backpack"></i> Registrar actividad extraescolar</h4>
+<div class="card mt-3">
+  <div class="card-body">
+    <form method="POST">
+      <div class="row g-3">
+        <div class="col-md-8">
+          <label class="form-label">Nombre de la actividad</label>
+          <input type="text" name="name" class="form-control" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Fecha</label>
+          <input type="date" name="date" class="form-control" required>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Descripción</label>
+          <textarea name="description" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Tramos afectados</label>
+          <div class="d-flex flex-wrap gap-3">
+            {% for slot in slots %}
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="slot_ids" value="{{ slot.id }}" id="slot{{ slot.id }}">
+              <label class="form-check-label" for="slot{{ slot.id }}">{{ slot.label }}</label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Grupos participantes</label>
+          {% for g in groups %}
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <input type="checkbox" class="form-check-input" name="group_ids" value="{{ g.id }}" id="grp{{ g.id }}">
+            <label for="grp{{ g.id }}" class="form-check-label me-2">{{ g.name }}</label>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" name="whole_group_{{ g.id }}" id="whole{{ g.id }}" checked>
+              <label class="form-check-label small text-muted" for="whole{{ g.id }}">Grupo completo</label>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Profesores acompañantes</label>
+          {% for t in teachers %}
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="teacher_ids" value="{{ t.id }}" id="tch{{ t.id }}">
+            <label class="form-check-label" for="tch{{ t.id }}">{{ t.full_name }}</label>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="btn btn-primary">Guardar actividad</button>
+        <a href="{{ url_for('activities.index') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

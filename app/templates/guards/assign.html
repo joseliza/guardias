@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Asignar guardia{% endblock %}
+{% block content %}
+<h4><i class="bi bi-person-plus"></i> Asignar guardia</h4>
+<p class="text-muted">Tramo: <strong>{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</strong> — Grupo: <strong>{{ guard.group.name if guard.group else '—' }}</strong></p>
+
+<div class="card">
+  <div class="card-body">
+    <form method="POST">
+      <div class="mb-3">
+        <label class="form-label">Profesor disponible <small class="text-muted">(ordenados por puntos ascendente)</small></label>
+        <select name="teacher_id" class="form-select" required>
+          {% for t in available %}
+          <option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>
+          {% else %}
+          <option disabled>No hay profesores disponibles</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Minutos efectivos de guardia</label>
+        <input type="number" name="effective_minutes" class="form-control" value="60" min="1" max="60" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Notas</label>
+        <input type="text" name="notes" class="form-control" placeholder="Observaciones opcionales">
+      </div>
+      <button type="submit" class="btn btn-danger">Confirmar asignación</button>
+      <a href="{{ url_for('guards.index') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if group else 'Nuevo' }} grupo{% endblock %}
+{% block content %}
+<h4><i class="bi bi-diagram-3"></i> {{ 'Editar' if group else 'Nuevo' }} grupo</h4>
+<div class="card mt-3">
+  <div class="card-body">
+    <form method="POST">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Nombre</label>
+          <input type="text" name="name" class="form-control" value="{{ group.name if group else '' }}" placeholder="1ºA ESO" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Nivel</label>
+          <input type="text" name="level" class="form-control" value="{{ group.level if group else '' }}" placeholder="1 ESO" required>
+        </div>
+        <div class="col-md-4 d-flex align-items-center gap-3 pt-4">
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="high_difficulty" id="hd" {% if group and group.high_difficulty %}checked{% endif %}>
+            <label class="form-check-label" for="hd"><i class="bi bi-star-fill text-warning"></i> Alta dificultad</label>
+          </div>
+          {% if group %}
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="active" id="active" {% if group.active %}checked{% endif %}>
+            <label class="form-check-label" for="active">Activo</label>
+          </div>
+          {% endif %}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Multiplicador de puntos</label>
+          <input type="number" name="difficulty_multiplier" class="form-control" step="0.1" min="1" max="5" value="{{ group.difficulty_multiplier if group else '1.0' }}">
+        </div>
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <a href="{{ url_for('admin.groups') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

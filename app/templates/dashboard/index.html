@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Inicio{% endblock %}
+{% block content %}
+<div class="row mb-3">
+  <div class="col">
+    <h4><i class="bi bi-house"></i> Panel de hoy — {{ today.strftime('%A, %d de %B de %Y') }}</h4>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Guardias pendientes -->
+  <div class="col-md-6">
+    <div class="card border-danger">
+      <div class="card-header bg-danger text-white"><i class="bi bi-exclamation-triangle"></i> Guardias pendientes</div>
+      <div class="card-body p-0">
+        {% if pending_guards %}
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Tramo</th><th>Grupo</th><th>Acción</th></tr></thead>
+          <tbody>
+            {% for g in pending_guards %}
+            {% set slot = slots | selectattr('id','eq', g.slot_id) | first %}
+            <tr>
+              <td>{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</td>
+              <td>{{ g.group.name if g.group else '—' }}</td>
+              <td>
+                {% if current_user.is_management %}
+                <a href="{{ url_for('guards.assign', guard_id=g.id) }}" class="btn btn-sm btn-outline-danger">Asignar</a>
+                {% else %}
+                <a href="{{ url_for('guards.self_register', guard_id=g.id) }}" class="btn btn-sm btn-outline-primary">Registrar</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="p-3 text-muted mb-0">No hay guardias pendientes hoy.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Mis tramos de guardia hoy -->
+  <div class="col-md-6">
+    <div class="card border-primary">
+      <div class="card-header bg-primary text-white"><i class="bi bi-person-check"></i> Mis tramos de guardia hoy</div>
+      <div class="card-body p-0">
+        {% if my_guard_slots %}
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Tramo</th><th>Chat</th></tr></thead>
+          <tbody>
+            {% for s in my_guard_slots %}
+            {% set slot = slots | selectattr('id','eq', s.slot_id) | first %}
+            <tr>
+              <td>{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</td>
+              <td>
+                <a href="{{ url_for('chat.slot_chat', channel=today.isoformat()+'_slot_'+s.slot_id|string) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-chat-dots"></i></a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% elif current_user.is_management %}
+        <p class="p-3 text-muted mb-0">Vista de equipo directivo.</p>
+        {% else %}
+        <p class="p-3 text-muted mb-0">No tienes guardia asignada hoy.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Ausencias de hoy -->
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-calendar-x"></i> Ausencias de hoy</div>
+      <div class="card-body p-0">
+        {% if today_absences %}
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Profesor/a</th><th>Tramo</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
+          <tbody>
+            {% for a in today_absences %}
+            {% set slot = slots | selectattr('id','eq', a.slot_id) | first %}
+            <tr>
+              <td>{{ a.teacher.full_name }}</td>
+              <td>{{ slot.label }}</td>
+              <td>{{ a.reason or '—' }}</td>
+              <td>
+                <span class="badge bg-{{ 'success' if a.status=='returned' else 'warning' if a.status=='pending' else 'secondary' }}">
+                  {{ a.status }}
+                </span>
+              </td>
+              <td>
+                {% if a.status != 'returned' %}
+                <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=a.id) }}" class="d-inline">
+                  <button class="btn btn-sm btn-outline-success">Reincorporado</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="p-3 text-muted mb-0">Sin ausencias registradas hoy.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mt-3">
+  <a href="{{ url_for('absences.create') }}" class="btn btn-warning"><i class="bi bi-calendar-plus"></i> Registrar ausencia</a>
+  <a href="{{ url_for('chat.index') }}" class="btn btn-outline-secondary ms-2"><i class="bi bi-chat-dots"></i> Canal de incidencias</a>
+</div>
+{% endblock %}
