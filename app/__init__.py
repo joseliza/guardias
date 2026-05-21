@@ -30,6 +30,7 @@ def create_app():
     from app.routes.activities import activities_bp
     from app.routes.admin import admin_bp
     from app.routes.chat import chat_bp
+    from app.routes.display import display_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -38,5 +39,6 @@ def create_app():
     app.register_blueprint(activities_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(chat_bp)
+    app.register_blueprint(display_bp)
 
     return app

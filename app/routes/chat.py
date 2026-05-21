@@ -30,6 +30,22 @@ def on_join(data):
     join_room(room)
 
 
+@socketio.on("load_messages")
+def on_load_messages(data):
+    channel = data.get("channel", "general")
+    messages = ChatMessage.query.filter_by(channel=channel).order_by(ChatMessage.created_at).limit(100).all()
+    emit("message_history", {
+        "messages": [
+            {
+                "author": m.author.full_name,
+                "message": m.message,
+                "timestamp": m.created_at.strftime("%H:%M"),
+            }
+            for m in messages
+        ]
+    })
+
+
 @socketio.on("send_message")
 def on_message(data):
     if not current_user.is_authenticated:

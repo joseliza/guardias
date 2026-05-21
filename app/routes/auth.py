@@ -15,7 +15,9 @@ def login():
         password = request.form.get("password", "")
         user = User.query.filter_by(email=email, active=True).first()
         if user and user.check_password(password):
-            login_user(user, remember=request.form.get("remember") == "on")
+            login_user(user, remember=True)
+            if user.role == "display":
+                return redirect(url_for("display.index"))
             next_page = request.args.get("next")
             return redirect(next_page or url_for("dashboard.index"))
         flash("Email o contraseña incorrectos.", "danger")

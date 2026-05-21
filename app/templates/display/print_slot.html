@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Tareas {{ slot.label }} – {{ target_date.strftime('%d/%m/%Y') }}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #000; padding: 1.5cm; }
+    h1 { font-size: 16px; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 4px; }
+    .meta { font-size: 11px; color: #555; margin-bottom: 16px; }
+    .absence-block { border: 1px solid #ccc; border-radius: 4px; margin-bottom: 14px; page-break-inside: avoid; }
+    .absence-header { background: #f0f0f0; padding: 6px 10px; font-weight: bold; font-size: 13px; border-bottom: 1px solid #ccc; display: flex; justify-content: space-between; }
+    .absence-reason { font-weight: normal; font-size: 11px; color: #555; }
+    .task-row { padding: 6px 10px; border-bottom: 1px solid #eee; }
+    .task-row:last-child { border-bottom: none; }
+    .task-group { font-weight: 600; color: #333; display: inline-block; min-width: 100px; }
+    .no-tasks { padding: 8px 10px; color: #888; font-style: italic; }
+    .no-absences { color: #555; font-style: italic; }
+    @media print {
+      body { padding: 1cm; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="no-print" style="margin-bottom:16px;">
+  <button onclick="window.print()" style="padding:6px 14px;font-size:13px;cursor:pointer;">🖨 Imprimir</button>
+  <button onclick="window.close()" style="padding:6px 14px;font-size:13px;margin-left:8px;cursor:pointer;">Cerrar</button>
+</div>
+
+<h1>Tareas – {{ slot.label }} ({{ slot.start }} – {{ slot.end }})</h1>
+<div class="meta">{{ target_date.strftime('%A, %d de %B de %Y') | capitalize }} &nbsp;·&nbsp; Generado {{ now().strftime('%H:%M') if now is defined else '' }}</div>
+
+{% if absences %}
+  {% for absence in absences %}
+  <div class="absence-block">
+    <div class="absence-header">
+      <span>{{ absence.teacher.full_name }}</span>
+      <span class="absence-reason">{{ absence.reason or 'Sin motivo indicado' }}</span>
+    </div>
+    {% set abs_tasks = absence.tasks.all() %}
+    {% if abs_tasks %}
+      {% for task in abs_tasks %}
+      <div class="task-row">
+        <span class="task-group">{{ task.group.name }}</span>
+        {{ task.description }}
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="no-tasks">Sin tareas registradas para este tramo.</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="no-absences">No hay ausencias registradas para este tramo.</p>
+{% endif %}
+
+<script>
+  // Imprime automáticamente al abrir
+  window.addEventListener('load', () => window.print());
+</script>
+</body>
+</html>
