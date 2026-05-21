@@ -155,6 +155,25 @@ def group_edit(gid):
 # ── Importación CSV horarios ──────────────────────────────────────────────────
 # Formato: email_profesor,dia(0-4),tramo(1-7),email_grupo_o_nombre,es_guardia(true/false)
 
+@admin_bp.route("/grupos/<int:gid>/clonar", methods=["POST"])
+@login_required
+def group_clone(gid):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    original = Group.query.get_or_404(gid)
+    clone = Group(
+        name=f"{original.name} (copia)",
+        level=original.level,
+        high_difficulty=original.high_difficulty,
+        difficulty_multiplier=original.difficulty_multiplier,
+        active=original.active,
+    )
+    db.session.add(clone)
+    db.session.commit()
+    flash(f"Grupo clonado como '{clone.name}'. Edítalo para cambiar el nombre.", "success")
+    return redirect(url_for("admin.groups"))
+
+
 @admin_bp.route("/horarios/importar-csv", methods=["GET", "POST"])
 @login_required
 def import_schedule_csv():

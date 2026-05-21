@@ -17,7 +17,12 @@
           <td>{% if g.high_difficulty %}<i class="bi bi-star-fill text-warning"></i> Sí{% else %}No{% endif %}</td>
           <td>x{{ g.difficulty_multiplier }}</td>
           <td><span class="badge bg-{{ 'success' if g.active else 'danger' }}">{{ 'Sí' if g.active else 'No' }}</span></td>
-          <td><a href="{{ url_for('admin.group_edit', gid=g.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a></td>
+          <td class="d-flex gap-1">
+            <a href="{{ url_for('admin.group_edit', gid=g.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+            <form method="POST" action="{{ url_for('admin.group_clone', gid=g.id) }}">
+              <button type="submit" class="btn btn-sm btn-outline-secondary" title="Clonar grupo"><i class="bi bi-copy"></i></button>
+            </form>
+          </td>
         </tr>
         {% endfor %}
       </tbody>

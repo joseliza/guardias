@@ -7,6 +7,7 @@ from app.models.guard import Guard
 from app.models.task import Task
 from app.models.user import User
 from app.models.group import Group
+from app.models.schedule import TeacherSchedule
 from app.utils.points import apply_absence_penalty
 
 absences_bp = Blueprint("absences", __name__, url_prefix="/ausencias")
@@ -65,7 +66,17 @@ def create():
                 status="pending",
             )
             db.session.add(guard)
-            apply_absence_penalty(teacher_id)
+
+            # Penalizar solo si el profesor tenía guardia asignada en ese tramo
+            day_idx = absence_date.weekday()
+            has_guard_slot = TeacherSchedule.query.filter_by(
+                teacher_id=teacher_id,
+                day_of_week=day_idx,
+                slot_id=int(slot_id),
+                is_guard_slot=True,
+            ).first()
+            if has_guard_slot:
+                apply_absence_penalty(teacher_id)
 
         db.session.commit()
         flash("Ausencia registrada correctamente.", "success")

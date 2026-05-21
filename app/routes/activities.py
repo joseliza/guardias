@@ -7,6 +7,7 @@ from app.models.absence import Absence
 from app.models.guard import Guard
 from app.models.user import User
 from app.models.group import Group
+from app.models.schedule import TeacherSchedule
 from app.utils.points import apply_absence_penalty
 from flask_mail import Message
 
@@ -87,7 +88,17 @@ def create():
                         status="pending",
                     )
                     db.session.add(guard)
-                    apply_absence_penalty(int(tid))
+
+                    # Penalizar solo si tenía guardia en ese tramo
+                    day_idx = activity_date.weekday()
+                    has_guard_slot = TeacherSchedule.query.filter_by(
+                        teacher_id=int(tid),
+                        day_of_week=day_idx,
+                        slot_id=int(slot_id),
+                        is_guard_slot=True,
+                    ).first()
+                    if has_guard_slot:
+                        apply_absence_penalty(int(tid))
 
         db.session.commit()
 
