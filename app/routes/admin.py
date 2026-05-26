@@ -5,6 +5,7 @@ from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.user import User
 from app.models.group import Group
+from app.models.room import Room
 from app.models.schedule import TeacherSchedule
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -121,17 +122,19 @@ def group_create():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     if request.method == "POST":
+        room_id = request.form.get("room_id") or None
         group = Group(
             name=request.form["name"].strip(),
-            level=request.form["level"].strip(),
             high_difficulty=request.form.get("high_difficulty") == "on",
             difficulty_multiplier=float(request.form.get("difficulty_multiplier", 1.0)),
+            room_id=int(room_id) if room_id else None,
         )
         db.session.add(group)
         db.session.commit()
         flash("Grupo creado.", "success")
         return redirect(url_for("admin.groups"))
-    return render_template("admin/group_form.html", group=None)
+    rooms = Room.query.filter_by(active=True).order_by(Room.name).all()
+    return render_template("admin/group_form.html", group=None, rooms=rooms)
 
 
 @admin_bp.route("/grupos/<int:gid>/editar", methods=["GET", "POST"])
@@ -141,15 +144,17 @@ def group_edit(gid):
         return redirect(url_for("dashboard.index"))
     group = Group.query.get_or_404(gid)
     if request.method == "POST":
+        room_id = request.form.get("room_id") or None
         group.name = request.form["name"].strip()
-        group.level = request.form["level"].strip()
         group.high_difficulty = request.form.get("high_difficulty") == "on"
         group.difficulty_multiplier = float(request.form.get("difficulty_multiplier", 1.0))
         group.active = request.form.get("active") == "on"
+        group.room_id = int(room_id) if room_id else None
         db.session.commit()
         flash("Grupo actualizado.", "success")
         return redirect(url_for("admin.groups"))
-    return render_template("admin/group_form.html", group=group)
+    rooms = Room.query.filter_by(active=True).order_by(Room.name).all()
+    return render_template("admin/group_form.html", group=group, rooms=rooms)
 
 
 # ── Importación CSV horarios ──────────────────────────────────────────────────
@@ -164,15 +169,91 @@ def group_clone(gid):
     original = Group.query.get_or_404(gid)
     clone = Group(
         name=f"{original.name} (copia)",
-        level=original.level,
         high_difficulty=original.high_difficulty,
         difficulty_multiplier=original.difficulty_multiplier,
         active=original.active,
+        room_id=original.room_id,
     )
     db.session.add(clone)
     db.session.commit()
     flash(f"Grupo clonado como '{clone.name}'. Edítalo para cambiar el nombre.", "success")
     return redirect(url_for("admin.groups"))
+
+
+@admin_bp.route("/grupos/<int:gid>/borrar", methods=["POST"])
+@login_required
+def group_delete(gid):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    group = Group.query.get_or_404(gid)
+    if group.schedule_entries.count() > 0:
+        flash(f"No se puede borrar '{group.name}': tiene horarios asignados. Desactívalo en su lugar.", "danger")
+        return redirect(url_for("admin.groups"))
+    db.session.delete(group)
+    db.session.commit()
+    flash(f"Grupo '{group.name}' eliminado.", "success")
+    return redirect(url_for("admin.groups"))
+
+
+@admin_bp.route("/aulas")
+@login_required
+def rooms():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    all_rooms = Room.query.order_by(Room.name).all()
+    return render_template("admin/rooms.html", rooms=all_rooms)
+
+
+@admin_bp.route("/aulas/nuevo", methods=["GET", "POST"])
+@login_required
+def room_create():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    if request.method == "POST":
+        name = request.form["name"].strip()
+        if Room.query.filter_by(name=name).first():
+            flash("Ya existe un aula con ese nombre.", "warning")
+            return redirect(request.url)
+        db.session.add(Room(name=name))
+        db.session.commit()
+        flash("Aula creada.", "success")
+        return redirect(url_for("admin.rooms"))
+    return render_template("admin/room_form.html", room=None)
+
+
+@admin_bp.route("/aulas/<int:rid>/editar", methods=["GET", "POST"])
+@login_required
+def room_edit(rid):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    room = Room.query.get_or_404(rid)
+    if request.method == "POST":
+        name = request.form["name"].strip()
+        existing = Room.query.filter_by(name=name).first()
+        if existing and existing.id != rid:
+            flash("Ya existe un aula con ese nombre.", "warning")
+            return redirect(request.url)
+        room.name = name
+        room.active = request.form.get("active") == "on"
+        db.session.commit()
+        flash("Aula actualizada.", "success")
+        return redirect(url_for("admin.rooms"))
+    return render_template("admin/room_form.html", room=room)
+
+
+@admin_bp.route("/aulas/<int:rid>/borrar", methods=["POST"])
+@login_required
+def room_delete(rid):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    room = Room.query.get_or_404(rid)
+    if room.groups:
+        flash(f"No se puede borrar '{room.name}': tiene grupos asignados. Desactívala o reasigna los grupos.", "danger")
+        return redirect(url_for("admin.rooms"))
+    db.session.delete(room)
+    db.session.commit()
+    flash(f"Aula '{room.name}' eliminada.", "success")
+    return redirect(url_for("admin.rooms"))
 
 
 @admin_bp.route("/horarios/importar-csv", methods=["GET", "POST"])

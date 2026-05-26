@@ -17,7 +17,20 @@ def create_app():
     login_manager.login_message = "Por favor, inicia sesión para acceder."
     login_manager.login_message_category = "warning"
 
+    _DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    _MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+              "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+    @app.template_filter("fecha_es")
+    def fecha_es(d, fmt="%A, %d de %B de %Y"):
+        return (fmt
+                .replace("%A", _DIAS[d.weekday()])
+                .replace("%B", _MESES[d.month - 1])
+                .replace("%d", f"{d.day:02d}")
+                .replace("%Y", str(d.year)))
+
     from app.models.user import User
+    from app.models.room import Room  # noqa: ensure table registered for migrations
 
     @login_manager.user_loader
     def load_user(user_id):

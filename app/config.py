@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(encoding="utf-8")
 
 
 class Config:
@@ -17,6 +17,7 @@ class Config:
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER")
 
     INSTITUTE_NAME = os.getenv("INSTITUTE_NAME", "IES")
+    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@instituto.es")
 
     # Tramos horarios del instituto
     TIME_SLOTS = [

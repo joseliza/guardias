@@ -4,7 +4,8 @@ __pycache__/
 *.pyo
 *.pyd
 instance/
-migrations/versions/
 *.db
 *.sqlite
 .DS_Store
+materias.pdf
+.claude/

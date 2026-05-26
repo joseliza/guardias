@@ -2,19 +2,34 @@
 {% block title %}Asignar guardia{% endblock %}
 {% block content %}
 <h4><i class="bi bi-person-plus"></i> Asignar guardia</h4>
-<p class="text-muted">Tramo: <strong>{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</strong> — Grupo: <strong>{{ guard.group.name if guard.group else '—' }}</strong></p>
+<p class="text-muted">
+  Tramo: <strong>{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</strong>
+  — Grupo: <strong>{{ guard.group.name if guard.group else '—' }}</strong>
+</p>
 
 <div class="card">
   <div class="card-body">
     <form method="POST">
       <div class="mb-3">
-        <label class="form-label">Profesor disponible <small class="text-muted">(ordenados por puntos ascendente)</small></label>
+        <label class="form-label">Profesor</label>
         <select name="teacher_id" class="form-select" required>
-          {% for t in available %}
-          <option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>
-          {% else %}
+          {% if primary %}
+          <optgroup label="— Profesores de guardia asignada —">
+            {% for t in primary %}
+            <option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
+          {% if secondary %}
+          <optgroup label="— Libres en este tramo (sin clase) —">
+            {% for t in secondary %}
+            <option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
+          {% if not primary and not secondary %}
           <option disabled>No hay profesores disponibles</option>
-          {% endfor %}
+          {% endif %}
         </select>
       </div>
       <div class="mb-3">

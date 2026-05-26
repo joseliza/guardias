@@ -18,7 +18,7 @@
           <td>{{ t.full_name }}</td>
           <td>{{ t.email }}</td>
           <td><span class="badge bg-secondary">{{ t.role }}</span></td>
-          <td>{{ t.points }}</td>
+          <td>{{ '—' if t.role == 'management' else t.points }}</td>
           <td><span class="badge bg-{{ 'success' if t.active else 'danger' }}">{{ 'Sí' if t.active else 'No' }}</span></td>
           <td><a href="{{ url_for('admin.teacher_edit', tid=t.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a></td>
         </tr>

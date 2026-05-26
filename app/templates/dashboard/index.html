@@ -1,115 +1,421 @@
 {% extends "base.html" %}
 {% block title %}Inicio{% endblock %}
 {% block content %}
-<div class="row mb-3">
+<div class="row mb-3 align-items-center">
   <div class="col">
-    <h4><i class="bi bi-house"></i> Panel de hoy — {{ today.strftime('%A, %d de %B de %Y') }}</h4>
+    <h4><i class="bi bi-house"></i> Panel de hoy — {{ today | fecha_es }}</h4>
+  </div>
+  <div class="col-auto">
+    <a href="{{ url_for('absences.create') }}" class="btn btn-warning btn-sm">
+      <i class="bi bi-calendar-plus"></i> Registrar ausencia
+    </a>
   </div>
 </div>
 
 <div class="row g-3">
-  <!-- Guardias pendientes -->
-  <div class="col-md-6">
-    <div class="card border-danger">
-      <div class="card-header bg-danger text-white"><i class="bi bi-exclamation-triangle"></i> Guardias pendientes</div>
+  <!-- Tramos horarios -->
+  <div class="col-md-8">
+
+    {# Toggle de vista #}
+    <div class="d-flex justify-content-end mb-2">
+      <div class="btn-group btn-group-sm" role="group" aria-label="Vista">
+        <button id="btn-view-scroll" class="btn btn-secondary active" title="Vista continua">
+          <i class="bi bi-list-ul"></i> Continua
+        </button>
+        <button id="btn-view-tabs" class="btn btn-outline-secondary" title="Una solapa por tramo">
+          <i class="bi bi-layout-tabs"></i> Por tramo
+        </button>
+      </div>
+    </div>
+
+    {# Barra de pestañas (oculta en vista continua) #}
+    <div id="slot-tabs-nav" class="d-none mb-2">
+      <ul class="nav nav-tabs flex-nowrap overflow-auto">
+        {% for item in slots_data %}{% if not item.slot.is_break %}
+        {% set hp = item.guards | selectattr('status','eq','pending') | list %}
+        <li class="nav-item flex-shrink-0">
+          <button class="nav-link" data-slot-tab="{{ item.slot.id }}">
+            {{ item.slot.label }}
+            {% if hp %}<span class="badge bg-danger ms-1">{{ hp|length }}</span>
+            {% elif item.absences %}<span class="badge bg-success ms-1"><i class="bi bi-check2"></i></span>{% endif %}
+          </button>
+        </li>
+        {% endif %}{% endfor %}
+      </ul>
+    </div>
+
+    {% for item in slots_data %}
+    {% set s = item.slot %}
+
+    {% if s.is_break %}
+    {# Separador de recreo #}
+    <div class="slot-break d-flex align-items-center gap-2 my-2 text-muted small">
+      <hr class="flex-grow-1 m-0">
+      <span><i class="bi bi-cup-hot"></i> Recreo {{ s.start }}–{{ s.end }}</span>
+      <hr class="flex-grow-1 m-0">
+    </div>
+
+    {% else %}
+    {% set has_pending = item.guards | selectattr('status','eq','pending') | list %}
+    {% set is_my_guard = item.is_my_guard %}
+
+    <div id="slot-{{ s.id }}" class="slot-card card mb-2 {% if has_pending %}border-danger{% elif is_my_guard %}border-primary{% endif %}" data-slot-id="{{ s.id }}">
+      <div class="card-header py-2 d-flex justify-content-between align-items-center
+        {% if has_pending %}bg-danger text-white{% elif is_my_guard %}bg-primary text-white{% else %}bg-light{% endif %}">
+        <span>
+          <strong>{{ s.label }}</strong>
+          <small class="ms-2 {% if has_pending or is_my_guard %}opacity-75{% else %}text-muted{% endif %}">
+            {{ s.start }}–{{ s.end }}
+          </small>
+          {% if is_my_guard %}
+          <span class="badge bg-warning text-dark ms-2">Tu guardia</span>
+          {% endif %}
+          {% if item.absences %}
+          <a href="{{ url_for('absences.slot_pdf', date_str=today.isoformat(), slot_id=s.id) }}"
+             class="btn btn-sm btn-outline-{% if has_pending or is_my_guard %}light{% else %}secondary{% endif %} py-0 px-2 ms-2"
+             title="Descargar tareas del tramo en PDF">
+            <i class="bi bi-file-earmark-pdf"></i> PDF tramo
+          </a>
+          {% endif %}
+        </span>
+        <span class="d-flex align-items-center gap-2">
+          {% if has_pending %}
+          <span class="badge bg-white text-danger">{{ has_pending | length }} pendiente{{ 's' if has_pending|length > 1 }}</span>
+          {% if current_user.is_management %}
+          <form method="POST" action="{{ url_for('guards.auto_assign_slot', date_str=today.isoformat(), slot_id=s.id) }}" class="d-inline">
+            <button type="submit" class="btn btn-sm btn-warning py-0 px-2" title="Auto-asignar este tramo">
+              <i class="bi bi-magic"></i> Auto-asignar
+            </button>
+          </form>
+          {% endif %}
+          {% elif item.absences %}
+          <span class="badge bg-success">Cubierto</span>
+          {% endif %}
+        </span>
+      </div>
+
+      {% if item.absences %}
       <div class="card-body p-0">
-        {% if pending_guards %}
         <table class="table table-sm mb-0">
-          <thead><tr><th>Tramo</th><th>Grupo</th><th>Acción</th></tr></thead>
-          <tbody>
-            {% for g in pending_guards %}
-            {% set slot = slots | selectattr('id','eq', g.slot_id) | first %}
+          <thead class="table-light">
             <tr>
-              <td>{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</td>
-              <td>{{ g.group.name if g.group else '—' }}</td>
+              <th>Profesor/a ausente</th>
+              <th>Grupo</th>
+              <th>Motivo</th>
+              <th>Tareas</th>
+              <th>Guardia</th>
+              {% if current_user.is_management %}<th>Acción</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for absence in item.absences %}
+            {% set guard = item.guards | selectattr('absence_id','eq', absence.id) | first %}
+            <tr>
+              <td>{{ absence.teacher.full_name }}</td>
               <td>
-                {% if current_user.is_management %}
-                <a href="{{ url_for('guards.assign', guard_id=g.id) }}" class="btn btn-sm btn-outline-danger">Asignar</a>
-                {% else %}
-                <a href="{{ url_for('guards.self_register', guard_id=g.id) }}" class="btn btn-sm btn-outline-primary">Registrar</a>
+                <span class="badge bg-light text-dark border">{{ absence_groups[absence.id] }}</span>
+                {% if absence_rooms[absence.id] %}
+                <span class="badge bg-secondary ms-1"><i class="bi bi-door-open"></i> {{ absence_rooms[absence.id] }}</span>
                 {% endif %}
               </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-        <p class="p-3 text-muted mb-0">No hay guardias pendientes hoy.</p>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <!-- Mis tramos de guardia hoy -->
-  <div class="col-md-6">
-    <div class="card border-primary">
-      <div class="card-header bg-primary text-white"><i class="bi bi-person-check"></i> Mis tramos de guardia hoy</div>
-      <div class="card-body p-0">
-        {% if my_guard_slots %}
-        <table class="table table-sm mb-0">
-          <thead><tr><th>Tramo</th><th>Chat</th></tr></thead>
-          <tbody>
-            {% for s in my_guard_slots %}
-            {% set slot = slots | selectattr('id','eq', s.slot_id) | first %}
-            <tr>
-              <td>{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</td>
+              <td><small class="text-muted">{{ absence.reason or '—' }}</small></td>
               <td>
-                <a href="{{ url_for('chat.slot_chat', channel=today.isoformat()+'_slot_'+s.slot_id|string) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-chat-dots"></i></a>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% elif current_user.is_management %}
-        <p class="p-3 text-muted mb-0">Vista de equipo directivo.</p>
-        {% else %}
-        <p class="p-3 text-muted mb-0">No tienes guardia asignada hoy.</p>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <!-- Ausencias de hoy -->
-  <div class="col-12">
-    <div class="card">
-      <div class="card-header"><i class="bi bi-calendar-x"></i> Ausencias de hoy</div>
-      <div class="card-body p-0">
-        {% if today_absences %}
-        <table class="table table-sm mb-0">
-          <thead><tr><th>Profesor/a</th><th>Tramo</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
-          <tbody>
-            {% for a in today_absences %}
-            {% set slot = slots | selectattr('id','eq', a.slot_id) | first %}
-            <tr>
-              <td>{{ a.teacher.full_name }}</td>
-              <td>{{ slot.label }}</td>
-              <td>{{ a.reason or '—' }}</td>
-              <td>
-                <span class="badge bg-{{ 'success' if a.status=='returned' else 'warning' if a.status=='pending' else 'secondary' }}">
-                  {{ a.status }}
-                </span>
+                {% set tasks = absence.tasks.all() %}
+                {% if tasks %}
+                <ul class="list-unstyled mb-0 small">
+                  {% for t in tasks %}
+                  <li><i class="bi bi-check2 text-success"></i> {{ t.description }}</li>
+                  {% endfor %}
+                </ul>
+                <a href="{{ url_for('absences.tasks_pdf', absence_id=absence.id) }}"
+                   class="btn btn-outline-secondary btn-sm mt-1" title="Descargar PDF">
+                  <i class="bi bi-file-earmark-pdf"></i> PDF
+                </a>
+                {% else %}
+                <span class="text-muted small">Sin tareas</span>
+                {% endif %}
               </td>
               <td>
-                {% if a.status != 'returned' %}
-                <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=a.id) }}" class="d-inline">
-                  <button class="btn btn-sm btn-outline-success">Reincorporado</button>
+                {% if guard %}
+                  {% set records = guard.records.all() %}
+                  {% if guard.status == 'covered' and records %}
+                  <span class="badge bg-success d-block mb-1">Cubierta</span>
+                  {% for rec in records %}
+                  <div class="d-flex align-items-center gap-1">
+                    <small class="text-success fw-semibold">
+                      <i class="bi bi-person-check"></i> {{ rec.teacher.full_name }}
+                      <span class="text-muted">({{ rec.effective_minutes }} min)</span>
+                    </small>
+                    {% if current_user.is_management %}
+                    <form method="POST" action="{{ url_for('guards.remove_record', record_id=rec.id) }}"
+                          onsubmit="return confirm('¿Quitar a {{ rec.teacher.full_name }} de esta guardia?')">
+                      <button type="submit" class="btn btn-link btn-sm text-danger p-0 ms-1" title="Quitar asignación">
+                        <i class="bi bi-x-circle"></i>
+                      </button>
+                    </form>
+                    {% endif %}
+                  </div>
+                  {% endfor %}
+                  {% elif guard.status == 'pending' %}
+                  <span class="badge bg-danger">Pendiente</span>
+                  {% else %}
+                  <span class="badge bg-secondary">{{ guard.status }}</span>
+                  {% endif %}
+                {% else %}
+                <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+              {% if current_user.is_management %}
+              <td class="d-flex gap-1 flex-wrap">
+                {% if guard %}
+                <a href="{{ url_for('guards.assign', guard_id=guard.id) }}"
+                   class="btn btn-sm {% if guard.status == 'pending' %}btn-outline-danger{% else %}btn-outline-secondary{% endif %}">
+                  <i class="bi bi-person-plus"></i> {% if guard.status == 'covered' %}Reasignar{% else %}Asignar{% endif %}
+                </a>
+                {% endif %}
+                {% if absence.status != 'returned' %}
+                <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=absence.id) }}" class="d-inline"
+                      onsubmit="return confirm('¿Confirmas que {{ absence.teacher.full_name }} se ha reincorporado?')">
+                  <button class="btn btn-sm btn-outline-success"><i class="bi bi-box-arrow-in-right"></i> Reincorp.</button>
                 </form>
                 {% endif %}
               </td>
+              {% endif %}
             </tr>
             {% endfor %}
           </tbody>
         </table>
-        {% else %}
-        <p class="p-3 text-muted mb-0">Sin ausencias registradas hoy.</p>
+
+        {# Panel de profesores de guardia #}
+        {% if item.guard_teachers or item.extra_teachers or item.overload %}
+        <div class="px-3 py-2 border-top bg-light small">
+          {% if item.overload %}
+          <div class="alert alert-warning py-1 px-2 mb-2 small">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <strong>Atención:</strong> hay más ausencias ({{ item.absences|length }}) que profesores de guardia disponibles ({{ item.guard_teachers|length }}).
+          </div>
+          {% endif %}
+          {% if item.multi_assigned %}
+          <div class="alert alert-info py-1 px-2 mb-2 small">
+            <i class="bi bi-person-lines-fill"></i>
+            <strong>Atención:</strong>
+            {{ item.multi_assigned | map(attribute='full_name') | join(', ') }}
+            {{ 'cubre' if item.multi_assigned|length == 1 else 'cubren' }} más de una guardia en este tramo.
+          </div>
+          {% endif %}
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            {# Pool primario: profesores con guardia oficial #}
+            <div class="d-flex flex-wrap gap-1 align-items-center">
+              <span class="text-muted me-1">Guardia:</span>
+              {% for t in item.guard_teachers %}
+                {% if t.id in item.assigned_teacher_ids %}
+                <span class="badge bg-warning text-dark" title="Ocupado — cubriendo una ausencia">
+                  <i class="bi bi-person-fill-exclamation"></i> {{ t.full_name }} ({{ t.points }} pts)
+                </span>
+                {% elif current_user.is_management and item.pending_guards_info %}
+                <button type="button"
+                        class="badge bg-success border-0 quick-assign-btn"
+                        style="cursor:pointer"
+                        title="Clic para asignar guardia"
+                        data-teacher-id="{{ t.id }}"
+                        data-teacher-name="{{ t.full_name }}"
+                        data-guards='{{ item.pending_guards_info | tojson }}'>
+                  <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
+                </button>
+                {% else %}
+                <span class="badge bg-success" title="Libre — disponible para cubrir">
+                  <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
+                </span>
+                {% endif %}
+              {% else %}
+              <span class="text-muted fst-italic">Ninguno asignado.</span>
+              {% endfor %}
+            </div>
+            {# Pool extra: asignados sin guardia oficial en este tramo #}
+            {% if item.extra_teachers %}
+            <div class="vr mx-1"></div>
+            <div class="d-flex flex-wrap gap-1 align-items-center">
+              <span class="text-muted me-1">Refuerzo:</span>
+              {% for t in item.extra_teachers %}
+              <span class="badge bg-purple text-white"
+                    style="background-color:#6f42c1!important"
+                    title="Cubriendo sin guardia oficial en este tramo">
+                <i class="bi bi-person-plus-fill"></i> {{ t.full_name }} ({{ t.points }} pts)
+              </span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
         {% endif %}
+      </div>
+      {% else %}
+      <div class="card-body py-2 text-muted small">Sin ausencias en este tramo.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <!-- Chat general -->
+  <div class="col-md-4">
+    <div class="card" style="position:sticky;top:1rem;">
+      <div class="card-header"><i class="bi bi-chat-dots"></i> Incidencias</div>
+      <div class="card-body p-0">
+        <div id="chat-box" class="p-3" style="height:420px;overflow-y:auto;background:#f8f9fa;">
+          {% for msg in chat_messages %}
+          <div class="mb-2">
+            <strong>{{ msg.author.full_name }}</strong>
+            <small class="text-muted ms-2">{{ msg.created_at.strftime('%H:%M') }}</small>
+            <div>{{ msg.message }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-footer p-2">
+        <form id="chat-form" class="d-flex gap-2">
+          <input type="text" id="msg-input" class="form-control form-control-sm" placeholder="Escribe una incidencia..." autocomplete="off">
+          <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-send"></i></button>
+        </form>
       </div>
     </div>
   </div>
 </div>
 
-<div class="mt-3">
-  <a href="{{ url_for('absences.create') }}" class="btn btn-warning"><i class="bi bi-calendar-plus"></i> Registrar ausencia</a>
-  <a href="{{ url_for('chat.index') }}" class="btn btn-outline-secondary ms-2"><i class="bi bi-chat-dots"></i> Canal de incidencias</a>
+<!-- Modal asignación rápida -->
+<div class="modal fade" id="qaModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0"><i class="bi bi-person-plus"></i> Asignación rápida</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('guards.quick_assign') }}">
+        <div class="modal-body">
+          <input type="hidden" name="teacher_id" id="qa-teacher-id">
+          <p class="mb-2 small">Profesor: <strong id="qa-teacher-name"></strong></p>
+          <input type="hidden" name="guard_id" id="qa-guard-id-single">
+          <div id="qa-single-label" class="small text-muted mb-1"></div>
+          <div id="qa-multi-wrap" class="d-none">
+            <label class="form-label small mb-1">Ausencia a cubrir</label>
+            <select id="qa-guard-select" class="form-select form-select-sm"></select>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-check2"></i> Confirmar</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const socket = io();
+const channel = "general";
+socket.emit('join', { channel });
+
+socket.on('new_message', (data) => {
+  const box = document.getElementById('chat-box');
+  const div = document.createElement('div');
+  div.className = 'mb-2';
+  div.innerHTML = `<strong>${data.author}</strong> <small class="text-muted ms-2">${data.timestamp}</small><div>${data.message}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+});
+
+document.getElementById('chat-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = document.getElementById('msg-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  socket.emit('send_message', { channel, message: msg });
+  input.value = '';
+});
+
+document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
+
+// Asignación rápida desde el panel de profesores
+const qaModal = new bootstrap.Modal(document.getElementById('qaModal'));
+document.querySelectorAll('.quick-assign-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const guards = JSON.parse(btn.dataset.guards);
+    document.getElementById('qa-teacher-id').value = btn.dataset.teacherId;
+    document.getElementById('qa-teacher-name').textContent = btn.dataset.teacherName;
+
+    const singleId = document.getElementById('qa-guard-id-single');
+    const singleLabel = document.getElementById('qa-single-label');
+    const multiWrap = document.getElementById('qa-multi-wrap');
+    const select = document.getElementById('qa-guard-select');
+
+    if (guards.length === 1) {
+      singleId.value = guards[0].id;
+      singleLabel.textContent = guards[0].label;
+      multiWrap.classList.add('d-none');
+    } else {
+      select.innerHTML = guards.map(g => `<option value="${g.id}">${g.label}</option>`).join('');
+      singleId.value = '';
+      singleLabel.textContent = '';
+      multiWrap.classList.remove('d-none');
+      // Sincronizar hidden input con el select
+      select.addEventListener('change', () => { singleId.value = select.value; });
+      singleId.value = guards[0].id;
+      select.value = guards[0].id;
+    }
+    qaModal.show();
+  });
+});
+
+// ── Vista continua / por tramo ──────────────────────────────────────────────
+const btnScroll = document.getElementById('btn-view-scroll');
+const btnTabs   = document.getElementById('btn-view-tabs');
+const tabsNav   = document.getElementById('slot-tabs-nav');
+const allCards  = () => document.querySelectorAll('.slot-card');
+const allBreaks = () => document.querySelectorAll('.slot-break');
+
+function activateTab(slotId) {
+  document.querySelectorAll('[data-slot-tab]').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector(`[data-slot-tab="${slotId}"]`);
+  if (btn) btn.classList.add('active');
+  allCards().forEach(c => c.classList.toggle('d-none', c.dataset.slotId !== String(slotId)));
+}
+
+function setView(mode, targetSlot) {
+  localStorage.setItem('dashView', mode);
+  if (mode === 'tabs') {
+    tabsNav.classList.remove('d-none');
+    allBreaks().forEach(b => b.classList.add('d-none'));
+    btnTabs.classList.replace('btn-outline-secondary', 'btn-secondary');
+    btnTabs.classList.add('active');
+    btnScroll.classList.replace('btn-secondary', 'btn-outline-secondary');
+    btnScroll.classList.remove('active');
+    const first = document.querySelector('[data-slot-tab]');
+    const target = targetSlot || document.querySelector('[data-slot-tab].active')?.dataset.slotTab || (first && first.dataset.slotTab);
+    if (target) activateTab(target);
+  } else {
+    tabsNav.classList.add('d-none');
+    allBreaks().forEach(b => b.classList.remove('d-none'));
+    allCards().forEach(c => c.classList.remove('d-none'));
+    btnScroll.classList.replace('btn-outline-secondary', 'btn-secondary');
+    btnScroll.classList.add('active');
+    btnTabs.classList.replace('btn-secondary', 'btn-outline-secondary');
+    btnTabs.classList.remove('active');
+    if (targetSlot) {
+      document.getElementById('slot-' + targetSlot)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+}
+
+btnScroll.addEventListener('click', () => setView('scroll'));
+btnTabs.addEventListener('click',   () => setView('tabs'));
+document.querySelectorAll('[data-slot-tab]').forEach(btn => {
+  btn.addEventListener('click', () => activateTab(btn.dataset.slotTab));
+});
+
+// Inicializar con vista guardada y tramo del ancla (#slot-X)
+const hashSlot = location.hash.startsWith('#slot-') ? location.hash.replace('#slot-', '') : null;
+setView(localStorage.getItem('dashView') || 'scroll', hashSlot);
+</script>
 {% endblock %}

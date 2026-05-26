@@ -5,26 +5,71 @@
   <h4><i class="bi bi-calendar-x"></i> Ausencias</h4>
   <a href="{{ url_for('absences.create') }}" class="btn btn-warning"><i class="bi bi-plus-lg"></i> Nueva ausencia</a>
 </div>
-<div class="card">
-  <div class="card-body p-0">
-    <table class="table table-hover mb-0">
-      <thead class="table-light"><tr><th>Fecha</th><th>Profesor/a</th><th>Tramo</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
-      <tbody>
-        {% for a in absences %}
-        {% set slot = slots | selectattr('id','eq', a.slot_id) | first %}
-        <tr>
-          <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
-          <td>{{ a.teacher.full_name }}</td>
-          <td>{{ slot.label if slot else a.slot_id }}</td>
-          <td>{{ a.reason or '—' }}</td>
-          <td><span class="badge bg-{{ 'success' if a.status=='returned' else 'warning text-dark' if a.status=='pending' else 'secondary' }}">{{ a.status }}</span></td>
-          <td><a href="{{ url_for('absences.tasks', absence_id=a.id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-list-task"></i> Tareas</a></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="6" class="text-center text-muted py-3">Sin ausencias registradas.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+
+{% if not grouped %}
+<div class="alert alert-info">Sin ausencias registradas.</div>
+{% endif %}
+
+{% for day in grouped %}
+<div class="mb-4">
+  {# ── Cabecera de fecha ── #}
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <span class="badge bg-primary fs-6 px-3 py-2">
+      <i class="bi bi-calendar3"></i> {{ day.date | fecha_es }}
+    </span>
+    <hr class="flex-grow-1 m-0">
   </div>
+
+  {% for item in day.slots %}
+  {% set s = item.slot %}
+  <div class="card mb-2 border-start border-4
+    {% if item.absences | selectattr('status','eq','pending') | list %}border-danger
+    {% else %}border-secondary{% endif %}">
+    <div class="card-header py-2 bg-light d-flex justify-content-between align-items-center">
+      <span class="fw-semibold">
+        <i class="bi bi-clock"></i>
+        {% if s %}{{ s.label }} &nbsp;·&nbsp; <small class="text-muted fw-normal">{{ s.start }}–{{ s.end }}</small>{% else %}Tramo {{ item.absences[0].slot_id }}{% endif %}
+      </span>
+      <span class="badge bg-secondary">{{ item.absences | length }} ausencia{{ 's' if item.absences|length > 1 }}</span>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Profesor/a</th>
+            <th>Motivo</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in item.absences %}
+          <tr>
+            <td>{{ a.teacher.full_name }}</td>
+            <td class="text-muted">{{ a.reason or '—' }}</td>
+            <td>
+              <span class="badge bg-{{ 'success' if a.status=='returned' else 'warning text-dark' if a.status=='pending' else 'secondary' }}">
+                {{ a.status }}
+              </span>
+            </td>
+            <td class="d-flex gap-1">
+              <a href="{{ url_for('absences.tasks', absence_id=a.id) }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-list-task"></i> Tareas
+              </a>
+              {% set tasks = a.tasks.all() %}
+              {% if tasks %}
+              <a href="{{ url_for('absences.tasks_pdf', absence_id=a.id) }}" class="btn btn-sm btn-outline-danger" title="Descargar PDF">
+                <i class="bi bi-file-earmark-pdf"></i>
+              </a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
 </div>
+{% endfor %}
 {% endblock %}

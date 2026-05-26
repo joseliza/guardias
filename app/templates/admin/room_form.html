@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if room else 'Nueva' }} aula{% endblock %}
+{% block content %}
+<h4><i class="bi bi-door-open"></i> {{ 'Editar' if room else 'Nueva' }} aula</h4>
+<div class="card mt-3">
+  <div class="card-body">
+    <form method="POST">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Nombre</label>
+          <input type="text" name="name" class="form-control" value="{{ room.name if room else '' }}"
+                 placeholder="Aula 15 / Sala de Informática" required>
+        </div>
+        {% if room %}
+        <div class="col-md-2 d-flex align-items-center pt-4">
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="active" id="active" {% if room.active %}checked{% endif %}>
+            <label class="form-check-label" for="active">Activa</label>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <a href="{{ url_for('admin.rooms') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

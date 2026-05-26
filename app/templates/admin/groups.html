@@ -8,12 +8,12 @@
 <div class="card">
   <div class="card-body p-0">
     <table class="table table-hover mb-0">
-      <thead class="table-light"><tr><th>Nombre</th><th>Nivel</th><th>Alta dificultad</th><th>Multiplicador</th><th>Activo</th><th></th></tr></thead>
+      <thead class="table-light"><tr><th>Nombre</th><th>Aula</th><th>Alta dificultad</th><th>Multiplicador</th><th>Activo</th><th></th></tr></thead>
       <tbody>
         {% for g in groups %}
         <tr>
           <td>{{ g.name }}</td>
-          <td>{{ g.level }}</td>
+          <td><span class="text-muted small">{{ g.room.name if g.room else '—' }}</span></td>
           <td>{% if g.high_difficulty %}<i class="bi bi-star-fill text-warning"></i> Sí{% else %}No{% endif %}</td>
           <td>x{{ g.difficulty_multiplier }}</td>
           <td><span class="badge bg-{{ 'success' if g.active else 'danger' }}">{{ 'Sí' if g.active else 'No' }}</span></td>
@@ -21,6 +21,10 @@
             <a href="{{ url_for('admin.group_edit', gid=g.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
             <form method="POST" action="{{ url_for('admin.group_clone', gid=g.id) }}">
               <button type="submit" class="btn btn-sm btn-outline-secondary" title="Clonar grupo"><i class="bi bi-copy"></i></button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.group_delete', gid=g.id) }}"
+                  onsubmit="return confirm('¿Borrar el grupo {{ g.name }}? Esta acción no se puede deshacer.')">
+              <button type="submit" class="btn btn-sm btn-outline-danger" title="Borrar grupo"><i class="bi bi-trash"></i></button>
             </form>
           </td>
         </tr>

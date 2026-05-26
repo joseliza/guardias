@@ -30,7 +30,7 @@
 </div>
 
 <h1>Tareas – {{ slot.label }} ({{ slot.start }} – {{ slot.end }})</h1>
-<div class="meta">{{ target_date.strftime('%A, %d de %B de %Y') | capitalize }} &nbsp;·&nbsp; Generado {{ now().strftime('%H:%M') if now is defined else '' }}</div>
+<div class="meta">{{ target_date | fecha_es }} &nbsp;·&nbsp; Generado {{ now().strftime('%H:%M') if now is defined else '' }}</div>
 
 {% if absences %}
   {% for absence in absences %}
