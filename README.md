@@ -1,5 +1,9 @@
 # Guardias
 
+**Autor:** José Manuel Lizana Jiménez  
+**Departamento de Informática — IES Ciudad Jardín**  
+**Licencia:** [GNU GPL v3](LICENSE)
+
 Aplicación web para la gestión de guardias en centros de educación secundaria. Permite registrar ausencias de profesores, asignar sustitutos, generar PDFs de tareas y hacer seguimiento de puntos por guardia cubierta.
 
 ## Funcionalidades principales
