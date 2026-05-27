@@ -1,3 +1,7 @@
+"""
+Factoría de la aplicación Flask. Inicializa extensiones, registra blueprints
+y define el filtro Jinja2 `fecha_es` para formatear fechas en castellano.
+"""
 from flask import Flask
 from app.config import Config
 from app.extensions import db, login_manager, migrate, mail, socketio
@@ -26,11 +30,13 @@ def create_app():
         return (fmt
                 .replace("%A", _DIAS[d.weekday()])
                 .replace("%B", _MESES[d.month - 1])
+                .replace("%m", f"{d.month:02d}")
                 .replace("%d", f"{d.day:02d}")
                 .replace("%Y", str(d.year)))
 
     from app.models.user import User
-    from app.models.room import Room  # noqa: ensure table registered for migrations
+    from app.models.room import Room  # noqa
+    from app.models.chat import ChatMessage, ChatClear  # noqa
 
     @login_manager.user_loader
     def load_user(user_id):

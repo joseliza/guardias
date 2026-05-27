@@ -1,3 +1,8 @@
+"""
+Configuración de la aplicación leída desde variables de entorno (.env).
+Define la cadena de conexión a MySQL, credenciales SMTP, nombre del centro
+y la tabla de tramos horarios (TIME_SLOTS) usada en todo el sistema.
+"""
 import os
 from dotenv import load_dotenv
 

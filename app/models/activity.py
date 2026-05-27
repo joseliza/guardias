@@ -1,3 +1,9 @@
+"""
+Modelos de actividades extraescolares: ExtraActivity, ExtraActivityGroup y ExtraActivityTeacher.
+ExtraActivity: salida o actividad fuera del centro con fecha y tramos afectados.
+ExtraActivityGroup: grupos que participan (completos o parciales).
+ExtraActivityTeacher: profesores acompañantes; puede enviarse email pidiendo tareas.
+"""
 from datetime import datetime
 from app.extensions import db
 

@@ -1,3 +1,8 @@
+"""
+Blueprint de autenticación. Gestiona el inicio y cierre de sesión.
+El rol `display` redirige directamente a la pantalla de sala de profesores;
+el resto de roles van al panel principal.
+"""
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, login_required, current_user
 from app.extensions import db

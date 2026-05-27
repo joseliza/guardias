@@ -1,3 +1,8 @@
+"""
+Modelo Group. Representa un grupo de alumnos (1º ESO A, 1º CFGS ASIR…).
+Incluye el multiplicador de dificultad que pondera los puntos de guardia
+y la referencia al aula habitual del grupo.
+"""
 from app.extensions import db
 
 

@@ -7,18 +7,22 @@
 <div class="card mb-4">
   <div class="card-header">Añadir tarea</div>
   <div class="card-body">
-    <form method="POST">
+    <form method="POST" enctype="multipart/form-data">
       <div class="mb-3">
         <label class="form-label">Grupo</label>
         <select name="group_id" class="form-select" required>
           {% for g in groups %}
-          <option value="{{ g.id }}">{{ g.name }}</option>
+          <option value="{{ g.id }}" {% if g.id == default_group_id %}selected{% endif %}>{{ g.name }}</option>
           {% endfor %}
         </select>
       </div>
       <div class="mb-3">
         <label class="form-label">Descripción de la tarea</label>
         <textarea name="description" class="form-control" rows="3" required></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Adjunto PDF <span class="text-muted">(opcional)</span></label>
+        <input type="file" name="attachment" class="form-control" accept=".pdf">
       </div>
       <button type="submit" class="btn btn-primary">Añadir tarea</button>
     </form>
@@ -29,15 +33,88 @@
   <div class="card-header">Tareas registradas</div>
   <div class="card-body p-0">
     <table class="table mb-0">
-      <thead><tr><th>Grupo</th><th>Tarea</th></tr></thead>
+      <thead><tr><th>Grupo</th><th>Tarea</th><th>Adjunto</th><th></th></tr></thead>
       <tbody>
         {% for t in absence.tasks %}
-        <tr><td>{{ t.group.name }}</td><td>{{ t.description }}</td></tr>
+        <tr>
+          <td>{{ t.group.name }}</td>
+          <td>{{ t.description }}</td>
+          <td>
+            {% if t.attachment %}
+            <a href="{{ url_for('absences.task_attachment', task_id=t.id) }}"
+               target="_blank" class="btn btn-sm btn-outline-danger py-0">
+              <i class="bi bi-file-earmark-pdf"></i> Ver PDF
+            </a>
+            <form method="POST" action="{{ url_for('absences.delete_task_attachment', task_id=t.id) }}"
+                  class="d-inline" onsubmit="return confirm('¿Eliminar el PDF adjunto?')">
+              <button type="submit" class="btn btn-sm btn-outline-secondary py-0" title="Quitar PDF">
+                <i class="bi bi-x"></i>
+              </button>
+            </form>
+            {% else %}
+            <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-primary py-0"
+                    data-bs-toggle="modal" data-bs-target="#modalEdit{{ t.id }}"
+                    title="Editar">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <form method="POST" action="{{ url_for('absences.delete_task', task_id=t.id) }}"
+                  class="d-inline" onsubmit="return confirm('¿Eliminar esta tarea?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0" title="Eliminar tarea">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
         {% else %}
-        <tr><td colspan="2" class="text-center text-muted py-3">Sin tareas todavía.</td></tr>
+        <tr><td colspan="4" class="text-center text-muted py-3">Sin tareas todavía.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<!-- Modales de edición -->
+{% for t in absence.tasks %}
+<div class="modal fade" id="modalEdit{{ t.id }}" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil"></i> Editar tarea</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('absences.edit_task', task_id=t.id) }}" enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Grupo</label>
+            <select name="group_id" class="form-select" required>
+              {% for g in groups %}
+              <option value="{{ g.id }}" {% if g.id == t.group_id %}selected{% endif %}>{{ g.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Descripción</label>
+            <textarea name="description" class="form-control" rows="3" required>{{ t.description }}</textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Reemplazar PDF <span class="text-muted">(opcional)</span></label>
+            <input type="file" name="attachment" class="form-control" accept=".pdf">
+            {% if t.attachment %}
+            <small class="text-muted">Ya tiene un PDF adjunto. Si subes uno nuevo, reemplazará al actual.</small>
+            {% endif %}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
 {% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Informe de incidencias{% endblock %}
+{% block content %}
+<h4><i class="bi bi-chat-square-text"></i> Informe del chat de incidencias</h4>
+<div class="card mt-3" style="max-width:500px;">
+  <div class="card-body">
+    <form method="GET" class="row g-3">
+      <div class="col-6">
+        <label class="form-label">Desde</label>
+        <input type="date" name="desde" class="form-control"
+               value="{{ request.args.get('desde', '') }}">
+      </div>
+      <div class="col-6">
+        <label class="form-label">Hasta</label>
+        <input type="date" name="hasta" class="form-control"
+               value="{{ request.args.get('hasta', today) }}">
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button formaction="{{ url_for('chat.report_pdf') }}" type="submit"
+                class="btn btn-danger">
+          <i class="bi bi-file-earmark-pdf"></i> Descargar PDF
+        </button>
+        <button formaction="{{ url_for('chat.report_csv') }}" type="submit"
+                class="btn btn-success">
+          <i class="bi bi-filetype-csv"></i> Descargar CSV
+        </button>
+      </div>
+    </form>
+    <p class="text-muted small mt-3 mb-0">
+      <i class="bi bi-info-circle"></i>
+      Deja "Desde" en blanco para incluir todo el historial.
+      El informe incluye todos los mensajes, incluidos los borrados visualmente.
+    </p>
+  </div>
+</div>
+{% endblock %}

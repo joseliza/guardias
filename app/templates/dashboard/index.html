@@ -58,6 +58,7 @@
     {% else %}
     {% set has_pending = item.guards | selectattr('status','eq','pending') | list %}
     {% set is_my_guard = item.is_my_guard %}
+    {% set can_manage = current_user.is_management or is_my_guard %}
 
     <div id="slot-{{ s.id }}" class="slot-card card mb-2 {% if has_pending %}border-danger{% elif is_my_guard %}border-primary{% endif %}" data-slot-id="{{ s.id }}">
       <div class="card-header py-2 d-flex justify-content-between align-items-center
@@ -104,7 +105,7 @@
               <th>Motivo</th>
               <th>Tareas</th>
               <th>Guardia</th>
-              {% if current_user.is_management %}<th>Acción</th>{% endif %}
+              {% if can_manage %}<th>Acción</th>{% endif %}
             </tr>
           </thead>
           <tbody>
@@ -124,7 +125,13 @@
                 {% if tasks %}
                 <ul class="list-unstyled mb-0 small">
                   {% for t in tasks %}
-                  <li><i class="bi bi-check2 text-success"></i> {{ t.description }}</li>
+                  <li>
+                    <i class="bi bi-check2 text-success"></i> {{ t.description }}
+                    {% if t.attachment %}
+                    <a href="{{ url_for('absences.task_attachment', task_id=t.id) }}" target="_blank"
+                       class="ms-1" title="Ver PDF adjunto"><i class="bi bi-file-earmark-pdf text-danger"></i></a>
+                    {% endif %}
+                  </li>
                   {% endfor %}
                 </ul>
                 <a href="{{ url_for('absences.tasks_pdf', absence_id=absence.id) }}"
@@ -146,7 +153,7 @@
                       <i class="bi bi-person-check"></i> {{ rec.teacher.full_name }}
                       <span class="text-muted">({{ rec.effective_minutes }} min)</span>
                     </small>
-                    {% if current_user.is_management %}
+                    {% if can_manage %}
                     <form method="POST" action="{{ url_for('guards.remove_record', record_id=rec.id) }}"
                           onsubmit="return confirm('¿Quitar a {{ rec.teacher.full_name }} de esta guardia?')">
                       <button type="submit" class="btn btn-link btn-sm text-danger p-0 ms-1" title="Quitar asignación">
@@ -165,7 +172,7 @@
                 <span class="text-muted small">—</span>
                 {% endif %}
               </td>
-              {% if current_user.is_management %}
+              {% if can_manage %}
               <td class="d-flex gap-1 flex-wrap">
                 {% if guard %}
                 <a href="{{ url_for('guards.assign', guard_id=guard.id) }}"
@@ -259,25 +266,84 @@
 
   <!-- Chat general -->
   <div class="col-md-4">
-    <div class="card" style="position:sticky;top:1rem;">
-      <div class="card-header"><i class="bi bi-chat-dots"></i> Incidencias</div>
-      <div class="card-body p-0">
-        <div id="chat-box" class="p-3" style="height:420px;overflow-y:auto;background:#f8f9fa;">
-          {% for msg in chat_messages %}
-          <div class="mb-2">
-            <strong>{{ msg.author.full_name }}</strong>
-            <small class="text-muted ms-2">{{ msg.created_at.strftime('%H:%M') }}</small>
-            <div>{{ msg.message }}</div>
+    <div style="position:sticky;top:1rem;">
+
+      <!-- Chat -->
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center py-2">
+          <span><i class="bi bi-chat-dots"></i> Incidencias</span>
+          <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#chat-panel-body">
+            <i class="bi bi-chevron-up"></i>
+          </button>
+        </div>
+        <div class="collapse show" id="chat-panel-body">
+          <div class="card-body p-0">
+            <div id="chat-box" class="p-3" style="height:300px;overflow-y:auto;background:#f8f9fa;">
+              {% for msg in chat_messages %}
+              <div class="mb-2">
+                <strong>{{ msg.author.full_name }}</strong>
+                <small class="text-muted ms-2">{{ msg.created_at.strftime('%H:%M') }}</small>
+                <div>{{ msg.message }}</div>
+              </div>
+              {% endfor %}
+            </div>
           </div>
-          {% endfor %}
+          <div class="card-footer p-2">
+            <form id="chat-form" class="d-flex gap-2">
+              <input type="text" id="msg-input" class="form-control form-control-sm" placeholder="Escribe una incidencia..." autocomplete="off">
+              <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-send"></i></button>
+            </form>
+          </div>
         </div>
       </div>
-      <div class="card-footer p-2">
-        <form id="chat-form" class="d-flex gap-2">
-          <input type="text" id="msg-input" class="form-control form-control-sm" placeholder="Escribe una incidencia..." autocomplete="off">
-          <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-send"></i></button>
-        </form>
+
+    {% if current_user.is_management %}
+      <!-- Separador arrastrable -->
+      <div id="resize-handle"
+           style="height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;margin:2px 0;">
+        <div style="width:48px;height:5px;background:#ced4da;border-radius:3px;pointer-events:none;"></div>
       </div>
+
+      <!-- Tareas -->
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center py-2">
+          <span><i class="bi bi-list-task"></i> Tareas del día</span>
+          <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#tasks-panel-dash">
+            <i class="bi bi-chevron-up"></i>
+          </button>
+        </div>
+        <div class="collapse show" id="tasks-panel-dash">
+          <div class="card-body p-2" style="max-height:300px;overflow-y:auto;">
+            {% set ns = namespace(has_tasks=false) %}
+            {% for sd in slots_data %}
+              {% set slot_tasks = tasks_by_slot.get(sd.slot.id, []) %}
+              {% if slot_tasks %}
+                {% set ns.has_tasks = true %}
+                <div class="text-uppercase fw-bold small text-primary mb-1 mt-2" style="font-size:.72rem;letter-spacing:.05em;">
+                  <i class="bi bi-clock"></i> {{ sd.slot.label }} · {{ sd.slot.start }}–{{ sd.slot.end }}
+                </div>
+                {% for t in slot_tasks %}
+                <div class="mb-2 p-2 rounded" style="background:#f8f9fa;font-size:.83rem;">
+                  <div class="text-muted" style="font-size:.75rem;"><i class="bi bi-person"></i> {{ t.teacher }} — {{ t.group }}</div>
+                  <div>{{ t.description }}</div>
+                  {% if t.attachment %}
+                  <a href="{{ url_for('absences.task_attachment', task_id=t.task_id) }}" target="_blank"
+                     class="text-danger small"><i class="bi bi-file-earmark-pdf"></i> Ver PDF</a>
+                  {% endif %}
+                </div>
+                {% endfor %}
+              {% endif %}
+            {% endfor %}
+            {% if not ns.has_tasks %}
+            <p class="text-muted small mb-0">Sin tareas registradas hoy.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
     </div>
   </div>
 </div>
@@ -316,6 +382,10 @@
 const socket = io();
 const channel = "general";
 socket.emit('join', { channel });
+
+socket.on('chat_cleared', () => {
+  document.getElementById('chat-box').innerHTML = '';
+});
 
 socket.on('new_message', (data) => {
   const box = document.getElementById('chat-box');
@@ -417,5 +487,56 @@ document.querySelectorAll('[data-slot-tab]').forEach(btn => {
 // Inicializar con vista guardada y tramo del ancla (#slot-X)
 const hashSlot = location.hash.startsWith('#slot-') ? location.hash.replace('#slot-', '') : null;
 setView(localStorage.getItem('dashView') || 'scroll', hashSlot);
+
+// ── Resize chat / tareas ─────────────────────────────────────────────────────
+{% if current_user.is_management %}
+(function() {
+  const handle    = document.getElementById('resize-handle');
+  const chatBox   = document.getElementById('chat-box');
+  const tasksBody = document.querySelector('#tasks-panel-dash .card-body');
+  if (!handle || !chatBox) return;
+
+  const STORAGE_KEY = 'dash_chat_height';
+  const DEFAULT_H = 300;
+  const MIN_H = 80;
+
+  function applyHeight(h) {
+    chatBox.style.height = h + 'px';
+    if (tasksBody) tasksBody.style.maxHeight = Math.max(MIN_H, 620 - h) + 'px';
+  }
+
+  const saved = parseInt(localStorage.getItem(STORAGE_KEY));
+  applyHeight(saved > 0 ? saved : DEFAULT_H);
+
+  let dragging = false, startY = 0, startH = 0;
+
+  function startDrag(y) {
+    dragging = true;
+    startY = y;
+    startH = chatBox.offsetHeight;
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  }
+  function moveDrag(y) {
+    if (!dragging) return;
+    applyHeight(Math.max(MIN_H, startH + (y - startY)));
+  }
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    localStorage.setItem(STORAGE_KEY, chatBox.offsetHeight);
+  }
+
+  handle.addEventListener('mousedown', e => { startDrag(e.clientY); e.preventDefault(); });
+  document.addEventListener('mousemove', e => moveDrag(e.clientY));
+  document.addEventListener('mouseup', endDrag);
+
+  handle.addEventListener('touchstart', e => { startDrag(e.touches[0].clientY); e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchmove', e => { if (dragging) { moveDrag(e.touches[0].clientY); e.preventDefault(); } }, { passive: false });
+  document.addEventListener('touchend', endDrag);
+})();
+{% endif %}
 </script>
 {% endblock %}

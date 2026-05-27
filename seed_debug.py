@@ -15,6 +15,7 @@ from app.models.schedule import TeacherSchedule
 from app.models.absence import Absence
 from app.models.guard import Guard, GuardRecord
 from app.models.task import Task
+from app.models.activity import ExtraActivity, ExtraActivityGroup, ExtraActivityTeacher
 
 DEBUG_DOMAIN = "@prueba.es"
 SEED = 42
@@ -90,6 +91,9 @@ def main():
         Task.query.delete(synchronize_session=False)
         Absence.query.delete(synchronize_session=False)
         TeacherSchedule.query.delete(synchronize_session=False)
+        ExtraActivityTeacher.query.delete(synchronize_session=False)
+        ExtraActivityGroup.query.delete(synchronize_session=False)
+        ExtraActivity.query.delete(synchronize_session=False)
         User.query.filter(User.role != "management").delete(synchronize_session=False)
         db.session.commit()
         print("Limpieza completada.")
@@ -180,16 +184,32 @@ def main():
             print("Hoy es fin de semana — no se crean ausencias.")
             return
 
+        # Máximo 6 ausencias por tramo
+        slot_absence_count = {sid: 0 for sid in non_break_slots}
+
         absent_teachers = random.sample(debug_teachers, k=min(18, len(debug_teachers)))
         absences_created = 0
         tasks_created = 0
 
         for teacher in absent_teachers:
-            # Cada profesor ausente falta en 1-3 tramos
-            n_slots = random.randint(1, 3)
-            absent_slots = random.sample(non_break_slots, k=min(n_slots, len(non_break_slots)))
+            # Solo tramos donde el profesor tiene clase real (con grupo asignado)
+            class_entries = TeacherSchedule.query.filter_by(
+                teacher_id=teacher.id,
+                day_of_week=day_idx,
+                is_guard_slot=False,
+            ).filter(TeacherSchedule.group_id.isnot(None)).all()
 
-            for slot_id in absent_slots:
+            # Filtrar los que aún no han alcanzado el límite de 6
+            available = [e for e in class_entries if slot_absence_count[e.slot_id] < 6]
+            if not available:
+                continue
+
+            n_slots = random.randint(1, 3)
+            chosen = random.sample(available, k=min(n_slots, len(available)))
+
+            for entry in chosen:
+                slot_id = entry.slot_id
+                group_id = entry.group_id
 
                 absence = Absence(
                     teacher_id=teacher.id,
@@ -206,20 +226,14 @@ def main():
                     absence_id=absence.id,
                     date=today,
                     slot_id=slot_id,
+                    group_id=group_id,
                     status="pending",
                 )
                 db.session.add(guard)
+                slot_absence_count[slot_id] += 1
                 absences_created += 1
 
-                # Tareas: 1-2 por ausencia, para el grupo que tenía ese tramo
-                schedule_entry = TeacherSchedule.query.filter_by(
-                    teacher_id=teacher.id,
-                    day_of_week=day_idx,
-                    slot_id=slot_id,
-                    is_guard_slot=False,
-                ).first()
-                group_id = schedule_entry.group_id if schedule_entry else random.choice(groups).id
-
+                # Tareas: 1-2 por ausencia
                 for _ in range(random.randint(1, 2)):
                     task = Task(
                         absence_id=absence.id,

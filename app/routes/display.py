@@ -1,3 +1,9 @@
+"""
+Blueprint de la pantalla de sala de profesores (rol `display`). Muestra en modo
+táctil las guardias del día con controles para asignar, reasignar, eliminar
+asignaciones, marcar incorporaciones y añadir tareas. Emite eventos Socket.IO
+`guard_updated` para refrescar la pantalla sin recargar en todos los clientes.
+"""
 from datetime import date
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, abort
 from flask_login import login_required, current_user
@@ -34,6 +40,19 @@ def index():
         s["id"]: get_available_teachers_for_slot(today, s["id"]) for s in slots
     }
 
+    # Tareas del día agrupadas por slot
+    from collections import defaultdict
+    tasks_by_slot = defaultdict(list)
+    for absence in absences:
+        for task in absence.tasks:
+            tasks_by_slot[absence.slot_id].append({
+                "teacher": absence.teacher.full_name,
+                "group": task.group.name,
+                "description": task.description,
+                "attachment": task.attachment,
+                "task_id": task.id,
+            })
+
     return render_template(
         "display/index.html",
         today=today,
@@ -42,6 +61,7 @@ def index():
         guards=guards,
         absences=absences,
         available_by_slot=available_by_slot,
+        tasks_by_slot=tasks_by_slot,
     )
 
 
@@ -82,14 +102,66 @@ def assign(guard_id):
     return redirect(url_for("display.index"))
 
 
+@display_bp.route("/registro/<int:record_id>/eliminar", methods=["POST"])
+@login_required
+def remove_record(record_id):
+    _require_display()
+    record = GuardRecord.query.get_or_404(record_id)
+    guard = record.guard
+
+    teacher = User.query.get(record.teacher_id)
+    if teacher:
+        teacher.points = round(teacher.points - record.points_awarded, 2)
+
+    db.session.delete(record)
+    db.session.flush()
+
+    if guard.records.count() == 0:
+        guard.status = "pending"
+
+    db.session.commit()
+
+    socketio.emit("guard_updated", {
+        "guard_id": guard.id,
+        "slot_id": guard.slot_id,
+        "status": guard.status,
+    }, room="display")
+
+    return redirect(url_for("display.index"))
+
+
+@display_bp.route("/incorporar/<int:absence_id>", methods=["POST"])
+@login_required
+def incorporar(absence_id):
+    _require_display()
+    absence = Absence.query.get_or_404(absence_id)
+    absence.status = "returned"
+    if absence.guard:
+        absence.guard.status = "returned"
+    db.session.commit()
+
+    socketio.emit("guard_updated", {
+        "slot_id": absence.slot_id,
+        "status": "returned",
+    }, room="display")
+
+    return redirect(url_for("display.index"))
+
+
 @display_bp.route("/tarea/<int:absence_id>", methods=["POST"])
 @login_required
 def add_task(absence_id):
     _require_display()
+    from app.routes.absences import _save_task_pdf
     absence = Absence.query.get_or_404(absence_id)
     group_id = int(request.form["group_id"])
     description = request.form["description"]
     task = Task(absence_id=absence.id, group_id=group_id, description=description)
+
+    file = request.files.get("attachment")
+    if file and file.filename.lower().endswith(".pdf"):
+        task.attachment = _save_task_pdf(file)
+
     db.session.add(task)
     db.session.commit()
     return redirect(url_for("display.index"))

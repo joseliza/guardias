@@ -1,3 +1,8 @@
+"""
+Modelo TeacherSchedule. Horario semanal fijo de cada profesor.
+Una fila por (profesor, día, tramo): si is_guard_slot=True el tramo es de guardia;
+si False tiene clase con el grupo indicado; sin fila significa hora libre.
+"""
 from app.extensions import db
 
 

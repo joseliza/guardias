@@ -1,3 +1,8 @@
+"""
+Blueprint de administración (solo rol management). Gestiona el CRUD de profesores,
+grupos y aulas, la importación masiva de profesores y horarios por CSV, y el
+informe resumen del carnet de puntos con enlace al historial detallado por profesor.
+"""
 import csv
 import io
 from flask import Blueprint, render_template, redirect, url_for, flash, request

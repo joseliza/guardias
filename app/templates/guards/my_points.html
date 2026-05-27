@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}{% if selected_teacher %}Puntos – {{ selected_teacher.full_name }}{% else %}Mis puntos{% endif %}{% endblock %}
+{% block content %}
+
+{# ── Selector de profesor (solo directivos) ─────────────────────────────── #}
+{% if teachers is not none %}
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form class="row g-2 align-items-center" method="GET">
+      <div class="col-auto">
+        <label class="col-form-label fw-semibold">Profesor/a:</label>
+      </div>
+      <div class="col">
+        <select name="teacher_id" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">— Seleccionar —</option>
+          {% for t in teachers %}
+          <option value="{{ t.id }}" {% if selected_teacher and selected_teacher.id == t.id %}selected{% endif %}>
+            {{ t.full_name }} ({{ "%.2f"|format(t.points) }} pts)
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if selected_teacher %}
+      <div class="col-auto">
+        <a href="{{ url_for('guards.my_points_csv', teacher_id=selected_teacher.id) }}"
+           class="btn btn-sm btn-outline-success">
+          <i class="bi bi-filetype-csv"></i> CSV este profesor
+        </a>
+      </div>
+      {% endif %}
+      <div class="col-auto">
+        <a href="{{ url_for('guards.my_points_csv') }}"
+           class="btn btn-sm btn-success">
+          <i class="bi bi-filetype-csv"></i> CSV todo el profesorado
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{# ── Cabecera ────────────────────────────────────────────────────────────── #}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4>
+    <i class="bi bi-star-half"></i>
+    {% if selected_teacher %}
+      Historial de {{ selected_teacher.full_name }}
+    {% else %}
+      Mis puntos
+    {% endif %}
+  </h4>
+  {% if total_points is not none %}
+  <span class="fs-4 fw-bold {{ 'text-success' if total_points >= 0 else 'text-danger' }}">
+    {{ "%.2f"|format(total_points) }} pts
+  </span>
+  {% endif %}
+</div>
+
+{# ── Estado vacío ────────────────────────────────────────────────────────── #}
+{% if teachers is not none and not selected_teacher %}
+<div class="alert alert-info">Selecciona un profesor para ver su historial.</div>
+
+{% elif not events %}
+<div class="alert alert-info">
+  {% if selected_teacher %}Sin registros para {{ selected_teacher.full_name }}.
+  {% else %}Aún no tienes registros de guardias ni ausencias.{% endif %}
+</div>
+
+{% else %}
+{# ── Tabla ───────────────────────────────────────────────────────────────── #}
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>Fecha</th>
+        <th>Tramo</th>
+        <th>Tipo</th>
+        <th>Grupo</th>
+        <th>Dificultad</th>
+        <th>Minutos</th>
+        <th class="text-end">Puntos</th>
+        <th>Detalle</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in events %}
+      <tr class="{{ 'table-success' if e.type == 'guard' else 'table-danger' }}">
+        <td class="text-nowrap">{{ e.date | fecha_es('%d/%m/%Y') }}</td>
+        <td class="text-nowrap">
+          {% if e.slot %}{{ e.slot.label }}<br>
+          <small class="text-muted">{{ e.slot.start }}–{{ e.slot.end }}</small>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if e.type == 'guard' %}
+          <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia cubierta</span>
+          {% else %}
+          <span class="badge bg-danger"><i class="bi bi-calendar-x"></i> Ausencia propia</span>
+          {% endif %}
+        </td>
+        <td>{{ e.group.name if e.group else '—' }}</td>
+        <td>
+          {% if e.type == 'guard' %}
+            {% if e.special %}
+            <span class="badge bg-warning text-dark">
+              <i class="bi bi-exclamation-triangle"></i> Especial ×{{ "%.1f"|format(e.multiplier) }}
+            </span>
+            {% else %}
+            <span class="text-muted">Normal ×1.0</span>
+            {% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ e.minutes ~ ' min' if e.minutes is not none else '—' }}</td>
+        <td class="text-end fw-bold {{ 'text-success' if e.points >= 0 else 'text-danger' }}">
+          {{ '+' if e.points >= 0 }}{{ "%.2f"|format(e.points) }}
+        </td>
+        <td><small class="text-muted">{{ e.detail }}</small></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% if total_points is not none %}
+    <tfoot class="table-dark">
+      <tr>
+        <td colspan="6" class="text-end fw-bold">Saldo total</td>
+        <td class="text-end fw-bold {{ 'text-success' if total_points >= 0 else 'text-danger' }}">
+          {{ '+' if total_points >= 0 }}{{ "%.2f"|format(total_points) }}
+        </td>
+        <td></td>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

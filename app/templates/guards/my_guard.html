@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Mi guardia{% endblock %}
+{% block content %}
+<h4><i class="bi bi-shield-check"></i> Mi guardia — {{ today | fecha_es }}</h4>
+
+{% if not guard_slots %}
+<div class="alert alert-info mt-3">No tienes guardia asignada hoy.</div>
+{% endif %}
+
+{% for gs in guard_slots %}
+{% set slot = gs.slot %}
+{% set guards = gs.guards %}
+{% set absences = gs.absences %}
+{% set primary = gs.primary %}
+{% set secondary = gs.secondary %}
+
+<div class="card mb-4" id="slot-{{ slot.id }}">
+  <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
+    <span><i class="bi bi-clock"></i> <strong>{{ slot.label }}</strong> — {{ slot.start }}–{{ slot.end }}</span>
+    <span class="badge bg-light text-dark">{{ guards | selectattr('status','eq','pending') | list | length }} pendiente(s)</span>
+  </div>
+  <div class="card-body p-0">
+
+    {% if not guards %}
+    <p class="text-muted p-3 mb-0">Sin ausencias registradas en este tramo.</p>
+    {% endif %}
+
+    {% for guard in guards %}
+    {% set group = guard.group %}
+    {% set absence = guard.absence %}
+    <div class="p-3 border-bottom">
+      <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+        <strong>{{ group.name if group else '—' }}</strong>
+        {% if group and group.room %}
+        <span class="text-muted"><i class="bi bi-door-open"></i> {{ group.room.name }}</span>
+        {% endif %}
+        {% if guard.status == 'covered' %}
+        <span class="badge bg-success">Cubierta</span>
+        {% elif guard.status == 'returned' %}
+        <span class="badge bg-secondary">Reincorporado</span>
+        {% else %}
+        <span class="badge bg-danger">Pendiente</span>
+        {% endif %}
+      </div>
+
+      {# Profesores asignados con botón de eliminar #}
+      {% for record in guard.records %}
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span><i class="bi bi-person-check text-success"></i> {{ record.teacher.full_name }}
+          <small class="text-muted">({{ record.effective_minutes }} min)</small>
+        </span>
+        <form method="POST" action="{{ url_for('guards.remove_record', record_id=record.id) }}" class="d-inline">
+          <input type="hidden" name="back" value="my_guard">
+          <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"
+                  onclick="return confirm('¿Eliminar esta asignación?')">
+            <i class="bi bi-x"></i>
+          </button>
+        </form>
+      </div>
+      {% endfor %}
+
+      {# Botones de acción #}
+      <div class="d-flex gap-2 flex-wrap mt-2">
+        {% if guard.status != 'returned' %}
+        <a href="{{ url_for('guards.assign', guard_id=guard.id, back='my_guard') }}"
+           class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-person-plus"></i>
+          {{ 'Reasignar' if guard.status == 'covered' else 'Asignar' }}
+        </a>
+        {% endif %}
+
+        {% if absence and absence.status not in ('returned',) %}
+        <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=absence.id) }}" class="d-inline">
+          <input type="hidden" name="back" value="my_guard">
+          <button type="submit" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-box-arrow-in-right"></i> Incorporar
+          </button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

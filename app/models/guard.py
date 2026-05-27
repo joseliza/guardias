@@ -1,3 +1,9 @@
+"""
+Modelos Guard y GuardRecord.
+Guard: guardia generada por una ausencia (grupo sin profesor, estado pending/covered/returned).
+GuardRecord: asignación concreta de un profesor a una guardia, con minutos efectivos y puntos.
+Un Guard puede tener varios GuardRecord (grupos juntos o refuerzo).
+"""
 from datetime import datetime
 from app.extensions import db
 

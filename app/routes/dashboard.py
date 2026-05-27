@@ -1,3 +1,9 @@
+"""
+Blueprint del panel principal (inicio). Agrega por tramo horario las ausencias,
+guardias, profesores disponibles, asignaciones y mensajes del chat del día.
+Calcula también qué tramos son de guardia del usuario actual (is_my_guard)
+para mostrar los controles de gestión directamente en el panel.
+"""
 from datetime import date
 from flask import Blueprint, render_template, current_app
 from flask_login import login_required, current_user
@@ -5,7 +11,7 @@ from app.models.guard import Guard, GuardRecord
 from app.models.absence import Absence
 from app.models.schedule import TeacherSchedule
 from app.models.user import User
-from app.models.chat import ChatMessage
+from app.models.chat import ChatMessage, ChatClear
 from app.utils.guards import get_available_teachers_for_slot
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -139,12 +145,36 @@ def index():
             "pending_guards_info": pending_guards_info,
         })
 
+    from datetime import datetime
+    today_midnight = datetime.combine(today, datetime.min.time())
+    last_clear = (ChatClear.query
+                  .filter(ChatClear.cleared_at >= today_midnight)
+                  .order_by(ChatClear.cleared_at.desc())
+                  .first())
+    chat_cutoff = last_clear.cleared_at if last_clear else today_midnight
+
     chat_messages = (
-        ChatMessage.query.filter_by(channel="general")
+        ChatMessage.query
+        .filter(ChatMessage.channel == "general",
+                ChatMessage.created_at >= chat_cutoff)
         .order_by(ChatMessage.created_at)
         .limit(50)
         .all()
     )
+
+    # Tareas del día por tramo (solo para management)
+    from collections import defaultdict
+    tasks_by_slot = defaultdict(list)
+    if current_user.is_management:
+        for a in today_absences:
+            for task in a.tasks:
+                tasks_by_slot[a.slot_id].append({
+                    "teacher": a.teacher.full_name,
+                    "group": task.group.name,
+                    "description": task.description,
+                    "attachment": task.attachment,
+                    "task_id": task.id,
+                })
 
     return render_template(
         "dashboard/index.html",
@@ -154,4 +184,5 @@ def index():
         absence_groups=absence_groups,
         absence_rooms=absence_rooms,
         chat_messages=chat_messages,
+        tasks_by_slot=tasks_by_slot,
     )

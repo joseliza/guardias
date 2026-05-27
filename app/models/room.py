@@ -1,3 +1,7 @@
+"""
+Modelo Room. Representa un aula física del centro (Aula 1 – Aula 40).
+Se asigna a grupos para mostrar la ubicación en el panel y en los PDFs.
+"""
 from app.extensions import db
 
 

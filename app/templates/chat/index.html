@@ -6,6 +6,11 @@
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span><i class="bi bi-chat-dots"></i> Incidencias — {{ channel }}</span>
+        {% if current_user.is_management %}
+        <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalLimpiar">
+          <i class="bi bi-trash"></i> Limpiar chat
+        </button>
+        {% endif %}
       </div>
       <div class="card-body p-0">
         <div id="chat-box" class="p-3" style="height:420px;overflow-y:auto;background:#f8f9fa;">
@@ -27,6 +32,29 @@
     </div>
   </div>
 </div>
+
+{% if current_user.is_management %}
+<div class="modal fade" id="modalLimpiar" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-trash"></i> Limpiar chat</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>El chat quedará vacío en pantalla para todos los usuarios.</p>
+        <p class="text-muted mb-0"><i class="bi bi-info-circle"></i> Los mensajes <strong>no se eliminan</strong> de la base de datos y seguirán disponibles para informes.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form method="POST" action="{{ url_for('chat.clear') }}" class="d-inline">
+          <button type="submit" class="btn btn-danger">Sí, limpiar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 <script>
@@ -44,6 +72,10 @@ socket.on('new_message', (data) => {
   box.scrollTop = box.scrollHeight;
 });
 
+socket.on('chat_cleared', () => {
+  document.getElementById('chat-box').innerHTML = '';
+});
+
 document.getElementById('chat-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const input = document.getElementById('msg-input');
@@ -53,7 +85,6 @@ document.getElementById('chat-form').addEventListener('submit', (e) => {
   input.value = '';
 });
 
-// Scroll al final al cargar
 document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
 </script>
 {% endblock %}

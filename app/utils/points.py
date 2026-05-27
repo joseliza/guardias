@@ -1,3 +1,8 @@
+"""
+Utilidades de puntuación. award_guard_points suma puntos al profesor que cubre
+una guardia; apply_absence_penalty resta puntos por ausencia. Ambas funciones
+ignoran los roles management y display, que no participan en el carnet de puntos.
+"""
 from app.extensions import db
 from app.models.user import User
 

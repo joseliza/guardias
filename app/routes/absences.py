@@ -1,3 +1,9 @@
+"""
+Blueprint de ausencias. Permite registrar ausencias de profesores, añadir tareas
+para el grupo que queda sin clase, marcar reincorporaciones y generar PDFs
+(por ausencia individual o por tramo horario completo con grupos y aulas).
+"""
+import os
 from datetime import date, datetime
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_required, current_user
@@ -112,6 +118,54 @@ def create():
                            today=date.today().isoformat())
 
 
+def _append_attachments(main_bytes, tasks, upload_dir):
+    """Añade las páginas de los PDFs adjuntos a las tareas al PDF principal."""
+    import io
+    from pypdf import PdfWriter, PdfReader
+
+    attachments = [t.attachment for t in tasks if t.attachment]
+    if not attachments:
+        return main_bytes
+
+    writer = PdfWriter()
+    writer.append(PdfReader(io.BytesIO(main_bytes)))
+    for filename in attachments:
+        path = os.path.join(upload_dir, filename)
+        if os.path.exists(path):
+            writer.append(PdfReader(path))
+
+    buf = io.BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
+
+
+def _save_task_pdf(file):
+    """Guarda el PDF adjunto en uploads/tasks/ y devuelve el nombre de fichero almacenado."""
+    import uuid
+    from werkzeug.utils import secure_filename
+    from flask import current_app
+    upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}_{secure_filename(file.filename)}"
+    file.save(os.path.join(upload_dir, filename))
+    return filename
+
+
+@absences_bp.route("/tarea/<int:task_id>/adjunto")
+@login_required
+def task_attachment(task_id):
+    """Descarga el PDF adjunto a una tarea."""
+    from flask import send_from_directory
+    task = Task.query.get_or_404(task_id)
+    if not task.attachment:
+        from flask import abort
+        abort(404)
+    upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
+    return send_from_directory(upload_dir, task.attachment,
+                               download_name=task.attachment.split('_', 1)[-1],
+                               as_attachment=False)
+
+
 @absences_bp.route("/<int:absence_id>/tareas", methods=["GET", "POST"])
 @login_required
 def tasks(absence_id):
@@ -122,16 +176,99 @@ def tasks(absence_id):
 
     groups = Group.query.filter_by(active=True).order_by(Group.name).all()
 
+    schedule_entry = TeacherSchedule.query.filter_by(
+        teacher_id=absence.teacher_id,
+        day_of_week=absence.date.weekday(),
+        slot_id=absence.slot_id,
+        is_guard_slot=False,
+    ).first()
+    default_group_id = schedule_entry.group_id if schedule_entry else None
+
     if request.method == "POST":
         group_id = int(request.form["group_id"])
         description = request.form["description"]
         task = Task(absence_id=absence.id, group_id=group_id, description=description)
+
+        file = request.files.get("attachment")
+        if file and file.filename.lower().endswith(".pdf"):
+            task.attachment = _save_task_pdf(file)
+        elif file and file.filename:
+            flash("Solo se permiten archivos PDF.", "warning")
+
         db.session.add(task)
         db.session.commit()
         flash("Tarea añadida.", "success")
         return redirect(url_for("absences.tasks", absence_id=absence.id))
 
-    return render_template("absences/tasks.html", absence=absence, groups=groups)
+    return render_template("absences/tasks.html", absence=absence, groups=groups,
+                           default_group_id=default_group_id)
+
+
+@absences_bp.route("/tarea/<int:task_id>/editar", methods=["POST"])
+@login_required
+def edit_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    absence = task.absence
+    if absence.teacher_id != current_user.id and not current_user.is_management:
+        flash("No tienes acceso.", "danger")
+        return redirect(url_for("absences.index"))
+
+    task.group_id = int(request.form["group_id"])
+    task.description = request.form["description"]
+
+    file = request.files.get("attachment")
+    if file and file.filename.lower().endswith(".pdf"):
+        # Reemplaza el adjunto anterior si existía
+        if task.attachment:
+            import os
+            old_path = os.path.join(current_app.root_path, '..', 'uploads', 'tasks', task.attachment)
+            if os.path.exists(old_path):
+                os.remove(old_path)
+        task.attachment = _save_task_pdf(file)
+    elif file and file.filename:
+        flash("Solo se permiten archivos PDF.", "warning")
+
+    db.session.commit()
+    flash("Tarea actualizada.", "success")
+    return redirect(url_for("absences.tasks", absence_id=absence.id))
+
+
+@absences_bp.route("/tarea/<int:task_id>/eliminar-adjunto", methods=["POST"])
+@login_required
+def delete_task_attachment(task_id):
+    task = Task.query.get_or_404(task_id)
+    absence = task.absence
+    if absence.teacher_id != current_user.id and not current_user.is_management:
+        flash("No tienes acceso.", "danger")
+        return redirect(url_for("absences.index"))
+
+    if task.attachment:
+        path = os.path.join(current_app.root_path, '..', 'uploads', 'tasks', task.attachment)
+        if os.path.exists(path):
+            os.remove(path)
+        task.attachment = None
+        db.session.commit()
+        flash("Adjunto eliminado.", "success")
+    return redirect(url_for("absences.tasks", absence_id=absence.id))
+
+
+@absences_bp.route("/tarea/<int:task_id>/eliminar", methods=["POST"])
+@login_required
+def delete_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    absence = task.absence
+    if absence.teacher_id != current_user.id and not current_user.is_management:
+        flash("No tienes acceso.", "danger")
+        return redirect(url_for("absences.index"))
+
+    if task.attachment:
+        path = os.path.join(current_app.root_path, '..', 'uploads', 'tasks', task.attachment)
+        if os.path.exists(path):
+            os.remove(path)
+    db.session.delete(task)
+    db.session.commit()
+    flash("Tarea eliminada.", "success")
+    return redirect(url_for("absences.tasks", absence_id=absence.id))
 
 
 @absences_bp.route("/<int:absence_id>/tareas/pdf")
@@ -205,12 +342,16 @@ def tasks_pdf(absence_id):
 
     if tasks:
         for i, task in enumerate(tasks, 1):
-            pdf.multi_cell(0, 7, f"{i}. {task.description}")
+            suffix = " [adjunto PDF]" if task.attachment else ""
+            pdf.multi_cell(0, 7, f"{i}. {task.description}{suffix}")
             pdf.ln(1)
     else:
         pdf.cell(0, 7, "Sin tareas registradas.", ln=True)
 
-    response = make_response(bytes(pdf.output()))
+    upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
+    pdf_bytes = _append_attachments(bytes(pdf.output()), tasks, upload_dir)
+
+    response = make_response(pdf_bytes)
     filename = f"tareas_{absence.date.isoformat()}_tramo{absence.slot_id}.pdf"
     response.headers["Content-Type"] = "application/pdf"
     response.headers["Content-Disposition"] = f"attachment; filename={filename}"
@@ -235,12 +376,14 @@ def slot_pdf(date_str, slot_id):
     slot = next((s for s in slots if s["id"] == slot_id), None)
     slot_label = f"{slot['label']} ({slot['start']}-{slot['end']})" if slot else str(slot_id)
 
+    import io
+    from pypdf import PdfWriter, PdfReader
+
     FONT   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
 
-    pdf = FPDF()
-    pdf.add_font("dv", "",  FONT)
-    pdf.add_font("dv", "B", FONT_B)
+    writer = PdfWriter()
 
     for absence in absences:
         tasks = absence.tasks.all()
@@ -254,6 +397,9 @@ def slot_pdf(date_str, slot_id):
         group_name = group.name if group else "-"
         room_name = group.room.name if group and group.room else "-"
 
+        pdf = FPDF()
+        pdf.add_font("dv", "",  FONT)
+        pdf.add_font("dv", "B", FONT_B)
         pdf.add_page()
 
         # Cabecera
@@ -291,13 +437,27 @@ def slot_pdf(date_str, slot_id):
 
         if tasks:
             for i, task in enumerate(tasks, 1):
-                pdf.multi_cell(0, 7, f"{i}. {task.description}")
+                suffix = " [adjunto PDF]" if task.attachment else ""
+                pdf.multi_cell(0, 7, f"{i}. {task.description}{suffix}")
                 pdf.ln(1)
         else:
-            pdf.set_font("dv", "", 11)
             pdf.cell(0, 7, "El profesor/a no ha dejado tareas.", ln=True)
 
-    response = make_response(bytes(pdf.output()))
+        # Añadir página(s) de esta ausencia al ensamblador
+        writer.append(PdfReader(io.BytesIO(bytes(pdf.output()))))
+
+        # Adjuntos de las tareas de esta ausencia, justo a continuación
+        for task in tasks:
+            if task.attachment:
+                path = os.path.join(upload_dir, task.attachment)
+                if os.path.exists(path):
+                    writer.append(PdfReader(path))
+
+    buf = io.BytesIO()
+    writer.write(buf)
+    pdf_bytes = buf.getvalue()
+
+    response = make_response(pdf_bytes)
     filename = f"tareas_{date_str}_tramo{slot_id}.pdf"
     response.headers["Content-Type"] = "application/pdf"
     response.headers["Content-Disposition"] = f"attachment; filename={filename}"
@@ -307,10 +467,32 @@ def slot_pdf(date_str, slot_id):
 @absences_bp.route("/<int:absence_id>/reincorporar", methods=["POST"])
 @login_required
 def mark_returned(absence_id):
+    from app.models.schedule import TeacherSchedule
+    from datetime import date as _date
+
     absence = Absence.query.get_or_404(absence_id)
+
+    # Permitido a: directivos, pantalla, y profesor con guardia en ese tramo hoy
+    if not current_user.is_management and current_user.role != "display":
+        has_guard = TeacherSchedule.query.filter_by(
+            teacher_id=current_user.id,
+            day_of_week=_date.today().weekday(),
+            slot_id=absence.slot_id,
+            is_guard_slot=True,
+        ).first()
+        if not has_guard:
+            flash("Sin permiso.", "danger")
+            return redirect(url_for("dashboard.index"))
+
     absence.status = "returned"
     if absence.guard:
         absence.guard.status = "returned"
     db.session.commit()
     flash("Reincorporación registrada.", "success")
+
+    back = request.form.get("back", "dashboard")
+    if back == "my_guard":
+        return redirect(url_for("guards.my_guard") + f"#slot-{absence.slot_id}")
+    if back == "display":
+        return redirect(url_for("display.index"))
     return redirect(url_for("dashboard.index") + f"#slot-{absence.slot_id}")

@@ -1,3 +1,8 @@
+"""
+Modelo Absence. Registra cada tramo en que un profesor está ausente:
+motivo, quién lo notificó, estado (pending/confirmed/returned) y la
+penalización de puntos aplicada. Cada ausencia puede generar una Guard.
+"""
 from datetime import datetime
 from app.extensions import db
 

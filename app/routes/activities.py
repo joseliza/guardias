@@ -1,3 +1,8 @@
+"""
+Blueprint de actividades extraescolares. Permite registrar salidas y actividades
+con los grupos participantes y los profesores acompañantes. Envía emails
+automáticos a los acompañantes solicitando las tareas para los alumnos.
+"""
 from datetime import datetime
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_required, current_user

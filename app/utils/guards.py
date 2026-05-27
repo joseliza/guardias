@@ -1,3 +1,10 @@
+"""
+Utilidades de asignación de guardias.
+get_available_teachers_for_slot: devuelve el pool primario (guardia asignada)
+  y secundario (libres sin clase) para un tramo dado, excluyendo ausentes.
+auto_assign_pending_guards: asigna automáticamente un profesor del pool primario
+  a cada guardia pendiente del tramo, sin repetir profesor ni crear dobles.
+"""
 from datetime import date
 from app.models.user import User
 from app.models.schedule import TeacherSchedule
