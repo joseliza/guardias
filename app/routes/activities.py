@@ -12,9 +12,6 @@ from app.models.absence import Absence
 from app.models.guard import Guard
 from app.models.user import User
 from app.models.group import Group
-from app.models.schedule import TeacherSchedule
-from app.utils.points import apply_absence_penalty
-from app.utils.guards import auto_assign_pending_guards
 from flask_mail import Message
 
 activities_bp = Blueprint("activities", __name__, url_prefix="/extraescolares")
@@ -95,22 +92,8 @@ def create():
                     )
                     db.session.add(guard)
 
-                    # Penalizar solo si tenía guardia en ese tramo
-                    day_idx = activity_date.weekday()
-                    has_guard_slot = TeacherSchedule.query.filter_by(
-                        teacher_id=int(tid),
-                        day_of_week=day_idx,
-                        slot_id=int(slot_id),
-                        is_guard_slot=True,
-                    ).first()
-                    if has_guard_slot:
-                        apply_absence_penalty(int(tid))
 
         db.session.commit()
-
-        # Auto-asignación de guardias generadas
-        for slot_id in slot_ids:
-            auto_assign_pending_guards(activity_date, int(slot_id))
 
         # Email a acompañantes
         _send_task_request_emails(activity)

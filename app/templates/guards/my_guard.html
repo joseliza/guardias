@@ -13,11 +13,14 @@
 {% set absences = gs.absences %}
 {% set primary = gs.primary %}
 {% set secondary = gs.secondary %}
+{% set activity_group_ids = gs.activity_group_ids %}
 
 <div class="card mb-4" id="slot-{{ slot.id }}">
   <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
     <span><i class="bi bi-clock"></i> <strong>{{ slot.label }}</strong> — {{ slot.start }}–{{ slot.end }}</span>
-    <span class="badge bg-light text-dark">{{ guards | selectattr('status','eq','pending') | list | length }} pendiente(s)</span>
+    {% set real_pending_count = [] %}
+    {% for g in guards %}{% if g.status == 'pending' and (not g.group_id or g.group_id not in activity_group_ids) %}{% set _ = real_pending_count.append(1) %}{% endif %}{% endfor %}
+    <span class="badge bg-light text-dark">{{ real_pending_count | length }} pendiente(s)</span>
   </div>
   <div class="card-body p-0">
 
@@ -38,6 +41,11 @@
         <span class="badge bg-success">Cubierta</span>
         {% elif guard.status == 'returned' %}
         <span class="badge bg-secondary">Reincorporado</span>
+        {% elif guard.group_id and guard.group_id in activity_group_ids %}
+        <span class="badge" style="background-color:#0d9488!important;color:#fff"
+              title="El grupo está de actividad extraescolar">
+          <i class="bi bi-bus-front"></i> Grupo en actividad EX
+        </span>
         {% else %}
         <span class="badge bg-danger">Pendiente</span>
         {% endif %}

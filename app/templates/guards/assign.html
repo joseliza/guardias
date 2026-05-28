@@ -21,6 +21,13 @@
             {% endfor %}
           </optgroup>
           {% endif %}
+          {% if ex_guard %}
+          <optgroup label="— Profesores de guardia por actividad extraescolar —">
+            {% for t in ex_guard %}
+            <option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
           {% if secondary %}
           <optgroup label="— Libres en este tramo (sin clase) —">
             {% for t in secondary %}
@@ -28,7 +35,7 @@
             {% endfor %}
           </optgroup>
           {% endif %}
-          {% if not primary and not secondary %}
+          {% if not primary and not ex_guard and not secondary %}
           <option disabled>No hay profesores disponibles</option>
           {% endif %}
         </select>

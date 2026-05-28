@@ -261,6 +261,40 @@ def room_delete(rid):
     return redirect(url_for("admin.rooms"))
 
 
+@admin_bp.route("/horarios")
+@login_required
+def schedules():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from flask import current_app
+
+    teachers = (User.query
+                .filter_by(active=True)
+                .filter(User.role.notin_(["management", "display"]))
+                .order_by(User.surname, User.name)
+                .all())
+
+    teacher_id = request.args.get("teacher_id", type=int)
+    selected = User.query.get(teacher_id) if teacher_id else None
+
+    slots_cfg = current_app.config["TIME_SLOTS"]
+    days = current_app.config["DAYS_OF_WEEK"]
+    schedule_grid = None
+    if selected:
+        entries = TeacherSchedule.query.filter_by(teacher_id=selected.id).all()
+        entry_map = {(e.day_of_week, e.slot_id): e for e in entries}
+        schedule_grid = []
+        for s in slots_cfg:
+            row = {"slot": s, "days": [entry_map.get((d, s["id"])) for d in range(5)]}
+            schedule_grid.append(row)
+
+    return render_template("admin/schedules.html",
+                           teachers=teachers,
+                           selected=selected,
+                           schedule_grid=schedule_grid,
+                           days=days)
+
+
 @admin_bp.route("/horarios/importar-csv", methods=["GET", "POST"])
 @login_required
 def import_schedule_csv():

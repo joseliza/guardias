@@ -50,7 +50,7 @@ def assign(guard_id):
     slots = current_app.config["TIME_SLOTS"]
     slot = next((s for s in slots if s["id"] == guard.slot_id), None)
 
-    primary, secondary = get_available_teachers_for_slot(guard.date, guard.slot_id)
+    primary, ex_guard, secondary = get_available_teachers_for_slot(guard.date, guard.slot_id)
 
     # Destino de vuelta: "my_guard" desde la página del profesor, "dashboard" por defecto
     back = request.args.get("back") or request.form.get("back", "dashboard")
@@ -93,7 +93,8 @@ def assign(guard_id):
         return redirect(url_for("dashboard.index") + f"#slot-{guard.slot_id}")
 
     return render_template("guards/assign.html", guard=guard, slot=slot,
-                           primary=primary, secondary=secondary, back=back)
+                           primary=primary, ex_guard=ex_guard,
+                           secondary=secondary, back=back)
 
 
 @guards_bp.route("/<int:guard_id>/registrar", methods=["GET", "POST"])
@@ -227,6 +228,18 @@ def my_guard():
 
     guard_slots = []
     if day_idx <= 4:
+        from app.models.activity import ExtraActivity
+        _today_acts = ExtraActivity.query.filter_by(date=today).all()
+
+        def _activity_gids(slot_id):
+            ids = set()
+            for act in _today_acts:
+                if slot_id in act.slot_id_list:
+                    for ag in act.groups:
+                        if ag.whole_group:
+                            ids.add(ag.group_id)
+            return ids
+
         entries = TeacherSchedule.query.filter_by(
             teacher_id=current_user.id,
             day_of_week=day_idx,
@@ -237,13 +250,15 @@ def my_guard():
             slot_cfg = slot_map.get(entry.slot_id)
             guards_in_slot = Guard.query.filter_by(date=today, slot_id=entry.slot_id).all()
             absences_in_slot = Absence.query.filter_by(date=today, slot_id=entry.slot_id).all()
-            primary, secondary = get_available_teachers_for_slot(today, entry.slot_id)
+            primary, ex_guard, secondary = get_available_teachers_for_slot(today, entry.slot_id)
             guard_slots.append({
                 "slot": slot_cfg,
                 "guards": guards_in_slot,
                 "absences": absences_in_slot,
                 "primary": primary,
+                "ex_guard": ex_guard,
                 "secondary": secondary,
+                "activity_group_ids": _activity_gids(entry.slot_id),
             })
 
     return render_template("guards/my_guard.html",

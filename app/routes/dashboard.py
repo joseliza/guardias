@@ -24,8 +24,21 @@ def index():
     day_idx = today.weekday()
     slots_cfg = current_app.config["TIME_SLOTS"]
 
+    from app.models.activity import ExtraActivity
+
     today_absences = Absence.query.filter_by(date=today).all()
     today_guards = Guard.query.filter_by(date=today).all()
+
+    # Grupos que salen completos en actividad extraescolar hoy, por tramo
+    _today_activities = ExtraActivity.query.filter_by(date=today).all()
+    def _activity_group_ids(slot_id):
+        ids = set()
+        for act in _today_activities:
+            if slot_id in act.slot_id_list:
+                for ag in act.groups:
+                    if ag.whole_group:
+                        ids.add(ag.group_id)
+        return ids
 
     absences_by_slot = {}
     guards_by_slot = {}
@@ -75,7 +88,7 @@ def index():
         absent_ids = {a.teacher_id for a in absences_by_slot.get(sid, [])}
         available_ids = guard_entry_ids - absent_ids
 
-        primary_teachers, secondary_teachers = get_available_teachers_for_slot(today, sid)
+        primary_teachers, ex_guard_teachers, secondary_teachers = get_available_teachers_for_slot(today, sid)
 
         # Registros de guardias cubiertas en este tramo hoy
         guard_ids_slot = [g.id for g in guards_by_slot.get(sid, [])]
@@ -94,15 +107,17 @@ def index():
                 key=lambda t: t.surname,
             )
 
-        primary_ids = {t.id for t in primary_teachers}
+        primary_ids   = {t.id for t in primary_teachers}
+        ex_guard_ids  = {t.id for t in ex_guard_teachers}
         extra_teachers = sorted(
-            [User.query.get(tid) for tid in assigned_teacher_ids - primary_ids
+            [User.query.get(tid) for tid in assigned_teacher_ids - primary_ids - ex_guard_ids
              if User.query.get(tid)],
             key=lambda t: t.points,
         )
 
         guard_info_by_slot[sid] = {
             "primary": primary_teachers,
+            "ex_guard": ex_guard_teachers,
             "secondary": secondary_teachers,
             "assigned_ids": assigned_teacher_ids,
             "multi_assigned": multi_assigned,
@@ -115,9 +130,16 @@ def index():
         sid = s["id"]
         absences = absences_by_slot.get(sid, [])
         guards = guards_by_slot.get(sid, [])
-        gi = guard_info_by_slot.get(sid, {"primary": [], "secondary": [], "assigned_ids": set(), "extra": [], "multi_assigned": []})
+        gi = guard_info_by_slot.get(sid, {"primary": [], "ex_guard": [], "secondary": [], "assigned_ids": set(), "extra": [], "multi_assigned": []})
         n_guard_teachers = len(gi["primary"])
-        n_absences = len(absences)
+
+        activity_gids = _activity_group_ids(sid)
+
+        # Guardias que realmente necesitan cobertura (excluye grupos en actividad EX)
+        real_pending = [
+            g for g in guards
+            if g.status == "pending" and g.group_id not in activity_gids
+        ]
 
         pending_guards_info = [
             {
@@ -128,21 +150,24 @@ def index():
                     + (g.group.name if g.group else "—")
                 ),
             }
-            for g in guards if g.status == "pending"
+            for g in real_pending
         ]
 
         slots_data.append({
             "slot": s,
             "absences": absences,
             "guards": guards,
+            "real_pending": real_pending,
             "guard_teachers": gi["primary"],
+            "ex_guard_teachers": gi["ex_guard"],
             "secondary_teachers": gi["secondary"],
             "extra_teachers": gi["extra"],
             "assigned_teacher_ids": gi["assigned_ids"],
             "multi_assigned": gi["multi_assigned"],
             "is_my_guard": sid in my_guard_slot_ids,
-            "overload": n_absences > 0 and n_absences > n_guard_teachers,
+            "overload": len(real_pending) > 0 and len(real_pending) > n_guard_teachers,
             "pending_guards_info": pending_guards_info,
+            "activity_group_ids": activity_gids,
         })
 
     from datetime import datetime
@@ -162,18 +187,25 @@ def index():
         .all()
     )
 
-    # Tareas del día por tramo (solo para management)
+    # Tareas del día por tramo agrupadas por ausencia (solo para management)
     from collections import defaultdict
     tasks_by_slot = defaultdict(list)
     if current_user.is_management:
         for a in today_absences:
-            for task in a.tasks:
+            task_list = list(a.tasks)
+            if task_list:
                 tasks_by_slot[a.slot_id].append({
+                    "absence_id": a.id,
                     "teacher": a.teacher.full_name,
-                    "group": task.group.name,
-                    "description": task.description,
-                    "attachment": task.attachment,
-                    "task_id": task.id,
+                    "group": absence_groups.get(a.id, "—"),
+                    "tasks": [
+                        {
+                            "description": t.description,
+                            "attachment": t.attachment,
+                            "task_id": t.id,
+                        }
+                        for t in task_list
+                    ],
                 })
 
     return render_template(

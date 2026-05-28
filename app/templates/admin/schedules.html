@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Horarios del profesorado{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-calendar3"></i> Horarios del profesorado</h4>
+</div>
+
+{# Selector de profesor #}
+<form method="GET" class="row g-2 align-items-end mb-4">
+  <div class="col-md-5">
+    <label class="form-label small text-muted mb-1">Profesor/a</label>
+    <select name="teacher_id" class="form-select" onchange="this.form.submit()">
+      <option value="">— Selecciona un profesor/a —</option>
+      {% for t in teachers %}
+      <option value="{{ t.id }}" {% if selected and t.id == selected.id %}selected{% endif %}>
+        {{ t.surname }}, {{ t.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+</form>
+
+{% if not selected %}
+<div class="alert alert-info">
+  <i class="bi bi-arrow-up-circle"></i> Selecciona un profesor para ver su horario semanal.
+</div>
+
+{% else %}
+<h5 class="mb-3">
+  <i class="bi bi-person"></i> {{ selected.surname }}, {{ selected.name }}
+  <small class="text-muted ms-2">{{ selected.email }}</small>
+  <span class="badge bg-secondary ms-2">{{ selected.points }} pts</span>
+</h5>
+
+<div class="table-responsive">
+  <table class="table table-bordered table-sm align-middle text-center" style="min-width:600px">
+    <thead class="table-dark">
+      <tr>
+        <th style="width:110px">Tramo</th>
+        {% for day in days %}
+        <th>{{ day }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in schedule_grid %}
+      {% set s = row.slot %}
+      {% if s.is_break %}
+      <tr class="table-secondary">
+        <td class="text-start fw-semibold small text-muted">
+          <i class="bi bi-cup-hot"></i> {{ s.label }}<br>
+          <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
+        </td>
+        {% for entry in row.days %}
+        <td>
+          {% if entry %}
+            {% if entry.is_guard_slot %}
+            <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia recreo</span>
+            {% else %}
+            <span class="text-muted small">—</span>
+            {% endif %}
+          {% else %}
+          <span class="text-muted" style="font-size:.8rem">—</span>
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% else %}
+      <tr>
+        <td class="text-start fw-semibold small text-muted">
+          {{ s.label }}<br>
+          <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
+        </td>
+        {% for entry in row.days %}
+        <td class="py-2
+          {% if entry %}
+            {% if entry.is_guard_slot %}bg-success-subtle{% else %}bg-primary-subtle{% endif %}
+          {% endif %}">
+          {% if entry %}
+            {% if entry.is_guard_slot %}
+            <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia</span>
+            {% elif entry.group %}
+            <span class="badge bg-primary">{{ entry.group.name }}</span>
+            {% if entry.group.room %}
+            <div class="small text-muted mt-1"><i class="bi bi-door-open"></i> {{ entry.group.room.name }}</div>
+            {% endif %}
+            {% else %}
+            <span class="text-muted small">—</span>
+            {% endif %}
+          {% else %}
+          <span class="text-muted" style="font-size:.8rem">Libre</span>
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# Resumen semanal #}
+{% set guard_count = namespace(n=0) %}
+{% set class_count = namespace(n=0) %}
+{% set free_count  = namespace(n=0) %}
+{% for row in schedule_grid %}
+  {% if not row.slot.is_break %}
+    {% for entry in row.days %}
+      {% if entry %}
+        {% if entry.is_guard_slot %}{% set guard_count.n = guard_count.n + 1 %}
+        {% else %}{% set class_count.n = class_count.n + 1 %}{% endif %}
+      {% else %}{% set free_count.n = free_count.n + 1 %}{% endif %}
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+<div class="d-flex gap-3 mt-2">
+  <span class="badge bg-success fs-6"><i class="bi bi-shield-check"></i> {{ guard_count.n }} guardia{{ 's' if guard_count.n != 1 }}</span>
+  <span class="badge bg-primary fs-6"><i class="bi bi-people"></i> {{ class_count.n }} clase{{ 's' if class_count.n != 1 }}</span>
+  <span class="badge bg-secondary fs-6"><i class="bi bi-dash-circle"></i> {{ free_count.n }} libre{{ 's' if free_count.n != 1 }}</span>
+</div>
+{% endif %}
+
+{% endblock %}
