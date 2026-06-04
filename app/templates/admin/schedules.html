@@ -9,7 +9,8 @@
 <form method="GET" class="row g-2 align-items-end mb-4">
   <div class="col-md-5">
     <label class="form-label small text-muted mb-1">Profesor/a</label>
-    <select name="teacher_id" class="form-select" onchange="this.form.submit()">
+    <input type="search" id="sched-teacher-search" class="form-control mb-1" placeholder="Buscar profesor...">
+    <select name="teacher_id" id="sched-teacher-select" class="form-select" onchange="this.form.submit()">
       <option value="">— Selecciona un profesor/a —</option>
       {% for t in teachers %}
       <option value="{{ t.id }}" {% if selected and t.id == selected.id %}selected{% endif %}>
@@ -120,4 +121,18 @@
 </div>
 {% endif %}
 
+{% endblock %}
+{% block scripts %}
+<script>
+const schedSearch = document.getElementById('sched-teacher-search');
+if (schedSearch) {
+  schedSearch.addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    const sel = document.getElementById('sched-teacher-select');
+    Array.from(sel.options).forEach(opt => {
+      opt.hidden = q && opt.value !== '' && !opt.text.toLowerCase().includes(q);
+    });
+  });
+}
+</script>
 {% endblock %}

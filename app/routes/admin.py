@@ -91,6 +91,37 @@ def teacher_edit(tid):
 # ── Importación CSV profesores ────────────────────────────────────────────────
 # Formato esperado: email,nombre,apellidos,rol,contraseña
 
+@admin_bp.route("/profesores/<int:tid>/eliminar", methods=["POST"])
+@login_required
+def teacher_delete(tid):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    teacher = User.query.get_or_404(tid)
+    if teacher.id == current_user.id:
+        flash("No puedes eliminar tu propia cuenta.", "danger")
+        return redirect(url_for("admin.teacher_edit", tid=tid))
+
+    name = teacher.full_name
+    # Eliminar registros dependientes manualmente (sin cascade en modelo)
+    from app.models.guard import GuardRecord
+    from app.models.absence import Absence
+    from app.models.schedule import TeacherSchedule
+    from app.models.guard import Guard
+
+    GuardRecord.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
+    # Guardias generadas por ausencias de este profesor
+    absence_ids = [a.id for a in Absence.query.filter_by(teacher_id=tid).all()]
+    if absence_ids:
+        Guard.query.filter(Guard.absence_id.in_(absence_ids)).delete(synchronize_session=False)
+    Absence.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
+    Absence.query.filter_by(reported_by_id=tid).update({"reported_by_id": None}, synchronize_session=False)
+    TeacherSchedule.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
+    db.session.delete(teacher)
+    db.session.commit()
+    flash(f"Profesor {name} eliminado permanentemente.", "success")
+    return redirect(url_for("admin.teachers"))
+
+
 @admin_bp.route("/profesores/toggle-emails-all", methods=["POST"])
 @login_required
 def teacher_toggle_emails_all():

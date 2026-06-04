@@ -150,7 +150,7 @@
             <div class="col-12">
               <label class="form-label d-block">Roles destinatarios</label>
               <div class="d-flex gap-3 flex-wrap mb-2">
-                {% for role, label in [('teacher','Profesorado'),('extracurricular','Extraescolares'),('management','Equipo directivo')] %}
+                {% for role, label in [('teacher','Profesorado'),('extracurricular','Extraescolares'),('management','Management')] %}
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" name="recipient_roles" value="{{ role }}"
                          id="role-{{ role }}" {% if role in sched_roles %}checked{% endif %}>
@@ -181,7 +181,7 @@
                     {% set current_role.val = u.role %}
                     <div class="col-12 mt-1">
                       <small class="text-muted text-uppercase fw-bold" style="font-size:.7rem;letter-spacing:.05em;">
-                        {{ {'teacher':'Profesorado','extracurricular':'Extraescolares','management':'Dirección'}.get(u.role, u.role) }}
+                        {{ {'teacher':'Profesorado','extracurricular':'Extraescolares','management':'Management'}.get(u.role, u.role) }}
                       </small>
                     </div>
                     {% endif %}
