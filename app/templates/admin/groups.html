@@ -5,9 +5,10 @@
   <h4><i class="bi bi-diagram-3"></i> Grupos</h4>
   <a href="{{ url_for('admin.group_create') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nuevo grupo</a>
 </div>
+<input type="search" class="table-filter form-control mb-2" data-target="#tabla-grupos" placeholder="Buscar grupo...">
 <div class="card">
   <div class="card-body p-0">
-    <table class="table table-hover mb-0">
+    <table class="table table-hover mb-0" id="tabla-grupos">
       <thead class="table-light"><tr><th>Nombre</th><th>Aula</th><th>Alta dificultad</th><th>Multiplicador</th><th>Activo</th><th></th></tr></thead>
       <tbody>
         {% for g in groups %}

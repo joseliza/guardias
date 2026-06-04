@@ -137,6 +137,19 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>document.querySelectorAll('.toast').forEach(el => new bootstrap.Toast(el).show());</script>
+<script>
+// Buscador rápido reutilizable: <input class="table-filter" data-target="#tabla-id">
+document.querySelectorAll('.table-filter').forEach(input => {
+  const tbody = document.querySelector(input.dataset.target + ' tbody');
+  if (!tbody) return;
+  input.addEventListener('input', () => {
+    const q = input.value.toLowerCase().trim();
+    tbody.querySelectorAll('tr').forEach(row => {
+      row.style.display = !q || row.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  });
+});
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
