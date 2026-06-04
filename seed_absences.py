@@ -22,6 +22,7 @@ from app.models.schedule import TeacherSchedule
 from app.models.absence import Absence
 from app.models.guard import Guard
 from app.models.guard import GuardRecord
+from app.models.task import Task
 from app.utils.guards import auto_assign_pending_guards
 from datetime import date
 
@@ -32,6 +33,23 @@ REASONS = [
     "Asuntos propios",
     "Guardia sindical",
     "",
+]
+
+TAREAS = [
+    "Leer el tema del libro y responder las preguntas de comprensión.",
+    "Realizar los ejercicios de la página indicada en el libro.",
+    "Copiar y aprender los apuntes del día anterior.",
+    "Completar la ficha de repaso entregada la semana pasada.",
+    "Leer en silencio el artículo fotocopiado y subrayar las ideas principales.",
+    "Realizar el problema de la página siguiente, todos los apartados.",
+    "Estudiar el vocabulario de la unidad para el próximo examen.",
+    "Terminar el trabajo en grupo sobre el tema actual.",
+    "Hacer el resumen del capítulo indicado en el libro de lectura.",
+    "Repasar los conceptos del examen de la próxima semana.",
+    "Continuar con el ejercicio de redacción iniciado en clase.",
+    "Resolver los problemas del apartado de autoevaluación.",
+    "Completar la línea del tiempo de la unidad actual.",
+    "Realizar el experimento de la guía práctica.",
 ]
 
 MAX_PER_SLOT = 6
@@ -120,6 +138,15 @@ def run():
                     group_id=entry.group_id,
                     status="pending",
                 ))
+
+                # Tareas: 70% de probabilidad, 1-2 por ausencia
+                if entry.group_id and random.random() > 0.3:
+                    for _ in range(random.randint(1, 2)):
+                        db.session.add(Task(
+                            absence_id=absence.id,
+                            group_id=entry.group_id,
+                            description=random.choice(TAREAS),
+                        ))
                 total += 1
 
             if seleccionados:
