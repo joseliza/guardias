@@ -4,7 +4,8 @@ email/contraseña y con Google Workspace OAuth (solo dominio del instituto).
 El rol `display` redirige directamente a la pantalla de sala de profesores;
 el resto de roles van al panel principal.
 """
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
+import urllib.parse
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_user, logout_user, login_required, current_user
 from app.extensions import db, oauth
 from app.models.user import User
@@ -33,15 +34,18 @@ def login():
 @auth_bp.route("/logout")
 @login_required
 def logout():
+    via_google = session.get("via_google", False)
     logout_user()
+    if via_google:
+        return redirect("https://accounts.google.com/Logout")
     return redirect(url_for("auth.login"))
 
 
 @auth_bp.route("/auth/google")
 def google_login():
-    redirect_uri = url_for("auth.google_callback", _external=True)
+    redirect_uri = url_for("auth.google_callback", _external=True, _scheme="https")
     allowed_domain = current_app.config["GOOGLE_ALLOWED_DOMAIN"]
-    return oauth.google.authorize_redirect(redirect_uri, hd=allowed_domain)
+    return oauth.google.authorize_redirect(redirect_uri, hd=allowed_domain, prompt="select_account login", max_age=0)
 
 
 @auth_bp.route("/auth/google/callback")
@@ -62,6 +66,7 @@ def google_callback():
         flash("No tienes cuenta en esta aplicación. Contacta con el equipo directivo.", "danger")
         return redirect(url_for("auth.login"))
 
+    session["via_google"] = True
     login_user(user, remember=True)
     if user.role == "display":
         return redirect(url_for("display.index"))

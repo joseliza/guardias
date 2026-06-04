@@ -40,13 +40,15 @@ def teacher_create():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     if request.method == "POST":
+        import secrets
         user = User(
             email=request.form["email"].strip().lower(),
             name=request.form["name"].strip(),
             surname=request.form["surname"].strip(),
             role=request.form.get("role", "teacher"),
         )
-        user.set_password(request.form["password"])
+        password = request.form.get("password") or secrets.token_hex(24)
+        user.set_password(password)
         db.session.add(user)
         db.session.commit()
         flash("Profesor creado.", "success")

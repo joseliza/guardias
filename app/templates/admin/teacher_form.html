@@ -36,8 +36,8 @@
           {% endif %}
         </div>
         <div class="col-md-6">
-          <label class="form-label">Contraseña {{ '(dejar vacío para no cambiar)' if teacher else '' }}</label>
-          <input type="password" name="password" class="form-control" {% if not teacher %}required{% endif %}>
+          <label class="form-label">Contraseña <small class="text-muted">(opcional si usa Google Workspace{{ ' · dejar vacío para no cambiar' if teacher else '' }})</small></label>
+          <input type="password" name="password" class="form-control">
         </div>
       </div>
       <div class="mt-4">
