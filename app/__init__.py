@@ -3,6 +3,7 @@ Factoría de la aplicación Flask. Inicializa extensiones, registra blueprints
 y define el filtro Jinja2 `fecha_es` para formatear fechas en castellano.
 """
 from flask import Flask
+from flask_login import current_user
 from app.config import Config
 from app.extensions import db, login_manager, migrate, mail, socketio, oauth
 
@@ -49,6 +50,14 @@ def create_app():
     @login_manager.user_loader
     def load_user(user_id):
         return User.query.get(int(user_id))
+
+    @app.after_request
+    def no_cache(response):
+        if current_user.is_authenticated:
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
 
     from app.routes.auth import auth_bp
     from app.routes.dashboard import dashboard_bp
