@@ -21,6 +21,7 @@ from app.models.user import User
 from app.models.schedule import TeacherSchedule
 from app.models.absence import Absence
 from app.models.guard import Guard
+from app.models.guard import GuardRecord
 from app.utils.guards import auto_assign_pending_guards
 from datetime import date
 
@@ -48,9 +49,12 @@ def run():
 
         # ── Limpiar ausencias y guardias de hoy ──────────────────────────────
         guards_hoy = Guard.query.filter_by(date=today).all()
-        absences_hoy = Absence.query.filter_by(date=today).all()
+        guard_ids = [g.id for g in guards_hoy]
+        if guard_ids:
+            GuardRecord.query.filter(GuardRecord.guard_id.in_(guard_ids)).delete(synchronize_session=False)
         for g in guards_hoy:
             db.session.delete(g)
+        absences_hoy = Absence.query.filter_by(date=today).all()
         for a in absences_hoy:
             db.session.delete(a)
         db.session.commit()
