@@ -4,7 +4,7 @@ y define el filtro Jinja2 `fecha_es` para formatear fechas en castellano.
 """
 from flask import Flask
 from app.config import Config
-from app.extensions import db, login_manager, migrate, mail, socketio
+from app.extensions import db, login_manager, migrate, mail, socketio, oauth
 
 
 def create_app():
@@ -16,6 +16,14 @@ def create_app():
     migrate.init_app(app, db)
     mail.init_app(app)
     socketio.init_app(app, async_mode="eventlet", cors_allowed_origins="*")
+    oauth.init_app(app)
+    oauth.register(
+        name="google",
+        client_id=app.config["GOOGLE_CLIENT_ID"],
+        client_secret=app.config["GOOGLE_CLIENT_SECRET"],
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
 
     login_manager.login_view = "auth.login"
     login_manager.login_message = "Por favor, inicia sesión para acceder."

@@ -1,11 +1,12 @@
 """
-Blueprint de autenticación. Gestiona el inicio y cierre de sesión.
+Blueprint de autenticación. Gestiona el inicio y cierre de sesión con
+email/contraseña y con Google Workspace OAuth (solo dominio del instituto).
 El rol `display` redirige directamente a la pantalla de sala de profesores;
 el resto de roles van al panel principal.
 """
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_user, logout_user, login_required, current_user
-from app.extensions import db
+from app.extensions import db, oauth
 from app.models.user import User
 
 auth_bp = Blueprint("auth", __name__)
@@ -34,3 +35,34 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/auth/google")
+def google_login():
+    redirect_uri = url_for("auth.google_callback", _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+
+@auth_bp.route("/auth/google/callback")
+def google_callback():
+    token = oauth.google.authorize_access_token()
+    userinfo = token.get("userinfo") or {}
+
+    email = (userinfo.get("email") or "").lower()
+    hd = userinfo.get("hd", "")
+    allowed_domain = current_app.config["GOOGLE_ALLOWED_DOMAIN"]
+
+    if hd != allowed_domain:
+        flash("Solo se permiten cuentas del instituto (@" + allowed_domain + ").", "danger")
+        return redirect(url_for("auth.login"))
+
+    user = User.query.filter_by(email=email, active=True).first()
+    if not user:
+        flash("No tienes cuenta en esta aplicación. Contacta con el equipo directivo.", "danger")
+        return redirect(url_for("auth.login"))
+
+    login_user(user, remember=True)
+    if user.role == "display":
+        return redirect(url_for("display.index"))
+    next_page = request.args.get("next")
+    return redirect(next_page or url_for("dashboard.index"))

@@ -24,6 +24,10 @@ class Config:
     INSTITUTE_NAME = os.getenv("INSTITUTE_NAME", "IES")
     ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@instituto.es")
 
+    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+    GOOGLE_ALLOWED_DOMAIN = os.getenv("GOOGLE_ALLOWED_DOMAIN", "iesciudadjardin.com")
+
     # Tramos horarios del instituto
     TIME_SLOTS = [
         {"id": 1, "label": "1ª hora",  "start": "08:15", "end": "09:15", "is_break": False},
