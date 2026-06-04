@@ -5,7 +5,7 @@ y define el filtro Jinja2 `fecha_es` para formatear fechas en castellano.
 from flask import Flask
 from flask_login import current_user
 from app.config import Config
-from app.extensions import db, login_manager, migrate, mail, socketio, oauth
+from app.extensions import db, login_manager, migrate, mail, socketio, oauth, scheduler
 
 
 def create_app():
@@ -76,5 +76,10 @@ def create_app():
     app.register_blueprint(admin_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(display_bp)
+
+    if not scheduler.running:
+        scheduler.start()
+    from app.utils.mail_digest import reload_schedule
+    reload_schedule(app)
 
     return app

@@ -16,7 +16,10 @@ def award_guard_points(teacher_id: int, points: float):
         db.session.add(teacher)
 
 
-def apply_absence_penalty(teacher_id: int, penalty: float = -1.0):
+def apply_absence_penalty(teacher_id: int, penalty: float = None):
+    if penalty is None:
+        from flask import current_app
+        penalty = current_app.config.get("ABSENCE_PENALTY", -1.0)
     teacher = User.query.get(teacher_id)
     if teacher and teacher.role not in EXCLUDED_ROLES:
         teacher.points = round(teacher.points + penalty, 2)

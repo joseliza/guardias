@@ -6,7 +6,21 @@ y la tabla de tramos horarios (TIME_SLOTS) usada en todo el sistema.
 import os
 from dotenv import load_dotenv
 
+import json
+
 load_dotenv(encoding="utf-8")
+
+_MAIL_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "instance", "mail_config.json")
+
+def _load_mail_config():
+    try:
+        with open(_MAIL_CONFIG_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+_mail = _load_mail_config()
+_points_cfg = _mail.get("POINTS", {})
 
 
 class Config:
@@ -14,12 +28,16 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "mysql+pymysql://guardias:password@db/guardias")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    MAIL_SERVER = os.getenv("MAIL_SERVER", "localhost")
-    MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
-    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() == "true"
-    MAIL_USERNAME = os.getenv("MAIL_USERNAME")
-    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
-    MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER")
+    MAIL_SERVER = _mail.get("MAIL_SERVER") or os.getenv("MAIL_SERVER", "localhost")
+    MAIL_PORT = int(_mail.get("MAIL_PORT") or os.getenv("MAIL_PORT", 587))
+    MAIL_USE_TLS = str(_mail.get("MAIL_USE_TLS") or os.getenv("MAIL_USE_TLS", "true")).lower() == "true"
+    MAIL_USERNAME = _mail.get("MAIL_USERNAME") or os.getenv("MAIL_USERNAME")
+    MAIL_PASSWORD = _mail.get("MAIL_PASSWORD") or os.getenv("MAIL_PASSWORD")
+    MAIL_DEFAULT_SENDER = _mail.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
+
+    ABSENCE_PENALTY  = float(_points_cfg.get("absence_penalty",  -1.0))
+    POINTS_PER_HOUR  = float(_points_cfg.get("points_per_hour",   1.0))
+    COURSE_START     = _points_cfg.get("course_start", "")
 
     INSTITUTE_NAME = os.getenv("INSTITUTE_NAME", "IES")
     ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@instituto.es")

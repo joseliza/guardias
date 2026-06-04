@@ -12,7 +12,23 @@
 <div class="card">
   <div class="card-body p-0">
     <table class="table table-hover mb-0" id="tabla-profesores">
-      <thead class="table-light"><tr><th>Apellidos, Nombre</th><th>Email</th><th>Rol</th><th>Puntos</th><th>Activo</th><th></th></tr></thead>
+      <thead class="table-light">
+        <tr>
+          <th>Apellidos, Nombre</th><th>Email</th><th>Rol</th><th>Puntos</th><th>Activo</th>
+          <th></th>
+          <th>
+            <form method="POST" action="{{ url_for('admin.teacher_toggle_emails_all') }}">
+              <input type="hidden" name="enable" value="{{ '0' if all_emails_on else '1' }}">
+              <button type="submit"
+                      class="btn btn-sm {{ 'btn-danger' if all_emails_on else 'btn-success' }} py-0 px-1"
+                      title="{{ 'Desactivar correos a todos' if all_emails_on else 'Activar correos a todos' }}"
+                      onclick="return confirm('¿Seguro que quieres {{ 'desactivar' if all_emails_on else 'activar' }} el correo para todos los profesores?')">
+                <i class="bi bi-envelope{{ '-slash' if all_emails_on }}"></i>
+              </button>
+            </form>
+          </th>
+        </tr>
+      </thead>
       <tbody>
         {% for t in teachers %}
         <tr>
@@ -22,6 +38,14 @@
           <td>{{ '—' if t.role == 'management' else t.points }}</td>
           <td><span class="badge bg-{{ 'success' if t.active else 'danger' }}">{{ 'Sí' if t.active else 'No' }}</span></td>
           <td><a href="{{ url_for('admin.teacher_edit', tid=t.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a></td>
+          <td>
+            <form method="POST" action="{{ url_for('admin.teacher_toggle_emails', tid=t.id) }}">
+              <button type="submit" class="btn btn-sm {{ 'btn-success' if t.receive_emails else 'btn-danger' }}"
+                      title="{{ 'Recibe correos (clic para desactivar)' if t.receive_emails else 'No recibe correos (clic para activar)' }}">
+                <i class="bi bi-envelope{{ '-slash' if not t.receive_emails }}"></i>
+              </button>
+            </form>
+          </td>
         </tr>
         {% endfor %}
       </tbody>

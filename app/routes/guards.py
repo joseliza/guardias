@@ -72,9 +72,11 @@ def assign(guard_id):
             flash(f"Aviso: {teacher_name} ya está asignado/a a otra guardia en este tramo "
                   f"(grupos juntos). La asignación se ha registrado igualmente.", "warning")
 
+        assigned_teacher = User.query.get(teacher_id)
         group = Group.query.get(guard.group_id)
         multiplier = group.difficulty_multiplier if group else 1.0
-        points = round((effective_minutes / 60) * multiplier, 2)
+        pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
+        points = round((effective_minutes / 60) * multiplier * pph, 2) if assigned_teacher.scores_points else 0
 
         db.session.add(GuardRecord(
             guard_id=guard.id,
@@ -84,7 +86,8 @@ def assign(guard_id):
             points_awarded=points,
         ))
         guard.status = "covered"
-        award_guard_points(teacher_id, points)
+        if assigned_teacher.scores_points:
+            award_guard_points(teacher_id, points)
         db.session.commit()
         flash("Guardia registrada correctamente.", "success")
 
@@ -110,7 +113,8 @@ def self_register(guard_id):
 
         group = Group.query.get(guard.group_id)
         multiplier = group.difficulty_multiplier if group else 1.0
-        points = round((effective_minutes / 60) * multiplier, 2)
+        pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
+        points = round((effective_minutes / 60) * multiplier * pph, 2) if current_user.scores_points else 0
 
         record = GuardRecord(
             guard_id=guard.id,
@@ -121,7 +125,8 @@ def self_register(guard_id):
         )
         db.session.add(record)
         guard.status = "covered"
-        award_guard_points(current_user.id, points)
+        if current_user.scores_points:
+            award_guard_points(current_user.id, points)
         db.session.commit()
         flash("Guardia registrada.", "success")
         return redirect(url_for("dashboard.index") + f"#slot-{guard.slot_id}")
@@ -153,9 +158,11 @@ def quick_assign():
         flash(f"Aviso: {teacher_name} ya está asignado/a a otra guardia en este tramo "
               f"(grupos juntos). La asignación se ha registrado igualmente.", "warning")
 
+    quick_teacher = User.query.get(teacher_id)
     group = Group.query.get(guard.group_id)
     multiplier = group.difficulty_multiplier if group else 1.0
-    points = round(multiplier, 2)
+    pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
+    points = round(multiplier * pph, 2) if quick_teacher.scores_points else 0
 
     db.session.add(GuardRecord(
         guard_id=guard.id,
@@ -165,7 +172,8 @@ def quick_assign():
         points_awarded=points,
     ))
     guard.status = "covered"
-    award_guard_points(teacher_id, points)
+    if quick_teacher.scores_points:
+        award_guard_points(teacher_id, points)
     db.session.commit()
     flash("Guardia asignada.", "success")
     return redirect(url_for("dashboard.index") + f"#slot-{guard.slot_id}")
@@ -315,7 +323,8 @@ def my_points():
     if current_user.is_management:
         teachers = (User.query
                     .filter_by(active=True)
-                    .filter(User.role.notin_(["management", "display"]))
+                    .filter(User.role != "display")
+                    .filter(db.or_(User.role != "management", User.track_points == True))
                     .order_by(User.surname, User.name)
                     .all())
         teacher_id = request.args.get("teacher_id", type=int)
@@ -357,7 +366,8 @@ def my_points_csv():
     else:
         all_teachers = (User.query
                         .filter_by(active=True)
-                        .filter(User.role.notin_(["management", "display"]))
+                        .filter(User.role != "display")
+                        .filter(db.or_(User.role != "management", User.track_points == True))
                         .order_by(User.surname, User.name)
                         .all())
         pairs = [(t, _build_events(t.id, slot_map)) for t in all_teachers]
@@ -399,7 +409,8 @@ def report():
                          func.sum(GuardRecord.points_awarded),
                          func.sum(GuardRecord.effective_minutes))
         .join(GuardRecord, GuardRecord.teacher_id == User.id)
-        .filter(User.role != "management")
+        .filter(db.or_(User.role != "management", User.track_points == True))
+        .filter(User.role != "display")
         .group_by(User.id)
         .order_by(func.sum(GuardRecord.points_awarded).desc())
         .all()

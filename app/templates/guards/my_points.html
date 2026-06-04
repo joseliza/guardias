@@ -11,7 +11,8 @@
         <label class="col-form-label fw-semibold">Profesor/a:</label>
       </div>
       <div class="col">
-        <select name="teacher_id" class="form-select form-select-sm" onchange="this.form.submit()">
+        <input type="search" id="points-teacher-search" class="form-control form-control-sm mb-1" placeholder="Buscar profesor...">
+        <select name="teacher_id" class="form-select form-select-sm" id="points-teacher-select" onchange="this.form.submit()">
           <option value="">— Seleccionar —</option>
           {% for t in teachers %}
           <option value="{{ t.id }}" {% if selected_teacher and selected_teacher.id == t.id %}selected{% endif %}>
@@ -132,4 +133,18 @@
   </table>
 </div>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+const search = document.getElementById('points-teacher-search');
+if (search) {
+  search.addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    const sel = document.getElementById('points-teacher-select');
+    Array.from(sel.options).forEach(opt => {
+      opt.hidden = q && opt.value !== '' && !opt.text.toLowerCase().includes(q);
+    });
+  });
+}
+</script>
 {% endblock %}

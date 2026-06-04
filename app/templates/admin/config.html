@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+{% block title %}Configuración{% endblock %}
+{% block content %}
+<h4><i class="bi bi-sliders"></i> Configuración</h4>
+
+{% set sched = schedule_config %}
+{% set excl = sched.get('excluded_ids', []) %}
+{% set sched_roles = sched.get('recipient_roles', ['teacher']) %}
+{% set sched_days = sched.get('days', [0,1,2,3,4]) %}
+
+<div class="accordion mt-3" id="config-accordion">
+
+  <!-- ── Servidor de correo ───────────────────────────────────────────── -->
+  <div class="accordion-item">
+    <h2 class="accordion-header">
+      <button class="accordion-button collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#section-mail">
+        Servidor de correo
+      </button>
+    </h2>
+    <div id="section-mail" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
+      <div class="accordion-body">
+
+        {# ── Parámetros SMTP ── #}
+        <form method="POST" action="{{ url_for('admin.config') }}">
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label">Servidor SMTP</label>
+              <input type="text" name="MAIL_SERVER" class="form-control"
+                     value="{{ mail_config.MAIL_SERVER }}" placeholder="smtp-relay.gmail.com">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Puerto</label>
+              <input type="number" name="MAIL_PORT" class="form-control"
+                     value="{{ mail_config.MAIL_PORT }}" placeholder="587">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Usuario</label>
+              <input type="email" name="MAIL_USERNAME" class="form-control"
+                     value="{{ mail_config.MAIL_USERNAME }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Contraseña <small class="text-muted">(vacío para relay por IP)</small></label>
+              <input type="password" name="MAIL_PASSWORD" class="form-control"
+                     value="{{ mail_config.MAIL_PASSWORD }}">
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Remitente por defecto</label>
+              <input type="email" name="MAIL_DEFAULT_SENDER" class="form-control"
+                     value="{{ mail_config.MAIL_DEFAULT_SENDER }}">
+            </div>
+            <div class="col-md-4 d-flex align-items-end pb-1">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" name="MAIL_USE_TLS" id="tls"
+                       {% if mail_config.MAIL_USE_TLS | string | lower == 'true' %}checked{% endif %}>
+                <label class="form-check-label" for="tls">Usar TLS</label>
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label">
+                Plantilla correo de bienvenida
+                <small class="text-muted">— variables: <code>{nombre}</code>, <code>{email}</code>, <code>{contraseña}</code></small>
+              </label>
+              <textarea name="MAIL_WELCOME_TEMPLATE" class="form-control font-monospace" rows="5"
+                        placeholder="Bienvenido/a {nombre}, tu cuenta ha sido creada...">{{ mail_config.MAIL_WELCOME_TEMPLATE }}</textarea>
+            </div>
+          </div>
+          <div class="mt-3 d-flex gap-2 align-items-center">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
+            <button type="button" class="btn btn-outline-secondary"
+                    data-bs-toggle="collapse" data-bs-target="#test-mail-panel">
+              <i class="bi bi-send-check"></i> Probar envío
+            </button>
+          </div>
+        </form>
+        <div class="collapse mt-3" id="test-mail-panel">
+          <div class="card card-body bg-light">
+            <form method="POST" action="{{ url_for('admin.test_email') }}" class="d-flex gap-2 align-items-end">
+              <div class="flex-grow-1">
+                <label class="form-label mb-1">Destinatario</label>
+                <input type="email" name="recipient" class="form-control" value="{{ current_user.email }}">
+              </div>
+              <button type="submit" class="btn btn-primary"><i class="bi bi-envelope-arrow-up"></i> Enviar</button>
+            </form>
+          </div>
+        </div>
+
+        <hr class="my-4">
+
+        {# ── Resumen diario ── #}
+        <div class="d-flex align-items-center" style="cursor:pointer"
+             data-bs-toggle="collapse" data-bs-target="#digest-section">
+          <h6 class="fw-semibold mb-0 me-2">
+            <i class="bi bi-calendar-check me-1"></i> Resumen diario por correo
+            {% if sched.get('enabled') %}
+            <span class="badge bg-success ms-1" style="font-size:.7rem;">Activo</span>
+            {% endif %}
+          </h6>
+          <i class="bi bi-chevron-down text-muted small"></i>
+        </div>
+
+        <div id="digest-section" class="collapse mt-3">
+        <form method="POST" action="{{ url_for('admin.config_schedule') }}">
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" name="enabled" id="sched-enabled"
+                   {% if sched.get('enabled') %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="sched-enabled">Activar envío programado</label>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Hora de envío</label>
+              <input type="time" name="time" class="form-control" value="{{ sched.get('time', '07:30') }}">
+            </div>
+            <div class="col-md-9">
+              <label class="form-label d-block">Días de envío</label>
+              <div class="d-flex gap-3 flex-wrap">
+                {% for idx, label in [(0,'Lunes'),(1,'Martes'),(2,'Miércoles'),(3,'Jueves'),(4,'Viernes'),(5,'Sábado'),(6,'Domingo')] %}
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="days" value="{{ idx }}"
+                         id="day-{{ idx }}" {% if idx in sched_days %}checked{% endif %}>
+                  <label class="form-check-label" for="day-{{ idx }}">{{ label }}</label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Asunto <small class="text-muted">— variables: <code>{fecha}</code>, <code>{nombre}</code></small></label>
+              <input type="text" name="subject" class="form-control"
+                     value="{{ sched.get('subject', 'Guardias del {fecha}') }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Texto de cabecera <small class="text-muted">(opcional)</small></label>
+              <input type="text" name="intro" class="form-control"
+                     value="{{ sched.get('intro', '') }}"
+                     placeholder="Buenos días, adjuntamos el resumen de tus guardias de hoy.">
+            </div>
+            <div class="col-12">
+              <label class="form-label d-block">Información a incluir por ausencia</label>
+              <div class="d-flex gap-3 flex-wrap">
+                {% for key, label in [('show_group','Grupo'),('show_room','Aula'),('show_reason','Motivo ausencia'),('show_status','Estado guardia'),('show_assigned','Profesor asignado')] %}
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="{{ key }}" id="{{ key }}"
+                         {% if sched.get(key, True) %}checked{% endif %}>
+                  <label class="form-check-label" for="{{ key }}">{{ label }}</label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label d-block">Roles destinatarios</label>
+              <div class="d-flex gap-3 flex-wrap mb-2">
+                {% for role, label in [('teacher','Profesorado'),('extracurricular','Extraescolares'),('management','Equipo directivo')] %}
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="recipient_roles" value="{{ role }}"
+                         id="role-{{ role }}" {% if role in sched_roles %}checked{% endif %}>
+                  <label class="form-check-label" for="role-{{ role }}">{{ label }}</label>
+                </div>
+                {% endfor %}
+              </div>
+              {% if users %}
+              <div class="card">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                  <span class="small fw-semibold">Selección individual
+                    <small class="text-muted fw-normal">(solo aparecen usuarios con "Recibe correos" activado)</small>
+                  </span>
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm py-0"
+                            onclick="setAllUsers(true)">Todos</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm py-0"
+                            onclick="setAllUsers(false)">Ninguno</button>
+                    <input type="search" id="user-search" class="form-control form-control-sm"
+                           style="width:180px" placeholder="Buscar...">
+                  </div>
+                </div>
+                <div class="card-body p-2" style="max-height:220px;overflow-y:auto;">
+                  <div class="row g-1" id="user-list">
+                    {% set current_role = namespace(val='') %}
+                    {% for u in users %}
+                    {% if u.role != current_role.val %}
+                    {% set current_role.val = u.role %}
+                    <div class="col-12 mt-1">
+                      <small class="text-muted text-uppercase fw-bold" style="font-size:.7rem;letter-spacing:.05em;">
+                        {{ {'teacher':'Profesorado','extracurricular':'Extraescolares','management':'Dirección'}.get(u.role, u.role) }}
+                      </small>
+                    </div>
+                    {% endif %}
+                    <div class="col-md-4 col-sm-6 user-item" data-name="{{ u.full_name | lower }}" data-role="{{ u.role }}">
+                      <div class="form-check">
+                        <input class="form-check-input user-checkbox" type="checkbox"
+                               name="_included_{{ u.id }}" id="u-{{ u.id }}"
+                               {% if u.id not in excl %}checked{% endif %}>
+                        <label class="form-check-label small" for="u-{{ u.id }}">{{ u.full_name }}</label>
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
+              <div id="excluded-container"></div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="mt-3 d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar programación</button>
+            <button type="button" class="btn btn-outline-secondary"
+                    onclick="if(confirm('¿Enviar el resumen ahora a todos los destinatarios?')) document.getElementById('test-digest-form').submit()">
+              <i class="bi bi-send"></i> Enviar ahora
+            </button>
+          </div>
+        </form>
+        <form id="test-digest-form" method="POST" action="{{ url_for('admin.test_digest') }}" class="d-none"></form>
+        </div>{# /digest-section #}
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Página de ayuda ────────────────────────────────────────────────── -->
+  <div class="accordion-item">
+    <h2 class="accordion-header">
+      <button class="accordion-button collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#section-help">
+        Página de ayuda
+      </button>
+    </h2>
+    <div id="section-help" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
+      <div class="accordion-body">
+        <p class="text-muted small mb-3">
+          Escribe en <strong>Markdown</strong> el contenido que verán todos los usuarios en la página de ayuda.
+          La vista previa se actualiza en tiempo real.
+          <a href="https://www.markdownguide.org/cheat-sheet/" target="_blank" rel="noopener">
+            <i class="bi bi-box-arrow-up-right"></i> Referencia rápida de Markdown
+          </a>
+        </p>
+        <form method="POST" action="{{ url_for('admin.config_help') }}">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Editor</label>
+              <textarea id="help-editor" name="help_content" class="form-control font-monospace"
+                        rows="22" placeholder="# Bienvenido/a&#10;&#10;Escribe aquí la ayuda en formato Markdown...">{{ help_content }}</textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Vista previa</label>
+              <div id="help-preview"
+                   class="border rounded p-3 help-preview-box"
+                   style="min-height:490px;overflow-y:auto;background:#fff;font-size:.95rem;">
+              </div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
+            <a href="{{ url_for('dashboard.help') }}" target="_blank" class="btn btn-outline-secondary ms-2">
+              <i class="bi bi-eye"></i> Ver página
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Puntuación de profesorado ──────────────────────────────────────── -->
+  <div class="accordion-item">
+    <h2 class="accordion-header">
+      <button class="accordion-button collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#section-points">
+        Puntuación de profesorado
+      </button>
+    </h2>
+    <div id="section-points" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
+      <div class="accordion-body">
+
+        {# ── Parámetros ── #}
+        <form method="POST" action="{{ url_for('admin.config_points') }}">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">
+                Penalización por ausencia
+                <small class="text-muted d-block">Valor negativo resta puntos</small>
+              </label>
+              <input type="number" name="absence_penalty" class="form-control"
+                     step="0.1" value="{{ points_config.get('absence_penalty', -1.0) }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">
+                Puntos por hora de guardia
+                <small class="text-muted d-block">Base antes de aplicar multiplicador de grupo</small>
+              </label>
+              <input type="number" name="points_per_hour" class="form-control"
+                     step="0.1" min="0" value="{{ points_config.get('points_per_hour', 1.0) }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">
+                Fecha de inicio del curso
+                <small class="text-muted d-block">Referencia para el informe</small>
+              </label>
+              <input type="date" name="course_start" class="form-control"
+                     value="{{ points_config.get('course_start', '') }}">
+            </div>
+          </div>
+          <div class="alert alert-info py-2 px-3 mt-3 small">
+            <i class="bi bi-info-circle"></i>
+            Los cambios en penalización y fórmula solo afectan a registros <strong>futuros</strong>, no modifican el historial existente.
+          </div>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
+        </form>
+
+        <hr class="my-4">
+
+        {# ── Exportar ── #}
+        <h6 class="fw-semibold mb-3"><i class="bi bi-download me-1"></i> Exportar puntos actuales</h6>
+        <p class="small text-muted">Descarga un CSV con el estado actual de puntos de todos los profesores. Se recomienda hacerlo <strong>antes de cualquier reset</strong>.</p>
+        <a href="{{ url_for('admin.points_export_csv') }}" class="btn btn-outline-success">
+          <i class="bi bi-filetype-csv"></i> Descargar CSV de puntos
+        </a>
+
+        <hr class="my-4">
+
+        {# ── Reset selectivo ── #}
+        <h6 class="fw-semibold mb-3"><i class="bi bi-person-x me-1"></i> Resetear profesor individual</h6>
+        <form method="POST" id="reset-teacher-form" action="">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+              <label class="form-label mb-1">Profesor/a</label>
+              <input type="search" id="reset-teacher-search" class="form-control form-control-sm mb-1" placeholder="Buscar...">
+              <select id="reset-teacher-select" class="form-select form-select-sm">
+                {% for t in scorable_teachers %}
+                <option value="{{ url_for('admin.points_reset_teacher', tid=t.id) }}"
+                        data-name="{{ t.full_name }}">
+                  {{ t.full_name }} — {{ "%.2f"|format(t.points) }} pts
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-auto">
+              <button type="submit" class="btn btn-warning btn-sm"
+                      onclick="return confirmResetTeacher()">
+                <i class="bi bi-arrow-counterclockwise"></i> Resetear a 0
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <hr class="my-4">
+
+        {# ── Reset total ── #}
+        <h6 class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i> Reset total</h6>
+        <div class="alert alert-danger py-2 px-3 small">
+          <strong>⚠️ Acción irreversible.</strong> Pondrá a 0 los puntos de <strong>todos</strong> los profesores.
+          El historial de guardias se conserva pero los contadores quedan a cero.
+          <strong>Descarga el CSV de respaldo antes de continuar.</strong>
+        </div>
+        <form method="POST" action="{{ url_for('admin.points_reset_all') }}"
+              onsubmit="return confirm('⚠️ ATENCIÓN: Esta acción es IRREVERSIBLE.\n\n¿Has descargado el CSV de respaldo?\n\n¿Seguro que quieres resetear los puntos de TODOS los profesores a 0?')">
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-trash"></i> Resetear puntos de todos los profesores
+          </button>
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+<style>
+#help-preview h1,#help-preview h2{border-bottom:1px solid #dee2e6;padding-bottom:.3rem;margin-top:1.2rem;}
+#help-preview h1{font-size:1.5rem;} #help-preview h2{font-size:1.2rem;}
+#help-preview code{background:#f1f3f5;padding:.1rem .3rem;border-radius:.2rem;font-size:.88em;}
+#help-preview pre code{display:block;padding:.7rem;overflow-x:auto;}
+#help-preview blockquote{border-left:4px solid #dee2e6;padding-left:.8rem;color:#6c757d;}
+#help-preview table{width:100%;border-collapse:collapse;}
+#help-preview th,#help-preview td{border:1px solid #dee2e6;padding:.3rem .5rem;}
+#help-preview th{background:#f8f9fa;}
+.accordion-header { cursor: grab; }
+.accordion-header:active { cursor: grabbing; }
+</style>
+<script>
+// Drag & drop para reordenar secciones
+const SORT_KEY = 'config_section_order';
+const accordion = document.getElementById('config-accordion');
+
+Sortable.create(accordion, {
+  animation: 150,
+  handle: '.accordion-header',
+  onEnd() {
+    const order = Array.from(accordion.children).map(el => el.querySelector('.accordion-collapse')?.id);
+    localStorage.setItem(SORT_KEY, JSON.stringify(order));
+  }
+});
+
+// Restaurar orden guardado
+const savedOrder = JSON.parse(localStorage.getItem(SORT_KEY) || 'null');
+if (savedOrder) {
+  savedOrder.forEach(id => {
+    const item = accordion.querySelector(`#${id}`)?.closest('.accordion-item');
+    if (item) accordion.appendChild(item);
+  });
+}
+
+// Abrir acordeón indicado por el hash de la URL
+if (location.hash) {
+  const target = document.querySelector(location.hash);
+  if (target && target.classList.contains('accordion-collapse')) {
+    new bootstrap.Collapse(target, { toggle: false }).show();
+  }
+}
+
+const editor = document.getElementById('help-editor');
+const preview = document.getElementById('help-preview');
+if (editor && preview) {
+  function updatePreview() {
+    preview.innerHTML = typeof marked !== 'undefined' ? marked.parse(editor.value) : editor.value;
+  }
+  editor.addEventListener('input', updatePreview);
+  updatePreview();
+}
+</script>
+<script>
+document.getElementById('user-search').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('.user-item').forEach(el => {
+    el.style.display = (!q || el.dataset.name.includes(q)) ? '' : 'none';
+  });
+});
+
+function setAllUsers(checked) {
+  document.querySelectorAll('.user-checkbox').forEach(cb => cb.checked = checked);
+}
+
+// Buscador reset individual
+const resetSearch = document.getElementById('reset-teacher-search');
+const resetSelect = document.getElementById('reset-teacher-select');
+if (resetSearch && resetSelect) {
+  resetSearch.addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    Array.from(resetSelect.options).forEach(opt => {
+      opt.hidden = q && !opt.dataset.name.toLowerCase().includes(q);
+    });
+  });
+}
+
+function confirmResetTeacher() {
+  const sel = document.getElementById('reset-teacher-select');
+  const name = sel.options[sel.selectedIndex]?.dataset.name || '';
+  if (!confirm(`¿Resetear los puntos de ${name} a 0?\n\nEsta acción no se puede deshacer.`)) return false;
+  document.getElementById('reset-teacher-form').action = sel.value;
+  return true;
+}
+
+document.querySelector('form[action="{{ url_for("admin.config_schedule") }}"]').addEventListener('submit', function() {
+  const container = document.getElementById('excluded-container');
+  container.innerHTML = '';
+  document.querySelectorAll('.user-checkbox').forEach(cb => {
+    if (!cb.checked) {
+      const uid = cb.id.replace('u-', '');
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'excluded_ids';
+      input.value = uid;
+      container.appendChild(input);
+    }
+  });
+});
+</script>
+{% endblock %}

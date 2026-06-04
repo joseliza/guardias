@@ -58,6 +58,8 @@
             <li><a class="dropdown-item" href="{{ url_for('guards.my_points') }}">Historial de puntos</a></li>
             <li><a class="dropdown-item" href="{{ url_for('chat.report') }}">Informe de incidencias</a></li>
             <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ url_for('admin.config') }}"><i class="bi bi-sliders"></i> Configuración</a></li>
+            <li><hr class="dropdown-divider"></li>
             <li>
               <a class="dropdown-item text-danger" href="#"
                  data-bs-toggle="modal" data-bs-target="#modalLimpiarChatNav">
@@ -68,7 +70,12 @@
         </li>
         {% endif %}
       </ul>
-      <ul class="navbar-nav">
+      <ul class="navbar-nav align-items-center">
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('dashboard.help') }}" title="Ayuda">
+            <i class="bi bi-question-circle"></i>
+          </a>
+        </li>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
             <i class="bi bi-person-circle"></i> {{ current_user.full_name }}
@@ -81,6 +88,8 @@
             <li><a class="dropdown-item" href="{{ url_for('guards.my_points') }}"><i class="bi bi-star-half"></i> Mis puntos</a></li>
             <li><hr class="dropdown-divider"></li>
             {% endif %}
+            <li><a class="dropdown-item" href="{{ url_for('dashboard.help') }}"><i class="bi bi-question-circle"></i> Ayuda</a></li>
+            <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</a></li>
           </ul>
         </li>

@@ -16,11 +16,15 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(100), nullable=False)
     surname = db.Column(db.String(100), nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    # roles: teacher, guard_manager, extracurricular, management
+    # roles: teacher, extracurricular, management, display
     role = db.Column(db.String(30), nullable=False, default="teacher")
     active = db.Column(db.Boolean, default=True, nullable=False)
     # Puntos acumulados en el curso actual
     points = db.Column(db.Float, default=0.0, nullable=False)
+    # Solo relevante para management: si True, acumula puntos como profesor normal
+    track_points = db.Column(db.Boolean, default=False, nullable=False)
+    # Si False, el usuario no recibe correos del sistema (resúmenes, notificaciones)
+    receive_emails = db.Column(db.Boolean, default=True, nullable=False)
 
     schedule_entries = db.relationship("TeacherSchedule", backref="teacher", lazy="dynamic")
     absences = db.relationship("Absence", foreign_keys="Absence.teacher_id", backref="teacher", lazy="dynamic")
@@ -43,6 +47,11 @@ class User(UserMixin, db.Model):
     @property
     def is_extracurricular(self):
         return self.role in ("extracurricular", "management")
+
+    @property
+    def scores_points(self):
+        """True si este usuario acumula puntos de guardia."""
+        return self.role not in ("management", "display") or (self.is_management and self.track_points)
 
     def __repr__(self):
         return f"<User {self.email}>"

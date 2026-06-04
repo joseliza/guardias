@@ -4,8 +4,8 @@ guardias, profesores disponibles, asignaciones y mensajes del chat del día.
 Calcula también qué tramos son de guardia del usuario actual (is_my_guard)
 para mostrar los controles de gestión directamente en el panel.
 """
-from datetime import date
-from flask import Blueprint, render_template, current_app
+from datetime import date, timedelta
+from flask import Blueprint, render_template, current_app, request
 from flask_login import login_required, current_user
 from app.models.guard import Guard, GuardRecord
 from app.models.absence import Absence
@@ -17,23 +17,47 @@ from app.utils.guards import get_available_teachers_for_slot
 dashboard_bp = Blueprint("dashboard", __name__)
 
 
+@dashboard_bp.route("/ayuda")
+@login_required
+def help():
+    import os
+    path = os.path.join(current_app.root_path, "..", "instance", "help_content.md")
+    try:
+        with open(path, encoding="utf-8") as f:
+            help_content = f.read()
+    except FileNotFoundError:
+        help_content = ""
+    return render_template("help.html", help_content=help_content)
+
+
 @dashboard_bp.route("/")
 @login_required
 def index():
     today = date.today()
-    day_idx = today.weekday()
+
+    fecha_str = request.args.get("fecha")
+    try:
+        target_date = date.fromisoformat(fecha_str) if fecha_str else today
+    except ValueError:
+        target_date = today
+
+    is_today = target_date == today
+    is_editable = target_date >= today
+    prev_date = target_date - timedelta(days=1)
+    next_date = target_date + timedelta(days=1)
+
+    day_idx = target_date.weekday()
     slots_cfg = current_app.config["TIME_SLOTS"]
 
     from app.models.activity import ExtraActivity
 
-    today_absences = Absence.query.filter_by(date=today).all()
-    today_guards = Guard.query.filter_by(date=today).all()
+    day_absences = Absence.query.filter_by(date=target_date).all()
+    day_guards = Guard.query.filter_by(date=target_date).all()
 
-    # Grupos que salen completos en actividad extraescolar hoy, por tramo
-    _today_activities = ExtraActivity.query.filter_by(date=today).all()
+    _day_activities = ExtraActivity.query.filter_by(date=target_date).all()
     def _activity_group_ids(slot_id):
         ids = set()
-        for act in _today_activities:
+        for act in _day_activities:
             if slot_id in act.slot_id_list:
                 for ag in act.groups:
                     if ag.whole_group:
@@ -42,15 +66,14 @@ def index():
 
     absences_by_slot = {}
     guards_by_slot = {}
-    for a in today_absences:
+    for a in day_absences:
         absences_by_slot.setdefault(a.slot_id, []).append(a)
-    for g in today_guards:
+    for g in day_guards:
         guards_by_slot.setdefault(g.slot_id, []).append(g)
 
-    # Grupo que tenía cada profesor en cada tramo hoy
     absence_groups = {}
     absence_rooms = {}
-    for a in today_absences:
+    for a in day_absences:
         entry = TeacherSchedule.query.filter_by(
             teacher_id=a.teacher_id,
             day_of_week=day_idx,
@@ -61,7 +84,6 @@ def index():
         absence_groups[a.id] = group.name if group else "—"
         absence_rooms[a.id] = group.room.name if group and group.room else None
 
-    # Tramos de guardia del usuario actual
     my_guard_slot_ids = set()
     if not current_user.is_management:
         my_guard_slot_ids = {
@@ -72,25 +94,21 @@ def index():
             ).all()
         }
 
-    # Profesores de guardia por tramo: todos los disponibles + cuáles ya asignados
     guard_info_by_slot = {}
     for s in slots_cfg:
         if s["is_break"]:
             continue
         sid = s["id"]
 
-        # IDs de profesores con guardia en este tramo (no ausentes)
         guard_entry_ids = {
             e.teacher_id for e in TeacherSchedule.query.filter_by(
                 day_of_week=day_idx, slot_id=sid, is_guard_slot=True
             ).all()
         }
         absent_ids = {a.teacher_id for a in absences_by_slot.get(sid, [])}
-        available_ids = guard_entry_ids - absent_ids
 
-        primary_teachers, ex_guard_teachers, secondary_teachers = get_available_teachers_for_slot(today, sid)
+        primary_teachers, ex_guard_teachers, secondary_teachers = get_available_teachers_for_slot(target_date, sid)
 
-        # Registros de guardias cubiertas en este tramo hoy
         guard_ids_slot = [g.id for g in guards_by_slot.get(sid, [])]
         assigned_teacher_ids = set()
         multi_assigned = []
@@ -107,8 +125,8 @@ def index():
                 key=lambda t: t.surname,
             )
 
-        primary_ids   = {t.id for t in primary_teachers}
-        ex_guard_ids  = {t.id for t in ex_guard_teachers}
+        primary_ids  = {t.id for t in primary_teachers}
+        ex_guard_ids = {t.id for t in ex_guard_teachers}
         extra_teachers = sorted(
             [User.query.get(tid) for tid in assigned_teacher_ids - primary_ids - ex_guard_ids
              if User.query.get(tid)],
@@ -124,7 +142,6 @@ def index():
             "extra": extra_teachers,
         }
 
-    # Estructura final por tramo
     slots_data = []
     for s in slots_cfg:
         sid = s["id"]
@@ -135,7 +152,6 @@ def index():
 
         activity_gids = _activity_group_ids(sid)
 
-        # Guardias que realmente necesitan cobertura (excluye grupos en actividad EX)
         real_pending = [
             g for g in guards
             if g.status == "pending" and g.group_id not in activity_gids
@@ -170,28 +186,30 @@ def index():
             "activity_group_ids": activity_gids,
         })
 
+    # Chat: mensajes del día visualizado (tras el último borrado de ese día)
     from datetime import datetime
-    today_midnight = datetime.combine(today, datetime.min.time())
+    day_midnight = datetime.combine(target_date, datetime.min.time())
+    day_end = datetime.combine(target_date + timedelta(days=1), datetime.min.time())
     last_clear = (ChatClear.query
-                  .filter(ChatClear.cleared_at >= today_midnight)
+                  .filter(ChatClear.cleared_at >= day_midnight,
+                          ChatClear.cleared_at < day_end)
                   .order_by(ChatClear.cleared_at.desc())
                   .first())
-    chat_cutoff = last_clear.cleared_at if last_clear else today_midnight
-
+    chat_cutoff = last_clear.cleared_at if last_clear else day_midnight
     chat_messages = (
         ChatMessage.query
         .filter(ChatMessage.channel == "general",
-                ChatMessage.created_at >= chat_cutoff)
+                ChatMessage.created_at >= chat_cutoff,
+                ChatMessage.created_at < day_end)
         .order_by(ChatMessage.created_at)
         .limit(50)
         .all()
     )
 
-    # Tareas del día por tramo agrupadas por ausencia (solo para management)
     from collections import defaultdict
     tasks_by_slot = defaultdict(list)
     if current_user.is_management:
-        for a in today_absences:
+        for a in day_absences:
             task_list = list(a.tasks)
             if task_list:
                 tasks_by_slot[a.slot_id].append({
@@ -211,6 +229,11 @@ def index():
     return render_template(
         "dashboard/index.html",
         today=today,
+        target_date=target_date,
+        is_today=is_today,
+        is_editable=is_editable,
+        prev_date=prev_date,
+        next_date=next_date,
         slots_data=slots_data,
         my_guard_slot_ids=my_guard_slot_ids,
         absence_groups=absence_groups,

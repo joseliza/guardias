@@ -5,41 +5,54 @@
 <div class="card mt-3">
   <div class="card-body">
     <form method="POST">
+
       {% if current_user.is_management %}
       <div class="mb-3">
         <label class="form-label">Profesor/a</label>
-        <select name="teacher_id" class="form-select" required>
+        <input type="search" id="teacher-search" class="form-control mb-1" placeholder="Buscar profesor...">
+        <select name="teacher_id" id="teacher-select" class="form-select" required>
           {% for t in teachers %}
           <option value="{{ t.id }}" {% if t.id == current_user.id %}selected{% endif %}>{{ t.full_name }}</option>
           {% endfor %}
         </select>
       </div>
       {% else %}
-      <input type="hidden" name="teacher_id" value="{{ current_user.id }}">
+      <input type="hidden" name="teacher_id" id="teacher-select" value="{{ current_user.id }}">
       {% endif %}
 
       <div class="mb-3">
         <label class="form-label">Fecha</label>
-        <input type="date" name="date" class="form-control" value="{{ today }}" required>
+        <input type="date" name="date" id="absence-date" class="form-control" value="{{ today }}" required>
       </div>
 
       <div class="mb-3">
-        <label class="form-label">Tramos afectados</label>
-        <div class="row g-2">
-          {% for slot in slots %}
-          <div class="col-auto">
+        <label class="form-label mb-2">Tramos afectados</label>
+        <div class="form-check form-switch mb-2">
+          <input class="form-check-input" type="checkbox" id="all-day-toggle">
+          <label class="form-check-label" for="all-day-toggle">Todo el día</label>
+        </div>
+
+        <div class="row g-2" id="slots-container">
+          {% for slot in slots %}{% if not slot.is_break %}
+          <div class="col-auto slot-item" data-slot-id="{{ slot.id }}">
             <div class="form-check">
-              <input class="form-check-input" type="checkbox" name="slot_ids" value="{{ slot.id }}" id="slot{{ slot.id }}">
-              <label class="form-check-label" for="slot{{ slot.id }}">{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</label>
+              <input class="form-check-input slot-checkbox" type="checkbox"
+                     name="slot_ids" value="{{ slot.id }}" id="slot{{ slot.id }}">
+              <label class="form-check-label" for="slot{{ slot.id }}">
+                {{ slot.label }}
+                <small class="text-muted">({{ slot.start }}–{{ slot.end }})</small>
+                <span class="badge bg-primary ms-1 d-none scheduled-badge" style="font-size:.65rem;">Tiene clase</span>
+              </label>
             </div>
           </div>
-          {% endfor %}
+          {% endif %}{% endfor %}
         </div>
       </div>
 
       <div class="mb-3">
-        <label class="form-label">Motivo</label>
-        <input type="text" name="reason" class="form-control" placeholder="Enfermedad, formación, etc.">
+        <label class="form-label">Comentario</label>
+        <input type="text" name="comment" class="form-control"
+               placeholder="Si crees que es importante informar de algo...">
       </div>
 
       <button type="submit" class="btn btn-warning">Registrar ausencia</button>
@@ -47,4 +60,103 @@
     </form>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const scheduleUrl = "{{ url_for('absences.schedule_json', tid=0, day_idx=0) }}";
+let scheduledSlotIds = [];
+
+function getTeacherId() {
+  const sel = document.getElementById('teacher-select');
+  return sel ? sel.value : null;
+}
+
+function getDayIdx() {
+  const d = document.getElementById('absence-date').value;
+  if (!d) return null;
+  return new Date(d + 'T12:00:00').getDay(); // 0=Dom … 6=Sab
+  // Convertir a lunes=0 … domingo=6
+}
+
+function jsDay(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  return (d.getDay() + 6) % 7; // lunes=0 … domingo=6
+}
+
+async function loadSchedule() {
+  const tid = getTeacherId();
+  const dateVal = document.getElementById('absence-date').value;
+  if (!tid || !dateVal) return;
+
+  const dayIdx = jsDay(dateVal);
+  const url = scheduleUrl.replace('/0/0', `/${tid}/${dayIdx}`);
+
+  try {
+    const res = await fetch(url);
+    const slots = await res.json();
+    scheduledSlotIds = slots.map(s => s.id);
+  } catch(e) {
+    scheduledSlotIds = [];
+  }
+
+  // Actualizar badges y marcar checkboxes
+  document.querySelectorAll('.slot-item').forEach(item => {
+    const slotId = parseInt(item.dataset.slotId);
+    const badge = item.querySelector('.scheduled-badge');
+    const cb = item.querySelector('.slot-checkbox');
+    if (scheduledSlotIds.includes(slotId)) {
+      badge.classList.remove('d-none');
+    } else {
+      badge.classList.add('d-none');
+    }
+    // No cambiar checkboxes manualmente seleccionados
+  });
+
+  // Si "Todo el día" está activo, seleccionar automáticamente
+  if (document.getElementById('all-day-toggle').checked) {
+    selectAllDay();
+  }
+}
+
+function selectAllDay() {
+  document.querySelectorAll('.slot-checkbox').forEach(cb => {
+    const slotId = parseInt(cb.value);
+    cb.checked = scheduledSlotIds.includes(slotId);
+  });
+}
+
+// "Todo el día"
+document.getElementById('all-day-toggle').addEventListener('change', function() {
+  if (this.checked) {
+    selectAllDay();
+  } else {
+    document.querySelectorAll('.slot-checkbox').forEach(cb => cb.checked = false);
+  }
+});
+
+// Al cambiar profesor o fecha
+document.getElementById('absence-date').addEventListener('change', loadSchedule);
+{% if current_user.is_management %}
+document.getElementById('teacher-select').addEventListener('change', loadSchedule);
+{% endif %}
+
+// Buscador de profesores
+{% if current_user.is_management %}
+document.getElementById('teacher-search').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  const sel = document.getElementById('teacher-select');
+  Array.from(sel.options).forEach(opt => {
+    opt.hidden = q && !opt.text.toLowerCase().includes(q);
+  });
+  const visible = Array.from(sel.options).find(o => !o.hidden);
+  if (visible && !sel.options[sel.selectedIndex] || sel.options[sel.selectedIndex]?.hidden) {
+    if (visible) { sel.value = visible.value; loadSchedule(); }
+  }
+});
+{% endif %}
+
+// Carga inicial
+loadSchedule();
+</script>
 {% endblock %}

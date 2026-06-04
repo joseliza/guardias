@@ -1,45 +1,63 @@
 {% extends "base.html" %}
 {% block title %}Inicio{% endblock %}
 {% block content %}
-<div class="row mb-3 align-items-center">
+<div class="row mb-2 align-items-center">
   <div class="col">
-    <h4><i class="bi bi-house"></i> Panel de hoy — {{ today | fecha_es }}</h4>
+    <h4>
+      <i class="bi bi-house"></i>
+      Panel{% if is_today %} de hoy{% endif %} — {{ target_date | fecha_es }}
+      {% if not is_today and not is_editable %}
+      <span class="badge bg-secondary ms-2" style="font-size:.65rem;vertical-align:middle;">Pasado</span>
+      {% elif not is_today %}
+      <span class="badge bg-info text-dark ms-2" style="font-size:.65rem;vertical-align:middle;">Futuro</span>
+      {% endif %}
+    </h4>
   </div>
-  <div class="col-auto">
+  <div class="col-auto d-flex align-items-center gap-2">
+    {# Navegación de fechas #}
+    <a href="{{ url_for('dashboard.index', fecha=prev_date.isoformat()) }}" class="btn btn-outline-secondary btn-sm" title="Día anterior">
+      <i class="bi bi-chevron-left"></i>
+    </a>
+    <input type="date" id="date-picker" class="form-control form-control-sm" style="width:auto"
+           value="{{ target_date.isoformat() }}"
+           title="Ir a una fecha">
+    <a href="{{ url_for('dashboard.index', fecha=next_date.isoformat()) }}" class="btn btn-outline-secondary btn-sm" title="Día siguiente">
+      <i class="bi bi-chevron-right"></i>
+    </a>
+    {% if not is_today %}
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-primary btn-sm">Hoy</a>
+    {% endif %}
+    {% if is_editable %}
     <a href="{{ url_for('absences.create') }}" class="btn btn-warning btn-sm">
       <i class="bi bi-calendar-plus"></i> Registrar ausencia
     </a>
+    {% endif %}
   </div>
 </div>
+{% if not is_editable %}
+<div class="alert alert-secondary py-1 px-3 mb-2 small">
+  <i class="bi bi-clock-history"></i> Vista de solo lectura — los datos de esta fecha no se pueden modificar.
+</div>
+{% endif %}
 
+{% set has_side_panel = true %}
 <div class="row g-3">
   <!-- Tramos horarios -->
-  <div class="col-md-8">
+  <div class="{{ 'col-md-8' if has_side_panel else 'col-md-12' }}">
 
-    {# Toggle de vista #}
-    <div class="d-flex justify-content-end mb-2">
-      <div class="btn-group btn-group-sm" role="group" aria-label="Vista">
-        <button id="btn-view-scroll" class="btn btn-secondary active" title="Vista continua">
-          <i class="bi bi-list-ul"></i> Continua
-        </button>
-        <button id="btn-view-tabs" class="btn btn-outline-secondary" title="Una solapa por tramo">
-          <i class="bi bi-layout-tabs"></i> Por tramo
-        </button>
-      </div>
-    </div>
-
-    {# Barra de pestañas (oculta en vista continua) #}
-    <div id="slot-tabs-nav" class="d-none mb-2">
-      <ul class="nav nav-tabs flex-nowrap overflow-auto">
-        {% for item in slots_data %}{% if not item.slot.is_break %}
+    {# Barra de pestañas #}
+    <div id="slot-tabs-nav" class="mb-2">
+      <ul class="nav nav-tabs flex-nowrap" style="overflow-x:auto;overflow-y:hidden">
+        {% for item in slots_data %}
         <li class="nav-item flex-shrink-0">
-          <button class="nav-link" data-slot-tab="{{ item.slot.id }}">
+          <button class="nav-link {% if item.slot.is_break %}text-muted{% endif %}" data-slot-tab="{{ item.slot.id }}">
+            {% if item.slot.is_break %}<i class="bi bi-cup-hot"></i>{% endif %}
             {{ item.slot.label }}
             {% if item.real_pending %}<span class="badge bg-danger ms-1">{{ item.real_pending|length }}</span>
             {% elif item.absences %}<span class="badge bg-success ms-1"><i class="bi bi-check2"></i></span>{% endif %}
           </button>
         </li>
-        {% endif %}{% endfor %}
+        {% endfor %}
       </ul>
     </div>
 
@@ -47,17 +65,16 @@
     {% set s = item.slot %}
 
     {% if s.is_break %}
-    {# Separador de recreo #}
-    <div class="slot-break d-flex align-items-center gap-2 my-2 text-muted small">
-      <hr class="flex-grow-1 m-0">
-      <span><i class="bi bi-cup-hot"></i> Recreo {{ s.start }}–{{ s.end }}</span>
-      <hr class="flex-grow-1 m-0">
+    <div id="slot-{{ s.id }}" class="slot-card card mb-2 border-0 bg-light" data-slot-id="{{ s.id }}">
+      <div class="card-body py-2 text-muted text-center small">
+        <i class="bi bi-cup-hot"></i> Recreo · {{ s.start }}–{{ s.end }} (30 min)
+      </div>
     </div>
 
     {% else %}
     {% set has_pending = item.real_pending %}
     {% set is_my_guard = item.is_my_guard %}
-    {% set can_manage = current_user.is_management or is_my_guard %}
+    {% set can_manage = (current_user.is_management or is_my_guard) and is_editable %}
 
     <div id="slot-{{ s.id }}" class="slot-card card mb-2 {% if has_pending %}border-danger{% elif is_my_guard %}border-primary{% endif %}" data-slot-id="{{ s.id }}">
       <div class="card-header py-2 d-flex justify-content-between align-items-center
@@ -74,8 +91,8 @@
         <span class="d-flex align-items-center gap-2">
           {% if has_pending %}
           <span class="badge bg-white text-danger">{{ has_pending | length }} pendiente{{ 's' if has_pending|length > 1 }}</span>
-          {% if current_user.is_management %}
-          <form method="POST" action="{{ url_for('guards.auto_assign_slot', date_str=today.isoformat(), slot_id=s.id) }}" class="d-inline">
+          {% if current_user.is_management and is_editable %}
+          <form method="POST" action="{{ url_for('guards.auto_assign_slot', date_str=target_date.isoformat(), slot_id=s.id) }}" class="d-inline">
             <button type="submit" class="btn btn-sm btn-warning py-0 px-2" title="Auto-asignar este tramo">
               <i class="bi bi-magic"></i> Auto-asignar
             </button>
@@ -278,11 +295,12 @@
     {% endfor %}
   </div>
 
-  <!-- Chat general -->
+  <!-- Chat y tareas -->
+  {% if has_side_panel %}
   <div class="col-md-4">
     <div style="position:sticky;top:1rem;">
 
-      <!-- Chat -->
+      <!-- Chat / Incidencias -->
       <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center py-2">
           <span><i class="bi bi-chat-dots"></i> Incidencias</span>
@@ -300,15 +318,19 @@
                 <small class="text-muted ms-2">{{ msg.created_at.strftime('%H:%M') }}</small>
                 <div>{{ msg.message }}</div>
               </div>
+              {% else %}
+              <p class="text-muted small mb-0">Sin incidencias registradas.</p>
               {% endfor %}
             </div>
           </div>
+          {% if is_today %}
           <div class="card-footer p-2">
             <form id="chat-form" class="d-flex gap-2">
               <input type="text" id="msg-input" class="form-control form-control-sm" placeholder="Escribe una incidencia..." autocomplete="off">
               <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-send"></i></button>
             </form>
           </div>
+          {% endif %}
         </div>
       </div>
 
@@ -340,7 +362,7 @@
                   <span class="text-uppercase fw-bold small text-primary" style="font-size:.72rem;letter-spacing:.05em;">
                     <i class="bi bi-clock"></i> {{ sd.slot.label }} · {{ sd.slot.start }}–{{ sd.slot.end }}
                   </span>
-                  <a href="{{ url_for('absences.slot_pdf', date_str=today.isoformat(), slot_id=sd.slot.id) }}"
+                  <a href="{{ url_for('absences.slot_pdf', date_str=target_date.isoformat(), slot_id=sd.slot.id) }}"
                      target="_blank" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;"
                      title="Imprimir tareas del tramo">
                     <i class="bi bi-printer"></i> Tramo
@@ -384,6 +406,7 @@
 
     </div>
   </div>
+  {% endif %}{# has_side_panel #}
 </div>
 
 <!-- Modal asignación rápida -->
@@ -417,6 +440,12 @@
 
 {% block scripts %}
 <script>
+// Navegación por datepicker
+document.getElementById('date-picker').addEventListener('change', function() {
+  if (this.value) window.location.href = '/?fecha=' + this.value;
+});
+
+{% if is_today %}
 const socket = io();
 const channel = "general";
 socket.emit('join', { channel });
@@ -444,7 +473,9 @@ document.getElementById('chat-form').addEventListener('submit', (e) => {
 });
 
 document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
+{% endif %}
 
+{% if is_editable %}
 // Asignación rápida desde el panel de profesores
 const qaModal = new bootstrap.Modal(document.getElementById('qaModal'));
 document.querySelectorAll('.quick-assign-btn').forEach(btn => {
@@ -475,56 +506,24 @@ document.querySelectorAll('.quick-assign-btn').forEach(btn => {
     qaModal.show();
   });
 });
+{% endif %}
 
-// ── Vista continua / por tramo ──────────────────────────────────────────────
-const btnScroll = document.getElementById('btn-view-scroll');
-const btnTabs   = document.getElementById('btn-view-tabs');
-const tabsNav   = document.getElementById('slot-tabs-nav');
-const allCards  = () => document.querySelectorAll('.slot-card');
-const allBreaks = () => document.querySelectorAll('.slot-break');
-
+// ── Vista por tramo ──────────────────────────────────────────────────────────
 function activateTab(slotId) {
   document.querySelectorAll('[data-slot-tab]').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector(`[data-slot-tab="${slotId}"]`);
   if (btn) btn.classList.add('active');
-  allCards().forEach(c => c.classList.toggle('d-none', c.dataset.slotId !== String(slotId)));
+  document.querySelectorAll('.slot-card').forEach(c => c.classList.toggle('d-none', c.dataset.slotId !== String(slotId)));
 }
 
-function setView(mode, targetSlot) {
-  localStorage.setItem('dashView', mode);
-  if (mode === 'tabs') {
-    tabsNav.classList.remove('d-none');
-    allBreaks().forEach(b => b.classList.add('d-none'));
-    btnTabs.classList.replace('btn-outline-secondary', 'btn-secondary');
-    btnTabs.classList.add('active');
-    btnScroll.classList.replace('btn-secondary', 'btn-outline-secondary');
-    btnScroll.classList.remove('active');
-    const first = document.querySelector('[data-slot-tab]');
-    const target = targetSlot || document.querySelector('[data-slot-tab].active')?.dataset.slotTab || (first && first.dataset.slotTab);
-    if (target) activateTab(target);
-  } else {
-    tabsNav.classList.add('d-none');
-    allBreaks().forEach(b => b.classList.remove('d-none'));
-    allCards().forEach(c => c.classList.remove('d-none'));
-    btnScroll.classList.replace('btn-outline-secondary', 'btn-secondary');
-    btnScroll.classList.add('active');
-    btnTabs.classList.replace('btn-secondary', 'btn-outline-secondary');
-    btnTabs.classList.remove('active');
-    if (targetSlot) {
-      document.getElementById('slot-' + targetSlot)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }
-}
-
-btnScroll.addEventListener('click', () => setView('scroll'));
-btnTabs.addEventListener('click',   () => setView('tabs'));
 document.querySelectorAll('[data-slot-tab]').forEach(btn => {
   btn.addEventListener('click', () => activateTab(btn.dataset.slotTab));
 });
 
-// Inicializar con vista guardada y tramo del ancla (#slot-X)
+// Activar tramo del ancla (#slot-X) o el primero disponible
 const hashSlot = location.hash.startsWith('#slot-') ? location.hash.replace('#slot-', '') : null;
-setView(localStorage.getItem('dashView') || 'scroll', hashSlot);
+const firstTab = document.querySelector('[data-slot-tab]');
+activateTab(hashSlot || (firstTab && firstTab.dataset.slotTab));
 
 // ── Resize chat / tareas ─────────────────────────────────────────────────────
 {% if current_user.is_management %}

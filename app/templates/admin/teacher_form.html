@@ -27,24 +27,58 @@
             <option value="display" {% if teacher and teacher.role=='display' %}selected{% endif %}>Pantalla sala profesores</option>
           </select>
         </div>
-        <div class="col-md-3 d-flex align-items-end">
+        <div class="col-md-3 d-flex flex-column justify-content-end gap-2 pb-1">
           {% if teacher %}
-          <div class="form-check mb-2">
+          <div class="form-check">
             <input type="checkbox" class="form-check-input" name="active" id="active" {% if teacher.active %}checked{% endif %}>
             <label class="form-check-label" for="active">Activo</label>
           </div>
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="receive_emails" id="receive_emails" {% if teacher.receive_emails %}checked{% endif %}>
+            <label class="form-check-label" for="receive_emails">Recibe correos</label>
+          </div>
           {% endif %}
+          <div class="form-check" id="track-points-wrapper" style="display:none">
+            <input type="checkbox" class="form-check-input" name="track_points" id="track_points" {% if teacher and teacher.track_points %}checked{% endif %}>
+            <label class="form-check-label" for="track_points">Acumula puntos como profesor</label>
+          </div>
         </div>
         <div class="col-md-6">
           <label class="form-label">Contraseña <small class="text-muted">(opcional si usa Google Workspace{{ ' · dejar vacío para no cambiar' if teacher else '' }})</small></label>
           <input type="password" name="password" class="form-control">
         </div>
       </div>
-      <div class="mt-4">
+      <div class="mt-4 d-flex gap-2 flex-wrap">
         <button type="submit" class="btn btn-primary">Guardar</button>
-        <a href="{{ url_for('admin.teachers') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
+        <a href="{{ url_for('admin.teachers') }}" class="btn btn-outline-secondary">Cancelar</a>
       </div>
     </form>
+    {% if teacher %}
+    <div class="d-flex align-items-center gap-3 mt-3 pt-3 border-top">
+      <form method="POST" action="{{ url_for('admin.teacher_send_welcome', tid=teacher.id) }}">
+        <button type="submit" class="btn btn-outline-info"
+                onclick="return confirm('¿Enviar correo de bienvenida a {{ teacher.email }}?')">
+          <i class="bi bi-envelope-arrow-up"></i> Enviar bienvenida
+        </button>
+      </form>
+      <p class="text-muted small mb-0">
+        <i class="bi bi-info-circle"></i>
+        Plantilla configurable en
+        <a href="{{ url_for('admin.config') }}">Admin → Configuración → Servidor de correo</a>.
+      </p>
+    </div>
+    {% endif %}
   </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const roleSelect = document.querySelector('select[name="role"]');
+  const trackWrapper = document.getElementById('track-points-wrapper');
+  function toggleTrackPoints() {
+    trackWrapper.style.display = roleSelect.value === 'management' ? '' : 'none';
+  }
+  roleSelect.addEventListener('change', toggleTrackPoints);
+  toggleTrackPoints();
+</script>
 {% endblock %}

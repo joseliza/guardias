@@ -9,6 +9,7 @@ from flask_migrate import Migrate
 from flask_mail import Mail
 from flask_socketio import SocketIO
 from authlib.integrations.flask_client import OAuth
+from apscheduler.schedulers.background import BackgroundScheduler
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -16,3 +17,4 @@ migrate = Migrate()
 mail = Mail()
 socketio = SocketIO()
 oauth = OAuth()
+scheduler = BackgroundScheduler(daemon=True)

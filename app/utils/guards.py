@@ -31,7 +31,7 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
     }
 
     all_teachers = User.query.filter_by(active=True).filter(
-        User.role.notin_(["management", "display"])
+        User.role != "display"
     ).all()
 
     # IDs con entrada en ese tramo (clase o guardia)
@@ -141,7 +141,9 @@ def auto_assign_pending_guards(target_date: date, slot_id: int) -> dict:
 
         group = Group.query.get(guard.group_id)
         multiplier = group.difficulty_multiplier if group else 1.0
-        points = round(multiplier, 2)
+        from flask import current_app
+        pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
+        points = round(multiplier * pph, 2) if teacher.scores_points else 0
 
         db.session.add(GuardRecord(
             guard_id=guard.id,
@@ -151,7 +153,8 @@ def auto_assign_pending_guards(target_date: date, slot_id: int) -> dict:
             points_awarded=points,
         ))
         guard.status = "covered"
-        award_guard_points(teacher.id, points)
+        if teacher.scores_points:
+            award_guard_points(teacher.id, points)
         used_teacher_ids.add(teacher.id)
         assigned += 1
 

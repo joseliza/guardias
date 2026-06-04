@@ -5,7 +5,7 @@ para el grupo que queda sin clase, marcar reincorporaciones y generar PDFs
 """
 import os
 from datetime import date, datetime
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.absence import Absence
@@ -66,56 +66,125 @@ def create():
 
         absence_date = datetime.strptime(request.form["date"], "%Y-%m-%d").date()
         slot_ids = request.form.getlist("slot_ids")
-        reason = request.form.get("reason", "")
+        reason = request.form.get("comment", "") or request.form.get("reason", "")
+
+        day_idx = absence_date.weekday()
+        configured_penalty = current_app.config.get("ABSENCE_PENALTY", -1.0)
+        slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
+        skipped_free = []
+        normal_slot_ids = []  # tramos normales para auto-asignar después
 
         for slot_id in slot_ids:
+            slot_id = int(slot_id)
+            slot_cfg = slots_cfg.get(slot_id, {})
+            is_break = slot_cfg.get("is_break", False)
+
             existing = Absence.query.filter_by(
-                teacher_id=teacher_id, date=absence_date, slot_id=int(slot_id)
+                teacher_id=teacher_id, date=absence_date, slot_id=slot_id
             ).first()
             if existing:
                 continue
+
+            if is_break:
+                # Recreo: solo registrar si el profesor tenía recreo asignado en su horario
+                has_break_slot = TeacherSchedule.query.filter_by(
+                    teacher_id=teacher_id,
+                    day_of_week=day_idx,
+                    slot_id=slot_id,
+                ).first()
+                if not has_break_slot:
+                    skipped_free.append(slot_cfg.get("label", f"Tramo {slot_id}"))
+                    continue
+                db.session.add(Absence(
+                    teacher_id=teacher_id,
+                    date=absence_date,
+                    slot_id=slot_id,
+                    reason=reason,
+                    reported_by_role="self" if teacher_id == current_user.id else "management",
+                    reported_by_id=current_user.id,
+                    penalty_points=0.0,
+                ))
+                continue
+
+            # Tramo normal: verificar que el profesor tiene algo asignado
+            schedule_entry = TeacherSchedule.query.filter_by(
+                teacher_id=teacher_id,
+                day_of_week=day_idx,
+                slot_id=slot_id,
+                is_guard_slot=False,
+            ).first()
+            has_guard_slot = TeacherSchedule.query.filter_by(
+                teacher_id=teacher_id,
+                day_of_week=day_idx,
+                slot_id=slot_id,
+                is_guard_slot=True,
+            ).first()
+
+            if not schedule_entry and not has_guard_slot:
+                skipped_free.append(slot_cfg.get("label", f"Tramo {slot_id}"))
+                continue
+
+            group_id = schedule_entry.group_id if schedule_entry else None
+
             absence = Absence(
                 teacher_id=teacher_id,
                 date=absence_date,
-                slot_id=int(slot_id),
+                slot_id=slot_id,
                 reason=reason,
                 reported_by_role="self" if teacher_id == current_user.id else "management",
                 reported_by_id=current_user.id,
+                penalty_points=0.0,
             )
             db.session.add(absence)
             db.session.flush()
 
-            # Genera la guardia pendiente
-            guard = Guard(
+            db.session.add(Guard(
                 absence_id=absence.id,
                 date=absence_date,
-                slot_id=int(slot_id),
+                slot_id=slot_id,
+                group_id=group_id,
                 status="pending",
-            )
-            db.session.add(guard)
+            ))
 
-            # Penalizar solo si el profesor tenía guardia asignada en ese tramo
-            day_idx = absence_date.weekday()
-            has_guard_slot = TeacherSchedule.query.filter_by(
-                teacher_id=teacher_id,
-                day_of_week=day_idx,
-                slot_id=int(slot_id),
-                is_guard_slot=True,
-            ).first()
             if has_guard_slot:
-                apply_absence_penalty(teacher_id)
+                absence.penalty_points = configured_penalty
+                apply_absence_penalty(teacher_id, configured_penalty)
+
+            normal_slot_ids.append(slot_id)
 
         db.session.commit()
 
-        # Auto-asignación de guardias generadas
-        for slot_id in slot_ids:
-            auto_assign_pending_guards(absence_date, int(slot_id))
+        # Auto-asignación solo en tramos normales (no recreo)
+        for slot_id in normal_slot_ids:
+            auto_assign_pending_guards(absence_date, slot_id)
 
+        if skipped_free:
+            flash(f"Tramos omitidos (el profesor no tiene clase ni guardia asignada): {', '.join(skipped_free)}.", "warning")
         flash("Ausencia registrada correctamente.", "success")
         return redirect(url_for("absences.index"))
 
     return render_template("absences/create.html", teachers=teachers, slots=slots,
                            today=date.today().isoformat())
+
+
+@absences_bp.route("/horario-json/<int:tid>/<int:day_idx>")
+@login_required
+def schedule_json(tid, day_idx):
+    """Devuelve los tramos que tiene el profesor en ese día de la semana."""
+    slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
+    entries = TeacherSchedule.query.filter_by(
+        teacher_id=tid,
+        day_of_week=day_idx,
+        is_guard_slot=False,
+    ).all()
+    result = []
+    for e in entries:
+        s = slots_cfg.get(e.slot_id)
+        if s:
+            result.append({"id": s["id"], "label": s["label"],
+                           "start": s["start"], "end": s["end"]})
+    result.sort(key=lambda x: x["id"])
+    return jsonify(result)
 
 
 def _append_attachments(main_bytes, tasks, upload_dir):
