@@ -7,17 +7,26 @@
 <div class="alert alert-info mt-3">
   <strong>Formato esperado:</strong> El CSV debe tener cabecera con las columnas:<br>
   <code>email, nombre, apellidos, rol, contraseña</code><br>
-  <small>El rol puede ser: <code>teacher</code>, <code>extracurricular</code>, <code>management</code>. Si se omite la contraseña se asigna <code>cambiar123</code>.</small>
+  <small>
+    Roles válidos: <code>teacher</code>, <code>extracurricular</code>, <code>management</code>, <code>display</code><br>
+    La contraseña es opcional — si se deja vacía el usuario solo podrá entrar con Google Workspace.
+  </small>
 </div>
+<a href="{{ url_for('admin.teachers_csv_template') }}" class="btn btn-outline-secondary btn-sm mb-3">
+  <i class="bi bi-download"></i> Descargar plantilla CSV
+</a>
 {% else %}
 <div class="alert alert-info mt-3">
   <strong>Formato esperado:</strong> El CSV debe tener cabecera con las columnas:<br>
   <code>email_profesor, dia, tramo, grupo, es_guardia</code><br>
-  <small>día: 0=Lunes…4=Viernes | tramo: 1–7 | es_guardia: true/false</small>
+  <small>día: 0=Lunes…4=Viernes | tramo: 1–7 | es_guardia: true/false | grupo: nombre exacto del grupo (vacío si es tramo de guardia)</small>
 </div>
+<a href="{{ url_for('admin.schedule_csv_template') }}" class="btn btn-outline-secondary btn-sm mb-3">
+  <i class="bi bi-download"></i> Descargar plantilla CSV
+</a>
 {% endif %}
 
-<div class="card mt-3">
+<div class="card mt-1">
   <div class="card-body">
     <form method="POST" enctype="multipart/form-data">
       <div class="mb-3">

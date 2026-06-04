@@ -79,6 +79,20 @@ def teacher_edit(tid):
 # ── Importación CSV profesores ────────────────────────────────────────────────
 # Formato esperado: email,nombre,apellidos,rol,contraseña
 
+@admin_bp.route("/profesores/plantilla-csv")
+@login_required
+def teachers_csv_template():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from flask import Response
+    content = "email,nombre,apellidos,rol,contraseña\nana.garcia@iesciudadjardin.es,Ana,García,teacher,\npedro.lopez@iesciudadjardin.es,Pedro,López,management,\n"
+    return Response(
+        "﻿" + content,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=plantilla_profesores.csv"},
+    )
+
+
 @admin_bp.route("/profesores/importar-csv", methods=["GET", "POST"])
 @login_required
 def import_teachers_csv():
@@ -295,6 +309,20 @@ def schedules():
                            selected=selected,
                            schedule_grid=schedule_grid,
                            days=days)
+
+
+@admin_bp.route("/horarios/plantilla-csv")
+@login_required
+def schedule_csv_template():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from flask import Response
+    content = "email_profesor,dia,tramo,grupo,es_guardia\nana.garcia@iesciudadjardin.es,0,1,1A Bach,false\nana.garcia@iesciudadjardin.es,0,3,,true\n"
+    return Response(
+        "﻿" + content,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=plantilla_horarios.csv"},
+    )
 
 
 @admin_bp.route("/horarios/importar-csv", methods=["GET", "POST"])
