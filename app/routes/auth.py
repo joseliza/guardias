@@ -40,7 +40,8 @@ def logout():
 @auth_bp.route("/auth/google")
 def google_login():
     redirect_uri = url_for("auth.google_callback", _external=True)
-    return oauth.google.authorize_redirect(redirect_uri)
+    allowed_domain = current_app.config["GOOGLE_ALLOWED_DOMAIN"]
+    return oauth.google.authorize_redirect(redirect_uri, hd=allowed_domain)
 
 
 @auth_bp.route("/auth/google/callback")
