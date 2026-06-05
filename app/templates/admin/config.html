@@ -13,6 +13,50 @@
 
 <div class="accordion mt-3" id="config-accordion">
 
+  <!-- ── General ──────────────────────────────────────────────────────── -->
+  <div class="accordion-item">
+    <h2 class="accordion-header">
+      <button class="accordion-button collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#section-general">
+        General
+      </button>
+    </h2>
+    <div id="section-general" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
+      <div class="accordion-body">
+        <form method="POST" action="{{ url_for('admin.config_general') }}">
+          <div class="mb-4">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="show_future_absences"
+                     id="show_future_absences"
+                     {% if general_config.get('show_future_absences') %}checked{% endif %}>
+              <label class="form-check-label" for="show_future_absences">
+                <strong>Mostrar ausencias futuras en el panel de justificación</strong>
+                <small class="d-block text-muted mt-1">
+                  Si está desactivado, solo aparecen ausencias de hoy o de fechas pasadas.
+                </small>
+              </label>
+            </div>
+          </div>
+          <div class="mb-4">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="auto_justify_extracurricular"
+                     id="auto_justify_extracurricular"
+                     {% if general_config.get('auto_justify_extracurricular') %}checked{% endif %}>
+              <label class="form-check-label" for="auto_justify_extracurricular">
+                <strong>Justificar automáticamente las ausencias por actividad extraescolar</strong>
+                <small class="d-block text-muted mt-1">
+                  Las ausencias generadas al registrar una actividad quedan marcadas como justificadas
+                  y no aparecen en el panel de revisión.
+                </small>
+              </label>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Servidor de correo ───────────────────────────────────────────── -->
   <div class="accordion-item">
     <h2 class="accordion-header">

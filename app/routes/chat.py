@@ -131,7 +131,8 @@ def report_pdf():
         for day, day_msgs in groupby(msgs, key=lambda m: m.created_at.date()):
             pdf.set_font("dv", "B", 12)
             pdf.set_fill_color(230, 230, 230)
-            pdf.cell(0, 8, day.strftime("%A, %d de %B de %Y").capitalize(), ln=True, fill=True)
+            from app.utils import fecha_es as _fecha_es
+            pdf.cell(0, 8, _fecha_es(day), ln=True, fill=True)
             pdf.ln(1)
 
             for m in day_msgs:

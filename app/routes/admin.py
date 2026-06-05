@@ -594,6 +594,7 @@ def teacher_send_welcome(tid):
 # ── Configuración ─────────────────────────────────────────────────────────────
 
 MAIL_KEYS = ["MAIL_SERVER", "MAIL_PORT", "MAIL_USE_TLS", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_DEFAULT_SENDER", "MAIL_WELCOME_TEMPLATE", "MAIL_JUSTIFICATION_TEMPLATE"]
+GENERAL_DEFAULTS = {"show_future_absences": False, "auto_justify_extracurricular": False}
 
 
 def _mail_config_path():
@@ -649,6 +650,7 @@ def config():
     stored = _read_mail_config()
     mail_config = {k: stored.get(k, current_app.config.get(k, "")) for k in MAIL_KEYS}
     schedule_config = stored.get("MAIL_SCHEDULE", {})
+    general_config = {**GENERAL_DEFAULTS, **stored.get("GENERAL", {})}
     points_config = stored.get("POINTS", {
         "absence_penalty": current_app.config.get("ABSENCE_PENALTY", -1.0),
         "points_per_hour":  current_app.config.get("POINTS_PER_HOUR",  1.0),
@@ -672,10 +674,26 @@ def config():
     return render_template("admin/config.html",
                            mail_config=mail_config,
                            schedule_config=schedule_config,
+                           general_config=general_config,
                            points_config=points_config,
                            users=users,
                            scorable_teachers=scorable_teachers,
                            help_content=help_content)
+
+
+@admin_bp.route("/configuracion/general", methods=["POST"])
+@login_required
+def config_general():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    current = _read_mail_config()
+    current["GENERAL"] = {
+        "show_future_absences":        bool(request.form.get("show_future_absences")),
+        "auto_justify_extracurricular": bool(request.form.get("auto_justify_extracurricular")),
+    }
+    _write_mail_config(current)
+    flash("Configuración general guardada.", "success")
+    return redirect(url_for("admin.config") + "#section-general")
 
 
 @admin_bp.route("/configuracion/horario", methods=["POST"])
@@ -761,15 +779,22 @@ def justification():
     from app.models.absence import Absence
     from app.models.schedule import TeacherSchedule
 
+    from datetime import date as _date
     slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
 
+    cfg = _read_mail_config()
+    general_cfg = {**GENERAL_DEFAULTS, **cfg.get("GENERAL", {})}
+    show_future = general_cfg.get("show_future_absences", False)
+    today = _date.today()
+
     # Profesores con alguna ausencia (justificada o no), ordenados alfabéticamente
-    teachers_with_absences = (User.query
+    # Si show_future está desactivado, solo se consideran ausencias hasta hoy
+    teachers_q = (User.query
         .join(Absence, Absence.teacher_id == User.id)
-        .filter(User.role != "display")
-        .distinct()
-        .order_by(User.surname, User.name)
-        .all())
+        .filter(User.role != "display"))
+    if not show_future:
+        teachers_q = teachers_q.filter(Absence.date <= today)
+    teachers_with_absences = teachers_q.distinct().order_by(User.surname, User.name).all()
 
     teacher_id = request.args.get("teacher_id", type=int)
     if not teacher_id and teachers_with_absences:
@@ -777,28 +802,17 @@ def justification():
 
     selected_teacher = User.query.get(teacher_id) if teacher_id else None
 
-    absences = []
     absence_groups = {}
-    if selected_teacher:
-        absences = (Absence.query
-                    .filter_by(teacher_id=selected_teacher.id, justified=False)
-                    .order_by(Absence.date.desc(), Absence.slot_id)
-                    .all())
-        for a in absences:
-            entry = TeacherSchedule.query.filter_by(
-                teacher_id=a.teacher_id, day_of_week=a.date.weekday(),
-                slot_id=a.slot_id, is_guard_slot=False,
-            ).first()
-            absence_groups[a.id] = entry.group.name if entry and entry.group else "—"
 
-    # Para el panel derecho: TODAS las ausencias del profesor (para poder también desjustificar)
-    all_absences = []
+    # Para el panel derecho: TODAS las ausencias del profesor (filtradas por fecha si procede)
     absences_by_date = {}
     if selected_teacher:
-        all_absences = (Absence.query
-                        .filter_by(teacher_id=selected_teacher.id)
-                        .order_by(Absence.date.desc(), Absence.slot_id)
-                        .all())
+        q = (Absence.query
+             .filter_by(teacher_id=selected_teacher.id)
+             .order_by(Absence.date.desc(), Absence.slot_id))
+        if not show_future:
+            q = q.filter(Absence.date <= today)
+        all_absences = q.all()
         for a in all_absences:
             entry = TeacherSchedule.query.filter_by(
                 teacher_id=a.teacher_id, day_of_week=a.date.weekday(),
@@ -807,13 +821,12 @@ def justification():
             absence_groups[a.id] = entry.group.name if entry and entry.group else "—"
             absences_by_date.setdefault(a.date, []).append(a)
 
-    # Ausencias devueltas y sin justificar para envío de correos
-    pending_email = (Absence.query
-                     .filter_by(justified=False, status="returned")
-                     .order_by(Absence.date.desc(), Absence.slot_id)
-                     .all())
+    # Ausencias sin justificar para envío de correos (respeta filtro de fechas)
+    pending_q = Absence.query.filter_by(justified=False)
+    if not show_future:
+        pending_q = pending_q.filter(Absence.date <= today)
+    pending_email = pending_q.order_by(Absence.date.desc(), Absence.slot_id).all()
 
-    cfg = _read_mail_config()
     has_template = bool(cfg.get("MAIL_JUSTIFICATION_TEMPLATE", "").strip())
 
     return render_template("admin/justification.html",
@@ -891,8 +904,7 @@ def send_justification_email_single(absence_id):
 
     absence = Absence.query.get_or_404(absence_id)
     if absence.status != "returned":
-        flash("No se puede enviar el correo: el profesor aún no se ha reincorporado.", "warning")
-        return redirect(url_for("admin.justification", teacher_id=absence.teacher_id))
+        flash("Aviso: el profesor aún no se ha reincorporado. El correo se envía igualmente.", "warning")
 
     sent = _send_justification_email_for_teacher(absence.teacher_id)
     if sent:
@@ -965,7 +977,225 @@ def send_justification_emails():
         flash(f"Correo{'s' if sent != 1 else ''} enviado{'s' if sent != 1 else ''}: {sent} profesor{'es' if sent != 1 else ''}.", "success")
     if skipped:
         flash(f"Omitidos (no reincorporados o error): {skipped}.", "warning")
-    return redirect(url_for("admin.justification"))
+    return redirect(url_for("admin.justification", teacher_id=teacher_id))
+
+
+# ── Informe PDF de faltas sin justificar ──────────────────────────────────────
+
+def _build_justification_report_data(desde, hasta):
+    """Devuelve lista de dicts con los datos del informe, agrupados por profesor y fecha."""
+    from datetime import date as _date
+    from app.models.absence import Absence
+    from app.models.schedule import TeacherSchedule
+
+    from app.utils import fecha_es as _fecha_es, _DIAS_ABREV
+    slots_cfg = current_app.config["TIME_SLOTS"]
+    slot_map = {s["id"]: s for s in slots_cfg}
+    break_ids = {s["id"] for s in slots_cfg if s.get("is_break")}
+
+    absences = (Absence.query
+                .filter_by(justified=False)
+                .filter(Absence.date >= desde, Absence.date <= hasta)
+                .join(User, Absence.teacher_id == User.id)
+                .filter(User.role != "display")
+                .order_by(User.surname, User.name, Absence.date, Absence.slot_id)
+                .all())
+
+    # Agrupar: teacher_id → date → [absence]
+    from collections import defaultdict
+    by_teacher = defaultdict(lambda: defaultdict(list))
+    teacher_map = {}
+    for a in absences:
+        by_teacher[a.teacher_id][a.date].append(a)
+        teacher_map[a.teacher_id] = a.teacher
+
+    rows = []
+    for tid, dates in sorted(by_teacher.items(), key=lambda x: teacher_map[x[0]].full_name):
+        teacher = teacher_map[tid]
+        teacher_rows = []
+        for d in sorted(dates.keys()):
+            day_absences = dates[d]
+            absent_slots = {a.slot_id for a in day_absences}
+            non_break_absent = absent_slots - break_ids
+
+            # Tramos de clase (no-recreo, no-guardia) del horario del profesor ese día
+            scheduled_slots = {
+                e.slot_id for e in TeacherSchedule.query.filter_by(
+                    teacher_id=tid, day_of_week=d.weekday()
+                ).all()
+                if e.slot_id not in break_ids and not e.is_guard_slot
+            }
+            if scheduled_slots:
+                # Día completo si todos los tramos del horario del profesor están ausentes
+                full_day = scheduled_slots <= non_break_absent
+            else:
+                # Sin horario registrado: día completo si cubre todos los tramos lectivos
+                all_non_break = {s["id"] for s in slots_cfg if not s.get("is_break")}
+                full_day = bool(all_non_break) and all_non_break <= non_break_absent
+
+            slots_label = ", ".join(
+                slot_map[sid]["label"] for sid in sorted(absent_slots)
+                if sid in slot_map
+            )
+            teacher_rows.append({
+                "date": d,
+                "date_label": f"{_DIAS_ABREV[d.weekday()]} {d.strftime('%d/%m/%Y')}",
+                "date_full": _fecha_es(d, "%A, %d de %B de %Y"),
+                "full_day": full_day,
+                "slots_label": slots_label,
+                "slot_details": [
+                    (slot_map[sid]["label"], slot_map[sid]["start"], slot_map[sid]["end"])
+                    for sid in sorted(absent_slots) if sid in slot_map
+                ],
+                "count": len(absent_slots),
+                "teacher": teacher.full_name,
+            })
+        rows.append({"teacher": teacher, "entries": teacher_rows,
+                     "total": sum(r["count"] for r in teacher_rows)})
+    return rows
+
+
+@admin_bp.route("/informe-justificacion")
+@login_required
+def justification_report():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from datetime import date as _date, timedelta
+
+    # Por defecto: primer día del mes actual → hoy
+    today = _date.today()
+    default_desde = today.replace(day=1).isoformat()
+    default_hasta = today.isoformat()
+
+    desde_str = request.args.get("desde", default_desde)
+    hasta_str = request.args.get("hasta", default_hasta)
+
+    summary = None
+    try:
+        desde = _date.fromisoformat(desde_str)
+        hasta = _date.fromisoformat(hasta_str)
+        rows_data = _build_justification_report_data(desde, hasta)
+        flat_rows = [r for teacher_data in rows_data for r in teacher_data["entries"]]
+        summary = {
+            "rows": flat_rows,
+            "total_slots": sum(r["count"] for r in flat_rows),
+            "total_teachers": len(rows_data),
+        } if rows_data else None
+    except (ValueError, TypeError):
+        desde_str, hasta_str = default_desde, default_hasta
+
+    return render_template("admin/justification_report.html",
+                           desde=desde_str, hasta=hasta_str, summary=summary)
+
+
+@admin_bp.route("/informe-justificacion/pdf")
+@login_required
+def justification_report_pdf():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from datetime import date as _date
+    from fpdf import FPDF
+    from flask import make_response
+
+    desde_str = request.args.get("desde", "")
+    hasta_str = request.args.get("hasta", "")
+    try:
+        desde = _date.fromisoformat(desde_str)
+        hasta = _date.fromisoformat(hasta_str)
+    except (ValueError, TypeError):
+        flash("Fechas no válidas.", "danger")
+        return redirect(url_for("admin.justification_report"))
+
+    rows_data = _build_justification_report_data(desde, hasta)
+
+    FONT   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+    pdf = FPDF()
+    pdf.add_font("dv", "",  FONT)
+    pdf.add_font("dv", "B", FONT_B)
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    institute = current_app.config.get("INSTITUTE_NAME", "IES")
+
+    # ── Cabecera ──
+    pdf.set_font("dv", "B", 16)
+    pdf.cell(0, 10, institute, ln=True, align="C")
+    pdf.set_font("dv", "B", 13)
+    pdf.cell(0, 8, "Informe de faltas sin justificar", ln=True, align="C")
+    pdf.set_font("dv", "", 10)
+    pdf.cell(0, 6,
+             f"Del {desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}",
+             ln=True, align="C")
+    pdf.ln(4)
+    pdf.set_draw_color(180, 180, 180)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+
+    if not rows_data:
+        pdf.set_font("dv", "", 11)
+        pdf.cell(0, 8, "No hay faltas sin justificar en el período seleccionado.", ln=True)
+    else:
+        total_slots = sum(t["total"] for t in rows_data)
+        total_teachers = len(rows_data)
+        pdf.set_font("dv", "", 9)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(0, 6,
+                 f"{total_slots} tramo{'s' if total_slots != 1 else ''} sin justificar"
+                 f" en {total_teachers} profesor{'es' if total_teachers != 1 else ''}",
+                 ln=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(4)
+
+        for teacher_data in rows_data:
+            teacher = teacher_data["teacher"]
+
+            # ── Nombre del profesor ──
+            pdf.set_font("dv", "B", 11)
+            pdf.set_fill_color(240, 240, 240)
+            pdf.cell(0, 7, f"  {teacher.full_name}", ln=True, fill=True)
+            pdf.ln(1)
+
+            for entry in teacher_data["entries"]:
+                # Línea fecha (abreviada: "Lun 01/06/2026")
+                pdf.set_font("dv", "B", 10)
+                pdf.cell(6)
+                pdf.cell(0, 6, entry["date_label"], ln=True)
+
+                # Línea tramos (indentada)
+                pdf.cell(12)
+                pdf.set_font("dv", "", 10)
+                if entry["full_day"]:
+                    pdf.set_text_color(180, 100, 0)
+                    pdf.cell(0, 6, "Día completo", ln=True)
+                    pdf.set_text_color(0, 0, 0)
+                else:
+                    slots_text = "  |  ".join(
+                        label for label, _s, _e in entry["slot_details"]
+                    )
+                    pdf.multi_cell(0, 6, slots_text)
+                pdf.ln(1)
+
+            # Total del profesor
+            pdf.set_font("dv", "", 9)
+            pdf.set_text_color(100, 100, 100)
+            pdf.cell(6)
+            pdf.cell(0, 5,
+                     f"Total: {teacher_data['total']} tramo{'s' if teacher_data['total'] != 1 else ''}"
+                     " sin justificar",
+                     ln=True)
+            pdf.set_text_color(0, 0, 0)
+            pdf.ln(2)
+            pdf.set_draw_color(210, 210, 210)
+            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+            pdf.ln(4)
+
+    response = make_response(bytes(pdf.output()))
+    fname = f"faltas_sin_justificar_{desde_str}_{hasta_str}.pdf"
+    response.headers["Content-Type"] = "application/pdf"
+    response.headers["Content-Disposition"] = f"inline; filename={fname}"
+    return response
 
 
 # ── Página de ayuda ───────────────────────────────────────────────────────────

@@ -140,12 +140,20 @@
                 {% if guard %}
                   {% set records = guard.records.all() %}
                   {% if guard.status == 'covered' and records %}
-                  <span class="badge bg-success d-block mb-1">Cubierta</span>
-                  {% for rec in records %}
+                  <div style="min-width:120px">
+                  <span class="badge bg-success d-block text-center mb-1">Cubierta</span>
+                  {% set slot_parts = s.start.split(':') %}
+                  {% set ns = namespace(cur = slot_parts[0]|int * 60 + slot_parts[1]|int) %}
+                  {% for rec in records | sort(attribute='id') %}
+                  {% set rec_start = ns.cur %}
+                  {% set rec_end = ns.cur + rec.effective_minutes %}
+                  {% set ns.cur = rec_end %}
                   <div class="d-flex align-items-center gap-1">
                     <small class="text-success fw-semibold">
                       <i class="bi bi-person-check"></i> {{ rec.teacher.full_name }}
-                      <span class="text-muted">({{ rec.effective_minutes }} min)</span>
+                      <span class="badge bg-success-subtle text-success-emphasis ms-1" style="font-size:.7rem;">
+                        {{ rec_start | mins_to_hhmm }}–{{ rec_end | mins_to_hhmm }} · {{ rec.effective_minutes }} min
+                      </span>
                     </small>
                     {% if can_manage %}
                     <form method="POST" action="{{ url_for('guards.remove_record', record_id=rec.id) }}"
@@ -157,15 +165,17 @@
                     {% endif %}
                   </div>
                   {% endfor %}
+                  </div>
                   {% elif guard.status == 'pending' %}
+                  <div style="min-width:120px">
                   {% if guard.group_id and guard.group_id in item.activity_group_ids %}
-                  <span class="badge" style="background-color:#0d9488!important;color:#fff"
+                  <span class="badge d-block text-center" style="background-color:#0d9488!important;color:#fff"
                         title="El grupo está de actividad extraescolar">
                     <i class="bi bi-bus-front"></i> Grupo en actividad EX
                   </span>
                   {% elif absence_support.get(absence.id) %}
                   {% set support = absence_support[absence.id] %}
-                  <span class="badge bg-warning text-dark"
+                  <span class="badge bg-warning text-dark d-block text-center"
                         title="Hay profesor/a de apoyo en este grupo y tramo">
                     <i class="bi bi-people-fill"></i> Apoyo
                   </span>
@@ -175,29 +185,37 @@
                   </small></div>
                   {% endfor %}
                   {% else %}
-                  <span class="badge bg-danger">Pendiente</span>
+                  <span class="badge bg-danger d-block text-center">Pendiente</span>
                   {% endif %}
+                  </div>
                   {% else %}
-                  <span class="badge bg-secondary">{{ guard.status }}</span>
+                  <span class="badge bg-secondary d-block text-center" style="min-width:120px">{{ guard.status }}</span>
                   {% endif %}
                 {% else %}
                 <span class="text-muted small">—</span>
                 {% endif %}
               </td>
               {% if can_manage %}
-              <td class="d-flex gap-1 flex-wrap">
-                {% if guard %}
-                <a href="{{ url_for('guards.assign', guard_id=guard.id) }}"
-                   class="btn btn-sm {% if guard.status == 'pending' %}btn-outline-danger{% else %}btn-outline-secondary{% endif %}">
-                  <i class="bi bi-person-plus"></i> {% if guard.status == 'covered' %}Reasignar{% else %}Asignar{% endif %}
-                </a>
-                {% endif %}
-                {% if absence.status != 'returned' %}
-                <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=absence.id) }}" class="d-inline"
-                      onsubmit="return confirm('¿Confirmas que {{ absence.teacher.full_name }} se ha reincorporado?')">
-                  <button class="btn btn-sm btn-outline-success"><i class="bi bi-box-arrow-in-right"></i> Reincorp.</button>
-                </form>
-                {% endif %}
+              <td>
+                <div class="d-grid gap-1" style="min-width:130px">
+                  {% if guard and absence.status != 'returned' %}
+                  <a href="{{ url_for('guards.assign', guard_id=guard.id) }}"
+                     class="btn btn-sm {% if guard.status == 'pending' %}btn-outline-danger{% else %}btn-outline-secondary{% endif %}">
+                    <i class="bi bi-person-plus"></i> {% if guard.status == 'covered' %}Reasignar{% else %}Asignar{% endif %}
+                  </a>
+                  {% endif %}
+                  {% if absence.status != 'returned' %}
+                  <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=absence.id) }}"
+                        onsubmit="return confirm('¿Confirmas que {{ absence.teacher.full_name }} se ha reincorporado?')">
+                    <button class="btn btn-sm btn-outline-success w-100"><i class="bi bi-box-arrow-in-right"></i> Reincorp.</button>
+                  </form>
+                  {% else %}
+                  <form method="POST" action="{{ url_for('absences.unmark_returned', absence_id=absence.id) }}"
+                        onsubmit="return confirm('¿Deshacer la reincorporación de {{ absence.teacher.full_name }}?')">
+                    <button class="btn btn-sm btn-outline-warning w-100"><i class="bi bi-arrow-counterclockwise"></i> Deshacer reincorp.</button>
+                  </form>
+                  {% endif %}
+                </div>
               </td>
               {% endif %}
             </tr>
@@ -231,14 +249,14 @@
                 <span class="badge bg-warning text-dark" title="Ocupado — cubriendo una ausencia">
                   <i class="bi bi-person-fill-exclamation"></i> {{ t.full_name }} ({{ t.points }} pts)
                 </span>
-                {% elif current_user.is_management and item.pending_guards_info %}
+                {% elif current_user.is_management and item.all_guards_info %}
                 <button type="button"
                         class="badge bg-success border-0 quick-assign-btn"
                         style="cursor:pointer"
                         title="Clic para asignar guardia"
                         data-teacher-id="{{ t.id }}"
                         data-teacher-name="{{ t.full_name }}"
-                        data-guards='{{ item.pending_guards_info | tojson }}'>
+                        data-guards='{{ item.all_guards_info | tojson }}'>
                   <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
                 </button>
                 {% else %}
@@ -261,14 +279,14 @@
                       title="Ocupado — cubriendo una ausencia">
                   <i class="bi bi-person-fill-exclamation"></i> {{ t.full_name }} ({{ t.points }} pts)
                 </span>
-                {% elif current_user.is_management and item.pending_guards_info %}
+                {% elif current_user.is_management and item.all_guards_info %}
                 <button type="button"
                         class="badge border-0 quick-assign-btn"
                         style="cursor:pointer;background-color:#0d9488!important;color:#fff"
                         title="Clic para asignar guardia"
                         data-teacher-id="{{ t.id }}"
                         data-teacher-name="{{ t.full_name }}"
-                        data-guards='{{ item.pending_guards_info | tojson }}'>
+                        data-guards='{{ item.all_guards_info | tojson }}'>
                   <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
                 </button>
                 {% else %}

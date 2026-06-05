@@ -20,6 +20,38 @@ from app.utils.guards import get_available_teachers_for_slot, auto_assign_pendin
 guards_bp = Blueprint("guards", __name__, url_prefix="/guardias")
 
 
+def _slot_duration(slot):
+    """Duración del tramo en minutos."""
+    sh, sm = map(int, slot["start"].split(":"))
+    eh, em = map(int, slot["end"].split(":"))
+    return (eh * 60 + em) - (sh * 60 + sm)
+
+
+def _recalculate_guard_records(guard, slot):
+    """Redistribuye los minutos del tramo a partes iguales entre todos los records.
+    Si no divide exactamente, los primeros profesores reciben un minuto extra."""
+    records = guard.records.order_by(GuardRecord.id).all()
+    if not records:
+        return
+    total_min = _slot_duration(slot)
+    n = len(records)
+    base = total_min // n
+    extra = total_min % n
+
+    group = db.session.get(Group, guard.group_id)
+    multiplier = group.difficulty_multiplier if group else 1.0
+    pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
+
+    for i, rec in enumerate(records):
+        new_minutes = base + (1 if i < extra else 0)
+        teacher = db.session.get(User, rec.teacher_id)
+        new_points = round((new_minutes / 60) * multiplier * pph, 2) if teacher and teacher.scores_points else 0.0
+        if teacher:
+            teacher.points = round(teacher.points - rec.points_awarded + new_points, 2)
+        rec.effective_minutes = new_minutes
+        rec.points_awarded = new_points
+
+
 def _can_manage_slot(slot_id):
     """True si el usuario puede gestionar guardias en este tramo:
     equipo directivo, pantalla, o profesor con guardia asignada en ese tramo hoy."""
@@ -72,22 +104,16 @@ def assign(guard_id):
             flash(f"Aviso: {teacher_name} ya está asignado/a a otra guardia en este tramo "
                   f"(grupos juntos). La asignación se ha registrado igualmente.", "warning")
 
-        assigned_teacher = User.query.get(teacher_id)
-        group = Group.query.get(guard.group_id)
-        multiplier = group.difficulty_multiplier if group else 1.0
-        pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
-        points = round((effective_minutes / 60) * multiplier * pph, 2) if assigned_teacher.scores_points else 0
-
         db.session.add(GuardRecord(
             guard_id=guard.id,
             teacher_id=teacher_id,
-            effective_minutes=effective_minutes,
+            effective_minutes=0,
             notes=notes,
-            points_awarded=points,
+            points_awarded=0.0,
         ))
         guard.status = "covered"
-        if assigned_teacher.scores_points:
-            award_guard_points(teacher_id, points)
+        db.session.flush()
+        _recalculate_guard_records(guard, slot)
         db.session.commit()
         flash("Guardia registrada correctamente.", "success")
 
@@ -158,22 +184,19 @@ def quick_assign():
         flash(f"Aviso: {teacher_name} ya está asignado/a a otra guardia en este tramo "
               f"(grupos juntos). La asignación se ha registrado igualmente.", "warning")
 
-    quick_teacher = User.query.get(teacher_id)
-    group = Group.query.get(guard.group_id)
-    multiplier = group.difficulty_multiplier if group else 1.0
-    pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
-    points = round(multiplier * pph, 2) if quick_teacher.scores_points else 0
-
     db.session.add(GuardRecord(
         guard_id=guard.id,
         teacher_id=teacher_id,
-        effective_minutes=60,
+        effective_minutes=0,
         notes="Asignación rápida",
-        points_awarded=points,
+        points_awarded=0.0,
     ))
     guard.status = "covered"
-    if quick_teacher.scores_points:
-        award_guard_points(teacher_id, points)
+    db.session.flush()
+    slots_cfg = current_app.config["TIME_SLOTS"]
+    slot = next((s for s in slots_cfg if s["id"] == guard.slot_id), None)
+    if slot:
+        _recalculate_guard_records(guard, slot)
     db.session.commit()
     flash("Guardia asignada.", "success")
     return redirect(url_for("dashboard.index") + f"#slot-{guard.slot_id}")
@@ -206,7 +229,7 @@ def remove_record(record_id):
         flash("Sin permiso.", "danger")
         return redirect(url_for("dashboard.index"))
 
-    teacher = User.query.get(record.teacher_id)
+    teacher = db.session.get(User, record.teacher_id)
     if teacher:
         teacher.points = round(teacher.points - record.points_awarded, 2)
 
@@ -215,6 +238,11 @@ def remove_record(record_id):
 
     if guard.records.count() == 0:
         guard.status = "pending"
+    else:
+        slots_cfg = current_app.config["TIME_SLOTS"]
+        slot = next((s for s in slots_cfg if s["id"] == guard.slot_id), None)
+        if slot:
+            _recalculate_guard_records(guard, slot)
 
     db.session.commit()
     flash("Asignación eliminada.", "success")

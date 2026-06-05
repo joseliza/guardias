@@ -565,3 +565,20 @@ def mark_returned(absence_id):
     if back == "display":
         return redirect(url_for("display.index"))
     return redirect(url_for("dashboard.index") + f"#slot-{absence.slot_id}")
+
+
+@absences_bp.route("/<int:absence_id>/deshacer-reincorporacion", methods=["POST"])
+@login_required
+def unmark_returned(absence_id):
+    absence = Absence.query.get_or_404(absence_id)
+
+    if not current_user.is_management:
+        flash("Sin permiso.", "danger")
+        return redirect(url_for("dashboard.index"))
+
+    absence.status = "absent"
+    if absence.guard and absence.guard.status == "returned":
+        absence.guard.status = "pending"
+    db.session.commit()
+    flash("Reincorporación deshecha. El profesor figura de nuevo como ausente.", "warning")
+    return redirect(url_for("dashboard.index") + f"#slot-{absence.slot_id}")

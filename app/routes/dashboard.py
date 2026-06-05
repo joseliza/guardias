@@ -175,6 +175,19 @@ def index():
             for g in real_pending
         ]
 
+        all_guards_info = [
+            {
+                "id": g.id,
+                "label": (
+                    (g.absence.teacher.full_name if g.absence else "—")
+                    + " / "
+                    + (g.group.name if g.group else "—")
+                ),
+            }
+            for g in guards_by_slot.get(sid, [])
+            if g.status != "returned"
+        ]
+
         slots_data.append({
             "slot": s,
             "absences": absences,
@@ -189,6 +202,7 @@ def index():
             "is_my_guard": sid in my_guard_slot_ids,
             "overload": len(real_pending) > 0 and len(real_pending) > n_guard_teachers,
             "pending_guards_info": pending_guards_info,
+            "all_guards_info": all_guards_info,
             "activity_group_ids": activity_gids,
         })
 

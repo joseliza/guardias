@@ -8,27 +8,34 @@
     <span class="badge bg-danger ms-2">{{ pending_justification }} sin justificar</span>
     {% endif %}
   </h4>
-  <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm">
-    <i class="bi bi-arrow-left"></i> Atrás
-  </a>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin.justification_report') }}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-filetype-pdf"></i> Informe PDF
+    </a>
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i> Atrás
+    </a>
+  </div>
 </div>
 
-<div class="row g-3">
+<div class="row g-3 align-items-start">
 
   {# ── Columna izquierda: lista de profesores ── #}
-  <div class="col-md-4 col-lg-3">
+  <div class="col-md-4 col-lg-3" style="position: sticky; top: 1rem;">
+    {% if teachers_with_absences %}
+    <input type="search" class="table-filter form-control mb-2"
+           data-target="#teacher-just-list" placeholder="Buscar profesor...">
+    {% endif %}
     <div class="card">
       <div class="card-header py-2 small fw-semibold text-muted">
         <i class="bi bi-people"></i> Profesores con faltas pendientes
       </div>
-      <div class="card-body p-0">
+      <div class="card-body p-0" id="teacher-list-scroll" style="max-height: calc(100vh - 10rem); overflow-y: auto;">
         {% if not teachers_with_absences %}
         <p class="text-muted small p-3 mb-0">
           <i class="bi bi-check2-circle text-success"></i> Ninguno.
         </p>
         {% else %}
-        <input type="search" class="table-filter form-control form-control-sm border-0 border-bottom rounded-0"
-               data-target="#teacher-just-list" placeholder="Buscar...">
         <div class="list-group list-group-flush" id="teacher-just-list">
           {% for t in teachers_with_absences %}
           {% set unjust = t.absences.filter_by(justified=False).count() %}
@@ -61,28 +68,30 @@
     {% else %}
     {% set teacher_pending_email = pending_email | selectattr('teacher_id', 'equalto', selected_teacher.id) | list %}
     <div class="card mb-3">
-      <div class="card-header d-flex align-items-center gap-2 flex-wrap">
+      <div class="card-header d-flex align-items-center gap-2 flex-wrap bg-primary bg-opacity-10">
         <i class="bi bi-person"></i>
         <strong>{{ selected_teacher.full_name }}</strong>
-        <small class="text-muted">{{ selected_teacher.email }}</small>
         {% set all_unjust = absences_by_date.values() | sum(start=[]) | selectattr('justified','equalto',False) | list %}
+        {% if all_unjust %}
+        <span class="badge bg-danger">{{ all_unjust|length }} sin justificar</span>
+        {% else %}
+        <span class="badge bg-success"><i class="bi bi-check2"></i> Todo justificado</span>
+        {% endif %}
         {% if teacher_pending_email and has_template %}
         {% set n_pe = teacher_pending_email|length %}
+        {% set n_still_absent = teacher_pending_email | selectattr('status', 'ne', 'returned') | list | length %}
         <form method="POST" action="{{ url_for('admin.send_justification_emails') }}"
-              class="ms-auto" onsubmit="return confirm('¿Enviar correo de solicitud de justificación a {{ selected_teacher.name }} por {{ n_pe }} falta{{ "s" if n_pe != 1 }}?')">
+              class="ms-auto"
+              onsubmit="return confirm('{% if n_still_absent %}Aviso: {{ n_still_absent }} falta{{ 's' if n_still_absent != 1 }} correspond{{ 'en' if n_still_absent != 1 else 'e' }} a un profesor aún ausente.\n{% endif %}¿Enviar correo de solicitud de justificación a {{ selected_teacher.name }} por {{ n_pe }} falta{{ 's' if n_pe != 1 }}?')">
           {% for a in teacher_pending_email %}
           <input type="hidden" name="absence_ids" value="{{ a.id }}">
           {% endfor %}
           <input type="hidden" name="teacher_id" value="{{ selected_teacher.id }}">
           <button type="submit" class="btn btn-sm btn-warning">
             <i class="bi bi-envelope-exclamation"></i>
-            Solicitar justificación ({{ teacher_pending_email|length }} falta{{ 's' if teacher_pending_email|length != 1 }})
+            Solicitar justificación ({{ n_pe }} falta{{ 's' if n_pe != 1 }}){% if n_still_absent %} <span class="badge bg-danger ms-1" title="{{ n_still_absent }} aún ausente{{ 's' if n_still_absent != 1 }}">{{ n_still_absent }} ausente{{ 's' if n_still_absent != 1 }}</span>{% endif %}
           </button>
         </form>
-        {% elif all_unjust and not teacher_pending_email %}
-        <span class="ms-auto text-muted small" title="El correo se habilitará cuando el profesor se reincorpore">
-          <i class="bi bi-envelope text-muted"></i> Correo disponible al reincorporarse
-        </span>
         {% elif teacher_pending_email and not has_template %}
         <a href="{{ url_for('admin.config') }}" class="btn btn-sm btn-outline-warning ms-auto">
           <i class="bi bi-exclamation-triangle"></i> Configura la plantilla de correo
@@ -95,9 +104,9 @@
         {% else %}
         {% for day, day_absences in absences_by_date.items() | sort(reverse=True) %}
         <div class="border-bottom">
-          <div class="px-3 py-2 bg-light d-flex align-items-center gap-2 flex-wrap">
+          <div class="px-3 py-2 bg-secondary bg-opacity-10 d-flex align-items-center gap-2 flex-wrap">
             <i class="bi bi-calendar3 text-muted"></i>
-            <strong class="small">{{ day.strftime('%A, %d de %B de %Y') | capitalize }}</strong>
+            <strong class="small">{{ day | fecha_es | capitalize }}</strong>
             {% set n_unjust = day_absences | selectattr('justified', 'equalto', False) | list | length %}
             {% if n_unjust %}
             <span class="badge bg-danger">{{ n_unjust }} sin justificar</span>
@@ -138,33 +147,38 @@
                 </td>
                 <td class="small text-muted" style="width:100px">{{ absence_groups[absence.id] }}</td>
                 <td class="small text-muted">{{ absence.reason or '—' }}</td>
-                <td class="text-nowrap" style="width:130px">
-                  {% if absence.status == 'returned' %}
-                  <span class="badge bg-success-subtle text-success-emphasis border border-success">
-                    <i class="bi bi-check2-circle"></i> Reincorporado
-                  </span>
-                  {% else %}
-                  <span class="badge bg-warning-subtle text-warning-emphasis border border-warning">
-                    <i class="bi bi-hourglass-split"></i> Ausente
-                  </span>
-                  {% endif %}
-                </td>
-                <td class="text-end" style="width:220px">
-                  <div class="d-flex gap-1 justify-content-end">
-                    {% if not absence.justified and absence.status == 'returned' %}
-                    <form method="POST"
-                          action="{{ url_for('admin.send_justification_email_single', absence_id=absence.id) }}">
-                      <button type="submit"
-                              class="btn btn-sm {{ 'btn-outline-warning' if not absence.justification_email_sent else 'btn-outline-secondary' }}"
-                              title="{{ 'Reenviar correo de justificación' if absence.justification_email_sent else 'Enviar correo de justificación' }}">
-                        <i class="bi bi-envelope{{ '-check' if absence.justification_email_sent }}"></i>
-                      </button>
-                    </form>
+                <td class="text-end text-nowrap">
+                  <div class="d-flex gap-2 justify-content-end align-items-center">
+                    {% if absence.status == 'returned' %}
+                    <span class="badge bg-success-subtle text-success-emphasis border border-success"
+                          style="min-width:105px; text-align:center;">
+                      <i class="bi bi-check2-circle"></i> Reincorporado
+                    </span>
+                    {% else %}
+                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning"
+                          style="min-width:105px; text-align:center;">
+                      <i class="bi bi-hourglass-split"></i> Ausente
+                    </span>
                     {% endif %}
+                    <div style="width:32px; flex-shrink:0;">
+                      {% if not absence.justified %}
+                      <form method="POST"
+                            action="{{ url_for('admin.send_justification_email_single', absence_id=absence.id) }}"
+                            {% if absence.status != 'returned' %}
+                            onsubmit="return confirm('El profesor aún no se ha reincorporado. ¿Enviar el correo igualmente?')"
+                            {% endif %}>
+                        <button type="submit"
+                                class="btn btn-sm {{ 'btn-outline-secondary' if absence.justification_email_sent else ('btn-outline-danger' if absence.status != 'returned' else 'btn-outline-warning') }}"
+                                title="{{ 'Reenviar correo de justificación' if absence.justification_email_sent else ('Enviar correo (profesor aún ausente)' if absence.status != 'returned' else 'Enviar correo de justificación') }}">
+                          <i class="bi bi-envelope{{ '-check' if absence.justification_email_sent else ('-exclamation' if absence.status != 'returned' else '') }}"></i>
+                        </button>
+                      </form>
+                      {% endif %}
+                    </div>
                     <form method="POST"
                           action="{{ url_for('admin.toggle_justified', absence_id=absence.id) }}">
                       <input type="hidden" name="teacher_id" value="{{ selected_teacher.id }}">
-                      <button type="submit"
+                      <button type="submit" style="min-width:120px"
                               class="btn btn-sm {{ 'btn-success' if absence.justified else 'btn-outline-secondary' }}">
                         {% if absence.justified %}
                         <i class="bi bi-check-circle-fill"></i> Justificada
@@ -188,4 +202,21 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const _scrollEl = document.getElementById('teacher-list-scroll');
+if (_scrollEl) {
+  const _KEY = 'just_teacher_scroll';
+  const _saved = sessionStorage.getItem(_KEY);
+  if (_saved) _scrollEl.scrollTop = parseInt(_saved);
+
+  document.querySelectorAll('#teacher-just-list a').forEach(link => {
+    link.addEventListener('click', () => {
+      sessionStorage.setItem(_KEY, _scrollEl.scrollTop);
+    });
+  });
+}
+</script>
 {% endblock %}

@@ -66,6 +66,10 @@ def create():
             db.session.add(ag)
 
         # Profesores acompañantes → ausencias automáticas
+        from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
+        _gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
+        auto_justify = _gcfg.get("auto_justify_extracurricular", False)
+
         teacher_ids = request.form.getlist("teacher_ids")
         for tid in teacher_ids:
             at = ExtraActivityTeacher(activity_id=activity.id, teacher_id=int(tid))
@@ -82,6 +86,7 @@ def create():
                         reason=f"Actividad extraescolar: {name}",
                         reported_by_role="extracurricular",
                         reported_by_id=current_user.id,
+                        justified=auto_justify,
                     )
                     db.session.add(absence)
                     db.session.flush()
@@ -150,6 +155,10 @@ def edit(aid):
             db.session.add(ExtraActivityGroup(activity_id=aid, group_id=int(gid), whole_group=whole))
 
         # Profesores: borrar todos y recrear
+        from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
+        _gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
+        auto_justify = _gcfg.get("auto_justify_extracurricular", False)
+
         ExtraActivityTeacher.query.filter_by(activity_id=aid).delete(synchronize_session=False)
         for tid in new_teacher_ids:
             db.session.add(ExtraActivityTeacher(activity_id=aid, teacher_id=tid))
@@ -163,6 +172,7 @@ def edit(aid):
                         reason=f"Actividad extraescolar: {request.form['name']}",
                         reported_by_role="extracurricular",
                         reported_by_id=current_user.id,
+                        justified=auto_justify,
                     )
                     db.session.add(absence)
                     db.session.flush()

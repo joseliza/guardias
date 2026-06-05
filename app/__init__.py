@@ -34,6 +34,10 @@ def create_app():
     _MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
               "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 
+    @app.template_filter("mins_to_hhmm")
+    def mins_to_hhmm(m):
+        return f"{m // 60:02d}:{m % 60:02d}"
+
     @app.template_filter("fecha_es")
     def fecha_es(d, fmt="%A, %d de %B de %Y"):
         return (fmt
