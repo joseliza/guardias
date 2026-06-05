@@ -578,6 +578,11 @@ def unmark_returned(absence_id):
 
     absence.status = "absent"
     if absence.guard and absence.guard.status == "returned":
+        for rec in absence.guard.records.all():
+            teacher = db.session.get(User, rec.teacher_id)
+            if teacher:
+                teacher.points = round(teacher.points - rec.points_awarded, 2)
+            db.session.delete(rec)
         absence.guard.status = "pending"
     db.session.commit()
     flash("Reincorporación deshecha. El profesor figura de nuevo como ausente.", "warning")
