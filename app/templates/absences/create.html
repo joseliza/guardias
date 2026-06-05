@@ -1,20 +1,24 @@
 {% extends "base.html" %}
 {% block title %}Nueva ausencia{% endblock %}
 {% block content %}
-<h4><i class="bi bi-calendar-plus"></i> Registrar ausencia</h4>
-<div class="card mt-3">
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-calendar-plus"></i> Registrar ausencia</h4>
+  <a href="{{ url_for('absences.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+</div>
+<div class="card">
   <div class="card-body">
     <form method="POST">
 
-      {% if current_user.is_management %}
+      {% if current_user.is_management or current_user.role == 'display' %}
       <div class="mb-3">
         <label class="form-label">Profesor/a</label>
-        <input type="search" id="teacher-search" class="form-control mb-1" placeholder="Buscar profesor...">
-        <select name="teacher_id" id="teacher-select" class="form-select" required>
-          {% for t in teachers %}
-          <option value="{{ t.id }}" {% if t.id == current_user.id %}selected{% endif %}>{{ t.full_name }}</option>
-          {% endfor %}
-        </select>
+        <div class="position-relative">
+          <input type="text" id="teacher-search" class="form-control" autocomplete="off"
+                 placeholder="Buscar por apellidos o nombre...">
+          <div id="teacher-suggestions" class="list-group position-absolute w-100 shadow-sm"
+               style="z-index:1050;display:none;max-height:260px;overflow-y:auto"></div>
+          <input type="hidden" name="teacher_id" id="teacher-select" value="{{ current_user.id }}">
+        </div>
       </div>
       {% else %}
       <input type="hidden" name="teacher_id" id="teacher-select" value="{{ current_user.id }}">
@@ -135,23 +139,72 @@ document.getElementById('all-day-toggle').addEventListener('change', function() 
   }
 });
 
-// Al cambiar profesor o fecha
+// Al cambiar fecha
 document.getElementById('absence-date').addEventListener('change', loadSchedule);
-{% if current_user.is_management %}
-document.getElementById('teacher-select').addEventListener('change', loadSchedule);
-{% endif %}
 
-// Buscador de profesores
-{% if current_user.is_management %}
-document.getElementById('teacher-search').addEventListener('input', function() {
-  const q = this.value.toLowerCase();
-  const sel = document.getElementById('teacher-select');
-  Array.from(sel.options).forEach(opt => {
-    opt.hidden = q && !opt.text.toLowerCase().includes(q);
-  });
-  const visible = Array.from(sel.options).find(o => !o.hidden);
-  if (visible && !sel.options[sel.selectedIndex] || sel.options[sel.selectedIndex]?.hidden) {
-    if (visible) { sel.value = visible.value; loadSchedule(); }
+{% if current_user.is_management or current_user.role == 'display' %}
+// Autocomplete de profesores
+const teacherData = [
+  {% for t in teachers %}{ id: {{ t.id }}, name: {{ t.full_name | tojson }} },
+  {% endfor %}
+];
+const tInput = document.getElementById('teacher-search');
+const tHidden = document.getElementById('teacher-select');
+const tSugg  = document.getElementById('teacher-suggestions');
+
+function tShowSuggestions(q) {
+  const matches = q ? teacherData.filter(t => normalize(t.name).includes(q)) : teacherData;
+  if (!matches.length) { tSugg.style.display = 'none'; return; }
+  tSugg.innerHTML = matches.slice(0, 15).map(t =>
+    `<button type="button" class="list-group-item list-group-item-action py-1 px-3"
+             data-id="${t.id}" data-name="${t.name.replace(/"/g,'&quot;')}">${t.name}</button>`
+  ).join('');
+  tSugg.style.display = 'block';
+}
+
+tInput.addEventListener('focus', function() {
+  tShowSuggestions(normalize(this.value.trim()));
+});
+
+tInput.addEventListener('input', function() {
+  tHidden.value = '';
+  tShowSuggestions(normalize(this.value.trim()));
+});
+
+tSugg.addEventListener('mousedown', function(e) {
+  const btn = e.target.closest('[data-id]');
+  if (!btn) return;
+  e.preventDefault();
+  tHidden.value = btn.dataset.id;
+  tInput.value  = btn.dataset.name;
+  tSugg.style.display = 'none';
+  loadSchedule();
+});
+
+document.addEventListener('click', function(e) {
+  if (!tInput.contains(e.target) && !tSugg.contains(e.target)) tSugg.style.display = 'none';
+});
+
+tInput.addEventListener('keydown', function(e) {
+  const items = tSugg.querySelectorAll('[data-id]');
+  if (!items.length) return;
+  const active = tSugg.querySelector('.active');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    const next = active ? active.nextElementSibling : items[0];
+    if (next) { active && active.classList.remove('active'); next.classList.add('active'); }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    const prev = active ? active.previousElementSibling : items[items.length-1];
+    if (prev) { active && active.classList.remove('active'); prev.classList.add('active'); }
+  } else if (e.key === 'Enter' && active) {
+    e.preventDefault();
+    tHidden.value = active.dataset.id;
+    tInput.value  = active.dataset.name;
+    tSugg.style.display = 'none';
+    loadSchedule();
+  } else if (e.key === 'Escape') {
+    tSugg.style.display = 'none';
   }
 });
 {% endif %}

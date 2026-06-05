@@ -89,8 +89,8 @@ def send_daily_digest(app):
                         guard = a.guard
                         if show_group and guard and guard.group:
                             parts.append(f"Grupo: {guard.group.name}")
-                            if show_room and guard.group.room:
-                                parts.append(f"Aula: {guard.group.room.name}")
+                            if show_room and guard.room:
+                                parts.append(f"Aula: {guard.room.name}")
                         if show_reason and a.reason:
                             parts.append(f"Motivo: {a.reason}")
                         if show_status and guard:

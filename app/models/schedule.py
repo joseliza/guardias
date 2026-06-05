@@ -19,6 +19,10 @@ class TeacherSchedule(db.Model):
     slot_id = db.Column(db.Integer, nullable=False)
     # true → el profesor está de guardia en ese tramo (libre / sin clase)
     is_guard_slot = db.Column(db.Boolean, default=False, nullable=False)
+    room_id = db.Column(db.Integer, db.ForeignKey("rooms.id"), nullable=True)
+    notes = db.Column(db.String(120), nullable=True)
+
+    room = db.relationship("Room", foreign_keys=[room_id])
 
     __table_args__ = (
         db.UniqueConstraint("teacher_id", "day_of_week", "slot_id", name="uq_schedule"),

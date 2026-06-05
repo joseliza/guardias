@@ -59,6 +59,17 @@ def create_app():
             response.headers["Expires"] = "0"
         return response
 
+    @app.context_processor
+    def inject_justification_count():
+        try:
+            if current_user.is_authenticated and current_user.is_management:
+                from app.models.absence import Absence
+                count = Absence.query.filter_by(justified=False).count()
+                return {"pending_justification": count}
+        except Exception:
+            pass
+        return {"pending_justification": 0}
+
     from app.routes.auth import auth_bp
     from app.routes.dashboard import dashboard_bp
     from app.routes.absences import absences_bp

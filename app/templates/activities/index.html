@@ -3,26 +3,75 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4><i class="bi bi-backpack"></i> Actividades extraescolares</h4>
-  <a href="{{ url_for('activities.create') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nueva actividad</a>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+    <a href="{{ url_for('activities.create') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nueva actividad</a>
+  </div>
 </div>
 <div class="card">
   <div class="card-body p-0">
     <table class="table table-hover mb-0">
-      <thead class="table-light"><tr><th>Fecha</th><th>Nombre</th><th>Tramos</th><th>Grupos</th><th>Acompañantes</th></tr></thead>
+      <thead class="table-light"><tr><th>Fecha</th><th>Nombre</th><th>Tramos</th><th>Grupos</th><th>Acompañantes</th><th></th></tr></thead>
       <tbody>
         {% for a in activities %}
         <tr>
-          <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
-          <td>{{ a.name }}</td>
-          <td>{{ a.slot_ids }}</td>
-          <td>{% for ag in a.groups %}{{ ag.group.name }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
-          <td>{% for at in a.accompanying_teachers %}{{ at.teacher.full_name }} {% if at.email_sent %}<i class="bi bi-envelope-check text-success"></i>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+          <td class="text-nowrap">{{ a.date.strftime('%d/%m/%Y') }}</td>
+          <td>{{ a.name }}{% if a.description %}<br><small class="text-muted">{{ a.description }}</small>{% endif %}</td>
+          <td class="text-nowrap small">
+            {% for sid in a.slot_id_list %}
+              {% set slot = slots | selectattr('id', 'equalto', sid) | first %}
+              {% if slot %}<span class="badge bg-secondary">{{ slot.label }}</span> {% endif %}
+            {% endfor %}
+          </td>
+          <td class="small">{% for ag in a.groups %}<span class="badge bg-primary">{{ ag.group.name }}</span>{% if not ag.whole_group %} <small class="text-muted">(parcial)</small>{% endif %} {% endfor %}</td>
+          <td class="small">{% for at in a.accompanying_teachers %}{{ at.teacher.full_name }}{% if at.email_sent %} <i class="bi bi-envelope-check text-success"></i>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+          <td class="text-end">
+            <div class="d-flex gap-1 justify-content-end">
+              <a href="{{ url_for('activities.edit', aid=a.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+              <button type="button" class="btn btn-sm btn-outline-danger"
+                      data-bs-toggle="modal" data-bs-target="#modalEliminar"
+                      data-id="{{ a.id }}" data-name="{{ a.name }}">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="text-center text-muted py-3">Sin actividades registradas.</td></tr>
+        <tr><td colspan="6" class="text-center text-muted py-3">Sin actividades registradas.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<div class="modal fade" id="modalEliminar" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-trash"></i> Eliminar actividad</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Seguro que quieres eliminar <strong id="modal-act-name"></strong>?</p>
+        <p class="text-danger small mb-0"><i class="bi bi-exclamation-triangle"></i>
+          Se eliminarán también las ausencias y guardias generadas automáticamente para los profesores acompañantes.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form id="modal-delete-form" method="POST">
+          <button type="submit" class="btn btn-danger">Sí, eliminar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('modalEliminar').addEventListener('show.bs.modal', function(e) {
+  const btn = e.relatedTarget;
+  document.getElementById('modal-act-name').textContent = btn.dataset.name;
+  document.getElementById('modal-delete-form').action = '/extraescolares/' + btn.dataset.id + '/eliminar';
+});
+</script>
 {% endblock %}

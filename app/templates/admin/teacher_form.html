@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Editar' if teacher else 'Nuevo' }} profesor{% endblock %}
 {% block content %}
-<h4><i class="bi bi-person"></i> {{ 'Editar' if teacher else 'Nuevo' }} profesor</h4>
-<div class="card mt-3">
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-person"></i> {{ 'Editar' if teacher else 'Nuevo' }} profesor</h4>
+  <a href="{{ url_for('admin.teachers') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+</div>
+<div class="card">
   <div class="card-body">
     <form method="POST">
       <div class="row g-3">

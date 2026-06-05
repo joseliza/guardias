@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Nueva actividad extraescolar{% endblock %}
+{% block title %}Editar actividad{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="mb-0"><i class="bi bi-backpack"></i> Registrar actividad extraescolar</h4>
+  <h4 class="mb-0"><i class="bi bi-backpack"></i> Editar actividad</h4>
   <a href="{{ url_for('activities.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
 </div>
 <div class="card">
@@ -11,15 +11,15 @@
       <div class="row g-3">
         <div class="col-md-8">
           <label class="form-label">Nombre de la actividad</label>
-          <input type="text" name="name" class="form-control" required>
+          <input type="text" name="name" class="form-control" value="{{ activity.name }}" required>
         </div>
         <div class="col-md-4">
           <label class="form-label">Fecha</label>
-          <input type="date" name="date" class="form-control" required>
+          <input type="date" name="date" class="form-control" value="{{ activity.date.isoformat() }}" required>
         </div>
         <div class="col-12">
           <label class="form-label">Descripción</label>
-          <textarea name="description" class="form-control" rows="2"></textarea>
+          <textarea name="description" class="form-control" rows="2">{{ activity.description or '' }}</textarea>
         </div>
         <div class="col-12">
           <label class="form-label mb-2">Tramos afectados</label>
@@ -32,7 +32,8 @@
             <div class="col-auto">
               <div class="form-check">
                 <input class="form-check-input slot-checkbox" type="checkbox"
-                       name="slot_ids" value="{{ slot.id }}" id="slot{{ slot.id }}">
+                       name="slot_ids" value="{{ slot.id }}" id="slot{{ slot.id }}"
+                       {% if slot.id in activity.slot_id_list %}checked{% endif %}>
                 <label class="form-check-label" for="slot{{ slot.id }}">
                   {{ slot.label }}
                   <small class="text-muted">({{ slot.start }}–{{ slot.end }})</small>
@@ -45,7 +46,7 @@
         <div class="col-md-6">
           <label class="form-label">Grupos participantes</label>
           <div id="selected-groups" class="d-flex flex-wrap gap-2 p-2 border rounded bg-light mb-2" style="min-height:44px">
-            <span class="text-muted small fst-italic align-self-center" id="no-groups-msg">Sin grupos seleccionados</span>
+            <span class="text-muted small fst-italic align-self-center" id="no-groups-msg" style="display:none">Sin grupos seleccionados</span>
           </div>
           <div class="position-relative">
             <input type="text" id="group-search" class="form-control" autocomplete="off" placeholder="Buscar grupo...">
@@ -56,7 +57,7 @@
         <div class="col-md-6">
           <label class="form-label">Profesores acompañantes</label>
           <div id="selected-teachers" class="d-flex flex-wrap gap-2 p-2 border rounded bg-light mb-2" style="min-height:44px">
-            <span class="text-muted small fst-italic align-self-center" id="no-teachers-msg">Sin profesores seleccionados</span>
+            <span class="text-muted small fst-italic align-self-center" id="no-teachers-msg" style="display:none">Sin profesores seleccionados</span>
           </div>
           <div class="position-relative">
             <input type="text" id="teacher-search" class="form-control" autocomplete="off" placeholder="Buscar profesor...">
@@ -66,7 +67,7 @@
         </div>
       </div>
       <div class="mt-4">
-        <button type="submit" class="btn btn-primary">Guardar actividad</button>
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
         <a href="{{ url_for('activities.index') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
       </div>
     </form>
@@ -75,19 +76,16 @@
 {% endblock %}
 {% block scripts %}
 <script>
-// ── Todo el día ──────────────────────────────────────────────────────────────
 document.getElementById('all-day-toggle').addEventListener('change', function() {
   document.querySelectorAll('.slot-checkbox').forEach(cb => cb.checked = this.checked);
 });
 
-// ── Datos ─────────────────────────────────────────────────────────────────────
 const groupData   = [{% for g in groups %}{ id: {{ g.id }}, name: {{ g.name|tojson }} },{% endfor %}];
 const teacherData = [{% for t in teachers %}{ id: {{ t.id }}, name: {{ t.full_name|tojson }} },{% endfor %}];
 const selGroups   = new Set();
 const selTeachers = new Set();
 
-// ── Grupos ────────────────────────────────────────────────────────────────────
-function addGroup(id, name) {
+function addGroup(id, name, wholeGroup = true) {
   if (selGroups.has(id)) return;
   selGroups.add(id);
   document.getElementById('no-groups-msg').style.display = 'none';
@@ -97,14 +95,13 @@ function addGroup(id, name) {
   chip.innerHTML =
     `<span>${name}</span>` +
     `<label class="d-flex align-items-center gap-1 mb-0 ms-1 small fw-normal" style="cursor:pointer">` +
-      `<input type="checkbox" name="whole_group_${id}" class="form-check-input mt-0" checked> Completo` +
+      `<input type="checkbox" name="whole_group_${id}" class="form-check-input mt-0" ${wholeGroup ? 'checked' : ''}> Completo` +
     `</label>` +
     `<input type="hidden" name="group_ids" value="${id}">` +
     `<button type="button" class="btn-close ms-1" style="font-size:.6rem" data-remove="group"></button>`;
   document.getElementById('selected-groups').appendChild(chip);
 }
 
-// ── Profesores ────────────────────────────────────────────────────────────────
 function addTeacher(id, name) {
   if (selTeachers.has(id)) return;
   selTeachers.add(id);
@@ -119,7 +116,6 @@ function addTeacher(id, name) {
   document.getElementById('selected-teachers').appendChild(chip);
 }
 
-// ── Eliminar chips ────────────────────────────────────────────────────────────
 document.getElementById('selected-groups').addEventListener('click', function(e) {
   const btn = e.target.closest('[data-remove="group"]');
   if (!btn) return;
@@ -137,11 +133,9 @@ document.getElementById('selected-teachers').addEventListener('click', function(
   if (!selTeachers.size) document.getElementById('no-teachers-msg').style.display = '';
 });
 
-// ── Autocomplete genérico ─────────────────────────────────────────────────────
 function makeAutocomplete(inputId, suggId, data, onSelect) {
   const input = document.getElementById(inputId);
   const sugg  = document.getElementById(suggId);
-
   function render(q) {
     const matches = q ? data.filter(x => normalize(x.name).includes(q)) : data;
     if (!matches.length) { sugg.style.display = 'none'; return; }
@@ -151,10 +145,8 @@ function makeAutocomplete(inputId, suggId, data, onSelect) {
     ).join('');
     sugg.style.display = 'block';
   }
-
-  input.addEventListener('focus',  () => render(normalize(input.value.trim())));
-  input.addEventListener('input',  () => render(normalize(input.value.trim())));
-
+  input.addEventListener('focus', () => render(normalize(input.value.trim())));
+  input.addEventListener('input', () => render(normalize(input.value.trim())));
   sugg.addEventListener('mousedown', function(e) {
     const btn = e.target.closest('[data-id]');
     if (!btn) return;
@@ -163,7 +155,6 @@ function makeAutocomplete(inputId, suggId, data, onSelect) {
     input.value = '';
     sugg.style.display = 'none';
   });
-
   document.addEventListener('click', function(e) {
     if (!input.contains(e.target) && !sugg.contains(e.target)) sugg.style.display = 'none';
   });
@@ -171,5 +162,13 @@ function makeAutocomplete(inputId, suggId, data, onSelect) {
 
 makeAutocomplete('group-search',   'group-suggestions',   groupData,   addGroup);
 makeAutocomplete('teacher-search', 'teacher-suggestions', teacherData, addTeacher);
+
+// Pre-cargar grupos y profesores existentes
+{% for ag in activity.groups %}
+addGroup({{ ag.group_id }}, {{ ag.group.name|tojson }}, {{ 'true' if ag.whole_group else 'false' }});
+{% endfor %}
+{% for at in activity.accompanying_teachers %}
+addTeacher({{ at.teacher_id }}, {{ at.teacher.full_name|tojson }});
+{% endfor %}
 </script>
 {% endblock %}

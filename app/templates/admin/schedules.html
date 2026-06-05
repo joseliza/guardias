@@ -2,137 +2,477 @@
 {% block title %}Horarios del profesorado{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="mb-0"><i class="bi bi-calendar3"></i> Horarios del profesorado</h4>
+  <h4><i class="bi bi-calendar3"></i> Horarios del profesorado</h4>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+    <a href="{{ url_for('admin.import_schedule_csv') }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-arrow-up"></i> Importar CSV</a>
+  </div>
 </div>
 
-{# Selector de profesor #}
-<form method="GET" class="row g-2 align-items-end mb-4">
-  <div class="col-md-5">
-    <label class="form-label small text-muted mb-1">Profesor/a</label>
-    <input type="search" id="sched-teacher-search" class="form-control mb-1" placeholder="Buscar profesor...">
-    <select name="teacher_id" id="sched-teacher-select" class="form-select" onchange="this.form.submit()">
-      <option value="">— Selecciona un profesor/a —</option>
-      {% for t in teachers %}
-      <option value="{{ t.id }}" {% if selected and t.id == selected.id %}selected{% endif %}>
-        {{ t.surname }}, {{ t.name }}
-      </option>
-      {% endfor %}
-    </select>
+{% if selected %}
+<div class="card mb-3">
+  <div class="card-body p-0">
+    <div class="px-3 pt-3 pb-2 border-bottom d-flex align-items-center gap-2 flex-wrap">
+      <i class="bi bi-person"></i>
+      <strong>{{ selected.surname }}, {{ selected.name }}</strong>
+      <small class="text-muted">{{ selected.email }}</small>
+      <span class="badge bg-secondary ms-1">{{ selected.points }} pts</span>
+      <a href="{{ url_for('admin.schedules') }}" class="btn btn-sm btn-outline-secondary ms-auto"><i class="bi bi-x-lg"></i></a>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-bordered table-sm align-middle text-center mb-0" style="min-width:600px">
+        <thead class="table-light">
+          <tr>
+            <th style="width:110px">Tramo</th>
+            {% for day in days %}<th>{{ day }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in schedule_grid %}
+          {% set s = row.slot %}
+          {% if s.is_break %}
+          <tr class="table-secondary">
+            <td class="text-start fw-semibold small text-muted">
+              <i class="bi bi-cup-hot"></i> {{ s.label }}<br>
+              <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
+            </td>
+            {% for entry in row.days %}
+            <td>
+              {% if entry and entry.is_guard_slot %}
+              <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia recreo</span>
+              {% else %}
+              <span class="text-muted" style="font-size:.8rem">—</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% else %}
+          <tr>
+            <td class="text-start fw-semibold small text-muted">
+              {{ s.label }}<br>
+              <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
+            </td>
+            {% for d in range(5) %}
+            {% set entry = row.days[d] %}
+            {% set cur_type = 'guard' if entry and entry.is_guard_slot else ('group' if entry and entry.group else 'free') %}
+            {% set cur_group_id = entry.group_id if entry and entry.group_id else 0 %}
+            {% set cur_group_name = entry.group.name if entry and entry.group else '' %}
+            {% set cur_room = entry.room if entry and entry.room else None %}
+            {% set cur_room_id = cur_room.id if cur_room else 0 %}
+            {% set cur_room_name = cur_room.name if cur_room else '' %}
+            <td class="py-2 schedule-cell{% if entry %}{% if entry.is_guard_slot %} bg-success-subtle{% else %} bg-primary-subtle{% endif %}{% endif %}"
+                style="cursor:pointer; min-width:90px"
+                data-teacher="{{ selected.id }}"
+                data-day="{{ d }}"
+                data-slot="{{ s.id }}"
+                data-slot-label="{{ s.label }}"
+                data-day-label="{{ days[d] }}"
+                data-type="{{ cur_type }}"
+                data-group-id="{{ cur_group_id }}"
+                data-group-name="{{ cur_group_name }}"
+                data-room-id="{{ cur_room_id if cur_room_id else '' }}"
+                data-room-name="{{ cur_room_name }}"
+                data-notes="{{ entry.notes if entry and entry.notes else '' }}"
+                onclick="openSlotModal(this)"
+                title="Clic para editar">
+              {% if entry %}
+                {% if entry.is_guard_slot %}
+                <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia</span>
+                {% elif entry.group %}
+                <span class="badge bg-primary">{{ entry.group.name }}</span>
+                {% set display_room = entry.room %}
+                {% if display_room %}
+                <div class="small text-muted mt-1"><i class="bi bi-door-open"></i> {{ display_room.name }}</div>
+                {% endif %}
+                {% elif entry.notes %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-pencil"></i> {{ entry.notes }}</span>
+                {% else %}
+                <span class="text-muted small">—</span>
+                {% endif %}
+                {% if entry.notes and (entry.is_guard_slot or entry.group) %}
+                <div class="small text-muted mt-1"><i class="bi bi-pencil"></i> {{ entry.notes }}</div>
+                {% endif %}
+              {% else %}
+              <span class="text-muted" style="font-size:.8rem">Libre</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% set guard_count = namespace(n=0) %}
+    {% set class_count = namespace(n=0) %}
+    {% set free_count  = namespace(n=0) %}
+    {% for row in schedule_grid %}
+      {% if not row.slot.is_break %}
+        {% for entry in row.days %}
+          {% if entry %}
+            {% if entry.is_guard_slot %}{% set guard_count.n = guard_count.n + 1 %}
+            {% else %}{% set class_count.n = class_count.n + 1 %}{% endif %}
+          {% else %}{% set free_count.n = free_count.n + 1 %}{% endif %}
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+    <div class="d-flex gap-2 px-3 py-2 border-top">
+      <span class="badge bg-success"><i class="bi bi-shield-check"></i> {{ guard_count.n }} guardia{{ 's' if guard_count.n != 1 }}</span>
+      <span class="badge bg-primary"><i class="bi bi-people"></i> {{ class_count.n }} clase{{ 's' if class_count.n != 1 }}</span>
+      <span class="badge bg-secondary"><i class="bi bi-dash-circle"></i> {{ free_count.n }} libre{{ 's' if free_count.n != 1 }}</span>
+    </div>
   </div>
-</form>
+</div>
+
+{# Modal de edición de tramo #}
+<div class="modal fade" id="slotModal" tabindex="-1">
+  <div class="modal-dialog modal-md">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0"><i class="bi bi-pencil-square"></i> <span id="modal-slot-title"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="slot-form" method="POST" action="{{ url_for('admin.schedule_set_cell') }}">
+          <input type="hidden" name="teacher_id" id="slot-teacher-id">
+          <input type="hidden" name="day"        id="slot-day">
+          <input type="hidden" name="slot_id"    id="slot-slot-id">
+          <input type="hidden" name="action"     id="slot-action">
+          <input type="hidden" name="group_id"   id="slot-group-id">
+          <input type="hidden" name="room_id"    id="slot-room-id">
+          <input type="hidden" name="notes"      id="slot-notes">
+
+          {# Asignación actual #}
+          <p id="slot-current" class="small text-muted mb-3"></p>
+
+          {# Buscador de grupo #}
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Grupo</label>
+            <div class="position-relative">
+              <input type="text" id="slot-group-search" class="form-control form-control-sm"
+                     autocomplete="off" placeholder="Buscar grupo...">
+              <div id="slot-group-sugg" class="list-group position-absolute w-100 shadow-sm"
+                   style="z-index:1060;display:none;max-height:180px;overflow-y:auto"></div>
+            </div>
+            <div id="slot-group-chip" class="mt-1" style="display:none">
+              <span class="badge bg-primary d-inline-flex align-items-center gap-1 px-2 py-1">
+                <span id="slot-group-chip-name"></span>
+                <button type="button" class="btn-close btn-close-white ms-1" style="font-size:.6rem"
+                        onclick="clearSlotGroup()"></button>
+              </span>
+            </div>
+          </div>
+
+          {# Buscador de aula #}
+          <div class="mb-3">
+            <label class="form-label small fw-semibold mb-1">Aula</label>
+            <div class="position-relative">
+              <input type="text" id="slot-room-search" class="form-control form-control-sm"
+                     autocomplete="off" placeholder="Buscar aula...">
+              <div id="slot-room-sugg" class="list-group position-absolute w-100 shadow-sm"
+                   style="z-index:1060;display:none;max-height:180px;overflow-y:auto"></div>
+            </div>
+            <div id="slot-room-chip" class="mt-1" style="display:none">
+              <span class="badge bg-secondary d-inline-flex align-items-center gap-1 px-2 py-1">
+                <span id="slot-room-chip-name"></span>
+                <button type="button" class="btn-close btn-close-white ms-1" style="font-size:.6rem"
+                        onclick="clearSlotRoom()"></button>
+              </span>
+            </div>
+          </div>
+
+          {# Otra actividad #}
+          <div class="mb-3">
+            <label class="form-label small fw-semibold mb-1">Otra actividad</label>
+            <div class="input-group input-group-sm">
+              <input type="text" id="slot-other-input" class="form-control"
+                     placeholder="Reunión, guardia de recreo...">
+              <button type="button" class="btn btn-warning" id="btn-save-other"
+                      style="display:none" onclick="submitSlotOther()">
+                <i class="bi bi-check-lg"></i>
+              </button>
+            </div>
+          </div>
+
+          <hr class="my-2">
+          <div class="d-grid gap-2">
+            <button type="button" id="btn-save-group" class="btn btn-sm btn-primary" style="display:none"
+                    onclick="submitSlot('group')">
+              <i class="bi bi-check-lg"></i> Guardar clase
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-success" onclick="submitSlot('guard')">
+              <i class="bi bi-shield-check"></i> Marcar como guardia
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="submitSlot('clear')">
+              <i class="bi bi-x-circle"></i> Dejar libre
+            </button>
+          </div>
+
+          {# Clonado — solo visible cuando la celda tiene contenido #}
+          <div id="clone-section" style="display:none">
+            <hr class="my-2">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="small fw-semibold">Clonar en...</span>
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-link btn-sm p-0 small" onclick="selectCloneRow()">mismo tramo</button>
+                <button type="button" class="btn btn-link btn-sm p-0 small" onclick="selectCloneCol()">mismo día</button>
+                <button type="button" class="btn btn-link btn-sm p-0 small text-danger" onclick="clearClone()">ninguno</button>
+              </div>
+            </div>
+            <div id="clone-grid" class="mb-2"></div>
+            <button type="button" class="btn btn-sm btn-warning w-100" id="btn-clone"
+                    onclick="submitClone()" style="display:none">
+              <i class="bi bi-copy"></i> Clonar seleccionados
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endif %}
 
 {% if not selected %}
-<div class="alert alert-info">
-  <i class="bi bi-arrow-up-circle"></i> Selecciona un profesor para ver su horario semanal.
-</div>
-
-{% else %}
-<h5 class="mb-3">
-  <i class="bi bi-person"></i> {{ selected.surname }}, {{ selected.name }}
-  <small class="text-muted ms-2">{{ selected.email }}</small>
-  <span class="badge bg-secondary ms-2">{{ selected.points }} pts</span>
-</h5>
-
-<div class="table-responsive">
-  <table class="table table-bordered table-sm align-middle text-center" style="min-width:600px">
-    <thead class="table-dark">
-      <tr>
-        <th style="width:110px">Tramo</th>
-        {% for day in days %}
-        <th>{{ day }}</th>
+<input type="search" class="table-filter form-control mb-2" data-target="#tabla-horarios" placeholder="Buscar profesor...">
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0" id="tabla-horarios">
+      <thead class="table-light">
+        <tr>
+          <th>Apellidos, Nombre</th>
+          <th>Email</th>
+          <th>Rol</th>
+          <th class="text-center"><i class="bi bi-shield-check text-success"></i> Guardias/sem</th>
+          <th class="text-center"><i class="bi bi-people text-primary"></i> Clases/sem</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in teachers %}
+        {% set s = summaries.get(t.id, {'guard': 0, 'class': 0}) %}
+        <tr style="cursor:pointer"
+            onclick="window.location='{{ url_for('admin.schedules', teacher_id=t.id) }}'">
+          <td>{{ t.full_name }}</td>
+          <td class="text-muted small">{{ t.email }}</td>
+          <td><span class="badge bg-secondary">{{ t.role }}</span></td>
+          <td class="text-center">
+            {% if s.guard %}<span class="badge bg-success">{{ s.guard }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td class="text-center">
+            {% if s.class %}<span class="badge bg-primary">{{ s['class'] }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+        </tr>
         {% endfor %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in schedule_grid %}
-      {% set s = row.slot %}
-      {% if s.is_break %}
-      <tr class="table-secondary">
-        <td class="text-start fw-semibold small text-muted">
-          <i class="bi bi-cup-hot"></i> {{ s.label }}<br>
-          <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
-        </td>
-        {% for entry in row.days %}
-        <td>
-          {% if entry %}
-            {% if entry.is_guard_slot %}
-            <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia recreo</span>
-            {% else %}
-            <span class="text-muted small">—</span>
-            {% endif %}
-          {% else %}
-          <span class="text-muted" style="font-size:.8rem">—</span>
-          {% endif %}
-        </td>
-        {% endfor %}
-      </tr>
-      {% else %}
-      <tr>
-        <td class="text-start fw-semibold small text-muted">
-          {{ s.label }}<br>
-          <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
-        </td>
-        {% for entry in row.days %}
-        <td class="py-2
-          {% if entry %}
-            {% if entry.is_guard_slot %}bg-success-subtle{% else %}bg-primary-subtle{% endif %}
-          {% endif %}">
-          {% if entry %}
-            {% if entry.is_guard_slot %}
-            <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia</span>
-            {% elif entry.group %}
-            <span class="badge bg-primary">{{ entry.group.name }}</span>
-            {% if entry.group.room %}
-            <div class="small text-muted mt-1"><i class="bi bi-door-open"></i> {{ entry.group.room.name }}</div>
-            {% endif %}
-            {% else %}
-            <span class="text-muted small">—</span>
-            {% endif %}
-          {% else %}
-          <span class="text-muted" style="font-size:.8rem">Libre</span>
-          {% endif %}
-        </td>
-        {% endfor %}
-      </tr>
-      {% endif %}
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-
-{# Resumen semanal #}
-{% set guard_count = namespace(n=0) %}
-{% set class_count = namespace(n=0) %}
-{% set free_count  = namespace(n=0) %}
-{% for row in schedule_grid %}
-  {% if not row.slot.is_break %}
-    {% for entry in row.days %}
-      {% if entry %}
-        {% if entry.is_guard_slot %}{% set guard_count.n = guard_count.n + 1 %}
-        {% else %}{% set class_count.n = class_count.n + 1 %}{% endif %}
-      {% else %}{% set free_count.n = free_count.n + 1 %}{% endif %}
-    {% endfor %}
-  {% endif %}
-{% endfor %}
-<div class="d-flex gap-3 mt-2">
-  <span class="badge bg-success fs-6"><i class="bi bi-shield-check"></i> {{ guard_count.n }} guardia{{ 's' if guard_count.n != 1 }}</span>
-  <span class="badge bg-primary fs-6"><i class="bi bi-people"></i> {{ class_count.n }} clase{{ 's' if class_count.n != 1 }}</span>
-  <span class="badge bg-secondary fs-6"><i class="bi bi-dash-circle"></i> {{ free_count.n }} libre{{ 's' if free_count.n != 1 }}</span>
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endif %}
 
 {% endblock %}
 {% block scripts %}
+{% if selected %}
 <script>
-const schedSearch = document.getElementById('sched-teacher-search');
-if (schedSearch) {
-  schedSearch.addEventListener('input', function() {
-    const q = this.value.toLowerCase();
-    const sel = document.getElementById('sched-teacher-select');
-    Array.from(sel.options).forEach(opt => {
-      opt.hidden = q && opt.value !== '' && !opt.text.toLowerCase().includes(q);
-    });
+const groupData = [{% for g in groups %}{ id: {{ g.id }}, name: {{ g.name|tojson }} },{% endfor %}];
+const roomData  = [{% for r in rooms %}{ id: {{ r.id }}, name: {{ r.name|tojson }} },{% endfor %}];
+const slotsConf = [{% for s in slots %}{% if not s.is_break %}{ id: {{ s.id }}, label: {{ s.label|tojson }} },{% endif %}{% endfor %}];
+const daysConf  = [{% for d in days %}{{ d|tojson }},{% endfor %}];
+const slotModal = new bootstrap.Modal(document.getElementById('slotModal'));
+let _srcDay = null, _srcSlot = null;
+
+function openSlotModal(el) {
+  const d = el.dataset;
+  document.getElementById('slot-teacher-id').value     = d.teacher;
+  document.getElementById('slot-day').value            = d.day;
+  document.getElementById('slot-slot-id').value        = d.slot;
+  document.getElementById('slot-action').value         = '';
+  document.getElementById('slot-group-id').value       = d.groupId || '';
+  document.getElementById('slot-room-id').value        = d.roomId  || '';
+  document.getElementById('slot-group-search').value   = '';
+  document.getElementById('slot-room-search').value    = '';
+  document.getElementById('slot-group-sugg').style.display = 'none';
+  document.getElementById('slot-room-sugg').style.display  = 'none';
+  document.getElementById('btn-save-group').style.display = d.groupId ? '' : 'none';
+  document.getElementById('slot-other-input').value = d.notes || '';
+  document.getElementById('btn-save-other').style.display = d.notes ? '' : 'none';
+  document.getElementById('slot-notes').value = '';
+
+  // Clonado
+  _srcDay  = parseInt(d.day);
+  _srcSlot = parseInt(d.slot);
+  const hasContent = d.type !== 'free';
+  document.getElementById('clone-section').style.display = hasContent ? '' : 'none';
+  if (hasContent) buildCloneGrid(_srcDay, _srcSlot);
+
+  document.getElementById('modal-slot-title').textContent = d.dayLabel + ' — ' + d.slotLabel;
+  const curLabels = { guard: '🛡️ Guardia', free: 'Libre', group: '📚 ' + d.groupName };
+  document.getElementById('slot-current').textContent = 'Actual: ' + (curLabels[d.type] || 'Libre');
+
+  const groupChip = document.getElementById('slot-group-chip');
+  if (d.groupId && d.groupId !== '0') {
+    document.getElementById('slot-group-chip-name').textContent = d.groupName;
+    groupChip.style.display = '';
+  } else {
+    groupChip.style.display = 'none';
+  }
+
+  const roomChip = document.getElementById('slot-room-chip');
+  if (d.roomId && d.roomId !== '0') {
+    document.getElementById('slot-room-chip-name').textContent = d.roomName;
+    roomChip.style.display = '';
+  } else {
+    roomChip.style.display = 'none';
+  }
+
+  slotModal.show();
+}
+
+function clearSlotGroup() {
+  document.getElementById('slot-group-id').value = '';
+  document.getElementById('slot-group-chip').style.display = 'none';
+  document.getElementById('btn-save-group').style.display = 'none';
+}
+
+function clearSlotRoom() {
+  document.getElementById('slot-room-id').value = '';
+  document.getElementById('slot-room-chip').style.display = 'none';
+}
+
+function submitSlotOther() {
+  const val = document.getElementById('slot-other-input').value.trim();
+  if (!val) return;
+  document.getElementById('slot-notes').value = val;
+  submitSlot('other');
+}
+
+function submitSlot(action) {
+  if (action === 'group' && !document.getElementById('slot-group-id').value) return;
+  document.getElementById('slot-action').value = action;
+  document.getElementById('slot-form').submit();
+}
+
+// Autocomplete genérico para el modal
+function makeModalAutocomplete(inputId, suggId, data, onSelect) {
+  const input = document.getElementById(inputId);
+  const sugg  = document.getElementById(suggId);
+  function render(q) {
+    const matches = q ? data.filter(x => normalize(x.name).includes(q)) : data;
+    if (!matches.length) { sugg.style.display = 'none'; return; }
+    sugg.innerHTML = matches.slice(0, 15).map(x =>
+      `<button type="button" class="list-group-item list-group-item-action py-1 px-3"
+               data-id="${x.id}" data-name="${x.name.replace(/"/g,'&quot;')}">${x.name}</button>`
+    ).join('');
+    sugg.style.display = 'block';
+  }
+  input.addEventListener('focus', () => render(normalize(input.value.trim())));
+  input.addEventListener('input', () => render(normalize(input.value.trim())));
+  sugg.addEventListener('mousedown', function(e) {
+    const btn = e.target.closest('[data-id]');
+    if (!btn) return;
+    e.preventDefault();
+    onSelect(btn.dataset.id, btn.dataset.name);
+    input.value = '';
+    sugg.style.display = 'none';
+  });
+  document.addEventListener('click', function(e) {
+    if (!input.contains(e.target) && !sugg.contains(e.target)) sugg.style.display = 'none';
   });
 }
+
+document.getElementById('slot-other-input').addEventListener('input', function() {
+  document.getElementById('btn-save-other').style.display = this.value.trim() ? '' : 'none';
+});
+
+makeModalAutocomplete('slot-group-search', 'slot-group-sugg', groupData, (id, name) => {
+  document.getElementById('slot-group-id').value = id;
+  document.getElementById('slot-group-chip-name').textContent = name;
+  document.getElementById('slot-group-chip').style.display = '';
+  document.getElementById('btn-save-group').style.display = '';
+});
+
+// ── Clonado ───────────────────────────────────────────────────────────────────
+function buildCloneGrid(srcDay, srcSlot) {
+  const grid = document.getElementById('clone-grid');
+  let html = '<table class="table table-bordered table-sm text-center mb-0" style="font-size:.75rem">';
+  html += '<thead class="table-light"><tr><th></th>';
+  daysConf.forEach(d => html += `<th>${d.substring(0,2)}</th>`);
+  html += '</tr></thead><tbody>';
+  slotsConf.forEach(s => {
+    html += `<tr><td class="text-start text-muted px-1">${s.label}</td>`;
+    daysConf.forEach((_, di) => {
+      const isSrc = di === srcDay && s.id === srcSlot;
+      if (isSrc) {
+        html += `<td class="bg-primary-subtle">✦</td>`;
+      } else {
+        html += `<td style="cursor:pointer" onclick="toggleClone(this,${di},${s.id})"
+                     data-day="${di}" data-slot="${s.id}"></td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  grid.innerHTML = html;
+  document.getElementById('btn-clone').style.display = 'none';
+}
+
+function toggleClone(cell, day, slot) {
+  cell.classList.toggle('bg-warning');
+  cell.textContent = cell.classList.contains('bg-warning') ? '✓' : '';
+  const any = document.getElementById('clone-grid').querySelector('.bg-warning');
+  document.getElementById('btn-clone').style.display = any ? '' : 'none';
+}
+
+function selectCloneRow() {
+  document.getElementById('clone-grid').querySelectorAll('[data-slot]').forEach(cell => {
+    if (parseInt(cell.dataset.slot) === _srcSlot) {
+      cell.classList.add('bg-warning');
+      cell.textContent = '✓';
+    }
+  });
+  document.getElementById('btn-clone').style.display = '';
+}
+
+function selectCloneCol() {
+  document.getElementById('clone-grid').querySelectorAll('[data-day]').forEach(cell => {
+    if (parseInt(cell.dataset.day) === _srcDay) {
+      cell.classList.add('bg-warning');
+      cell.textContent = '✓';
+    }
+  });
+  document.getElementById('btn-clone').style.display = '';
+}
+
+function clearClone() {
+  document.getElementById('clone-grid').querySelectorAll('.bg-warning').forEach(cell => {
+    cell.classList.remove('bg-warning');
+    cell.textContent = '';
+  });
+  document.getElementById('btn-clone').style.display = 'none';
+}
+
+function submitClone() {
+  const teacherId = document.getElementById('slot-teacher-id').value;
+  const cells = document.getElementById('clone-grid').querySelectorAll('.bg-warning');
+  if (!cells.length) return;
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '{{ url_for("admin.schedule_clone_cell") }}';
+  const add = (n, v) => { const i = document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; form.appendChild(i); };
+  add('teacher_id', teacherId);
+  add('src_day', _srcDay);
+  add('src_slot_id', _srcSlot);
+  cells.forEach(cell => add('targets', cell.dataset.day + ':' + cell.dataset.slot));
+  document.body.appendChild(form);
+  form.submit();
+}
+
+makeModalAutocomplete('slot-room-search', 'slot-room-sugg', roomData, (id, name) => {
+  document.getElementById('slot-room-id').value = id;
+  document.getElementById('slot-room-chip-name').textContent = name;
+  document.getElementById('slot-room-chip').style.display = '';
+});
 </script>
+{% endif %}
 {% endblock %}

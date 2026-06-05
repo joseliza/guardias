@@ -59,8 +59,8 @@ def create():
 
     if request.method == "POST":
         teacher_id = int(request.form.get("teacher_id", current_user.id))
-        # Solo directivos pueden registrar ausencias de otros
-        if teacher_id != current_user.id and not current_user.is_management:
+        # Solo directivos y pantalla pueden registrar ausencias de otros
+        if teacher_id != current_user.id and not current_user.is_management and current_user.role != "display":
             flash("No tienes permiso para registrar ausencias de otros profesores.", "danger")
             return redirect(url_for("absences.create"))
 
@@ -363,7 +363,7 @@ def tasks_pdf(absence_id):
     ).first()
     group = schedule_entry.group if schedule_entry else None
     group_name = group.name if group else "-"
-    room_name = group.room.name if group and group.room else "-"
+    room_name = schedule_entry.room.name if schedule_entry and schedule_entry.room else "-"
 
     FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
@@ -464,7 +464,7 @@ def slot_pdf(date_str, slot_id):
         ).first()
         group = entry.group if entry else None
         group_name = group.name if group else "-"
-        room_name = group.room.name if group and group.room else "-"
+        room_name = entry.room.name if entry and entry.room else "-"
 
         pdf = FPDF()
         pdf.add_font("dv", "",  FONT)

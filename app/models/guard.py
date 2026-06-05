@@ -24,6 +24,20 @@ class Guard(db.Model):
     group = db.relationship("Group")
     records = db.relationship("GuardRecord", backref="guard", lazy="dynamic")
 
+    @property
+    def room(self):
+        """Aula del tramo: la del horario del profesor ausente."""
+        if not self.absence:
+            return None
+        from app.models.schedule import TeacherSchedule
+        entry = TeacherSchedule.query.filter_by(
+            teacher_id=self.absence.teacher_id,
+            day_of_week=self.date.weekday(),
+            slot_id=self.slot_id,
+            is_guard_slot=False,
+        ).first()
+        return entry.room if entry else None
+
 
 class GuardRecord(db.Model):
     """Registro de tiempo efectivo de un profesor en una guardia.

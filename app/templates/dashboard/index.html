@@ -163,6 +163,17 @@
                         title="El grupo está de actividad extraescolar">
                     <i class="bi bi-bus-front"></i> Grupo en actividad EX
                   </span>
+                  {% elif absence_support.get(absence.id) %}
+                  {% set support = absence_support[absence.id] %}
+                  <span class="badge bg-warning text-dark"
+                        title="Hay profesor/a de apoyo en este grupo y tramo">
+                    <i class="bi bi-people-fill"></i> Apoyo
+                  </span>
+                  {% for t in support %}
+                  <div><small class="text-warning-emphasis fw-semibold">
+                    <i class="bi bi-person-check"></i> {{ t.full_name }}
+                  </small></div>
+                  {% endfor %}
                   {% else %}
                   <span class="badge bg-danger">Pendiente</span>
                   {% endif %}

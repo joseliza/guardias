@@ -210,19 +210,16 @@ def group_create():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     if request.method == "POST":
-        room_id = request.form.get("room_id") or None
         group = Group(
             name=request.form["name"].strip(),
             high_difficulty=request.form.get("high_difficulty") == "on",
             difficulty_multiplier=float(request.form.get("difficulty_multiplier", 1.0)),
-            room_id=int(room_id) if room_id else None,
         )
         db.session.add(group)
         db.session.commit()
         flash("Grupo creado.", "success")
         return redirect(url_for("admin.groups"))
-    rooms = Room.query.filter_by(active=True).order_by(Room.name).all()
-    return render_template("admin/group_form.html", group=None, rooms=rooms)
+    return render_template("admin/group_form.html", group=None)
 
 
 @admin_bp.route("/grupos/<int:gid>/editar", methods=["GET", "POST"])
@@ -232,17 +229,14 @@ def group_edit(gid):
         return redirect(url_for("dashboard.index"))
     group = Group.query.get_or_404(gid)
     if request.method == "POST":
-        room_id = request.form.get("room_id") or None
         group.name = request.form["name"].strip()
         group.high_difficulty = request.form.get("high_difficulty") == "on"
         group.difficulty_multiplier = float(request.form.get("difficulty_multiplier", 1.0))
         group.active = request.form.get("active") == "on"
-        group.room_id = int(room_id) if room_id else None
         db.session.commit()
         flash("Grupo actualizado.", "success")
         return redirect(url_for("admin.groups"))
-    rooms = Room.query.filter_by(active=True).order_by(Room.name).all()
-    return render_template("admin/group_form.html", group=group, rooms=rooms)
+    return render_template("admin/group_form.html", group=group)
 
 
 # ── Importación CSV horarios ──────────────────────────────────────────────────
@@ -260,7 +254,6 @@ def group_clone(gid):
         high_difficulty=original.high_difficulty,
         difficulty_multiplier=original.difficulty_multiplier,
         active=original.active,
-        room_id=original.room_id,
     )
     db.session.add(clone)
     db.session.commit()
@@ -335,9 +328,6 @@ def room_delete(rid):
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     room = Room.query.get_or_404(rid)
-    if room.groups:
-        flash(f"No se puede borrar '{room.name}': tiene grupos asignados. Desactívala o reasigna los grupos.", "danger")
-        return redirect(url_for("admin.rooms"))
     db.session.delete(room)
     db.session.commit()
     flash(f"Aula '{room.name}' eliminada.", "success")
@@ -350,12 +340,27 @@ def schedules():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     from flask import current_app
+    from sqlalchemy import func
 
     teachers = (User.query
                 .filter_by(active=True)
-                .filter(User.role.notin_(["management", "display"]))
+                .filter(User.role != "display")
                 .order_by(User.surname, User.name)
                 .all())
+
+    # Resumen de guardias/clases por profesor en una sola consulta
+    summary_rows = (db.session.query(
+        TeacherSchedule.teacher_id,
+        TeacherSchedule.is_guard_slot,
+        func.count(TeacherSchedule.id),
+    ).group_by(TeacherSchedule.teacher_id, TeacherSchedule.is_guard_slot).all())
+    summaries = {}
+    for tid, is_guard, count in summary_rows:
+        s = summaries.setdefault(tid, {"guard": 0, "class": 0})
+        if is_guard:
+            s["guard"] = count
+        else:
+            s["class"] = count
 
     teacher_id = request.args.get("teacher_id", type=int)
     selected = User.query.get(teacher_id) if teacher_id else None
@@ -371,11 +376,114 @@ def schedules():
             row = {"slot": s, "days": [entry_map.get((d, s["id"])) for d in range(5)]}
             schedule_grid.append(row)
 
+    from app.models.group import Group as GroupModel
+    from app.models.room import Room as RoomModel
+    groups = GroupModel.query.filter_by(active=True).order_by(GroupModel.name).all()
+    rooms  = RoomModel.query.filter_by(active=True).order_by(RoomModel.name).all()
+
     return render_template("admin/schedules.html",
                            teachers=teachers,
+                           summaries=summaries,
                            selected=selected,
                            schedule_grid=schedule_grid,
-                           days=days)
+                           days=days,
+                           slots=slots_cfg,
+                           groups=groups,
+                           rooms=rooms)
+
+
+@admin_bp.route("/horarios/clonar-celda", methods=["POST"])
+@login_required
+def schedule_clone_cell():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+
+    teacher_id  = int(request.form["teacher_id"])
+    src_day     = int(request.form["src_day"])
+    src_slot_id = int(request.form["src_slot_id"])
+
+    source = TeacherSchedule.query.filter_by(
+        teacher_id=teacher_id, day_of_week=src_day, slot_id=src_slot_id
+    ).first()
+    if not source:
+        flash("El tramo origen ya no existe.", "warning")
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+    targets = request.form.getlist("targets")  # lista de "day:slot_id"
+    cloned = 0
+    for t in targets:
+        try:
+            d, s = map(int, t.split(":"))
+        except ValueError:
+            continue
+        existing = TeacherSchedule.query.filter_by(
+            teacher_id=teacher_id, day_of_week=d, slot_id=s
+        ).first()
+        if existing:
+            existing.is_guard_slot = source.is_guard_slot
+            existing.group_id      = source.group_id
+            existing.room_id       = source.room_id
+            existing.notes         = source.notes
+        else:
+            db.session.add(TeacherSchedule(
+                teacher_id=teacher_id, day_of_week=d, slot_id=s,
+                is_guard_slot=source.is_guard_slot,
+                group_id=source.group_id,
+                room_id=source.room_id,
+                notes=source.notes,
+            ))
+        cloned += 1
+
+    db.session.commit()
+    if cloned:
+        flash(f"Tramo clonado en {cloned} celda{'s' if cloned != 1 else ''}.", "success")
+    return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+
+@admin_bp.route("/horarios/celda", methods=["POST"])
+@login_required
+def schedule_set_cell():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+
+    teacher_id = int(request.form["teacher_id"])
+    day        = int(request.form["day"])
+    slot_id    = int(request.form["slot_id"])
+    action     = request.form["action"]  # "clear" | "guard" | "group"
+
+    existing = TeacherSchedule.query.filter_by(
+        teacher_id=teacher_id, day_of_week=day, slot_id=slot_id
+    ).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.flush()
+
+    room_id = request.form.get("room_id", type=int) or None
+    notes   = request.form.get("notes", "").strip() or None
+    if action == "guard":
+        db.session.add(TeacherSchedule(
+            teacher_id=teacher_id, day_of_week=day,
+            slot_id=slot_id, is_guard_slot=True, group_id=None,
+            room_id=room_id, notes=notes,
+        ))
+    elif action == "group":
+        group_id = request.form.get("group_id", type=int)
+        if group_id:
+            db.session.add(TeacherSchedule(
+                teacher_id=teacher_id, day_of_week=day,
+                slot_id=slot_id, is_guard_slot=False, group_id=group_id,
+                room_id=room_id, notes=notes,
+            ))
+    elif action == "other":
+        if notes:
+            db.session.add(TeacherSchedule(
+                teacher_id=teacher_id, day_of_week=day,
+                slot_id=slot_id, is_guard_slot=False, group_id=None,
+                room_id=room_id, notes=notes,
+            ))
+
+    db.session.commit()
+    return redirect(url_for("admin.schedules", teacher_id=teacher_id))
 
 
 @admin_bp.route("/horarios/plantilla-csv")
@@ -485,7 +593,7 @@ def teacher_send_welcome(tid):
 
 # ── Configuración ─────────────────────────────────────────────────────────────
 
-MAIL_KEYS = ["MAIL_SERVER", "MAIL_PORT", "MAIL_USE_TLS", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_DEFAULT_SENDER", "MAIL_WELCOME_TEMPLATE"]
+MAIL_KEYS = ["MAIL_SERVER", "MAIL_PORT", "MAIL_USE_TLS", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_DEFAULT_SENDER", "MAIL_WELCOME_TEMPLATE", "MAIL_JUSTIFICATION_TEMPLATE"]
 
 
 def _mail_config_path():
@@ -641,6 +749,223 @@ def test_email():
         flash(f"Error al enviar el correo: {cause}", "danger")
 
     return redirect(url_for("admin.config"))
+
+
+# ── Justificación de faltas ───────────────────────────────────────────────────
+
+@admin_bp.route("/justificacion")
+@login_required
+def justification():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.absence import Absence
+    from app.models.schedule import TeacherSchedule
+
+    slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
+
+    # Profesores con alguna ausencia (justificada o no), ordenados alfabéticamente
+    teachers_with_absences = (User.query
+        .join(Absence, Absence.teacher_id == User.id)
+        .filter(User.role != "display")
+        .distinct()
+        .order_by(User.surname, User.name)
+        .all())
+
+    teacher_id = request.args.get("teacher_id", type=int)
+    if not teacher_id and teachers_with_absences:
+        teacher_id = teachers_with_absences[0].id
+
+    selected_teacher = User.query.get(teacher_id) if teacher_id else None
+
+    absences = []
+    absence_groups = {}
+    if selected_teacher:
+        absences = (Absence.query
+                    .filter_by(teacher_id=selected_teacher.id, justified=False)
+                    .order_by(Absence.date.desc(), Absence.slot_id)
+                    .all())
+        for a in absences:
+            entry = TeacherSchedule.query.filter_by(
+                teacher_id=a.teacher_id, day_of_week=a.date.weekday(),
+                slot_id=a.slot_id, is_guard_slot=False,
+            ).first()
+            absence_groups[a.id] = entry.group.name if entry and entry.group else "—"
+
+    # Para el panel derecho: TODAS las ausencias del profesor (para poder también desjustificar)
+    all_absences = []
+    absences_by_date = {}
+    if selected_teacher:
+        all_absences = (Absence.query
+                        .filter_by(teacher_id=selected_teacher.id)
+                        .order_by(Absence.date.desc(), Absence.slot_id)
+                        .all())
+        for a in all_absences:
+            entry = TeacherSchedule.query.filter_by(
+                teacher_id=a.teacher_id, day_of_week=a.date.weekday(),
+                slot_id=a.slot_id, is_guard_slot=False,
+            ).first()
+            absence_groups[a.id] = entry.group.name if entry and entry.group else "—"
+            absences_by_date.setdefault(a.date, []).append(a)
+
+    # Ausencias devueltas y sin justificar para envío de correos
+    pending_email = (Absence.query
+                     .filter_by(justified=False, status="returned")
+                     .order_by(Absence.date.desc(), Absence.slot_id)
+                     .all())
+
+    cfg = _read_mail_config()
+    has_template = bool(cfg.get("MAIL_JUSTIFICATION_TEMPLATE", "").strip())
+
+    return render_template("admin/justification.html",
+                           teachers_with_absences=teachers_with_absences,
+                           selected_teacher=selected_teacher,
+                           absences_by_date=absences_by_date,
+                           absence_groups=absence_groups,
+                           slots_cfg=slots_cfg,
+                           pending_email=pending_email,
+                           has_template=has_template)
+
+
+def _send_justification_email_for_teacher(teacher_id: int) -> bool:
+    """Envía un único correo al profesor con TODAS sus faltas sin justificar.
+    Devuelve True si se envió correctamente."""
+    from flask_mail import Message
+    from app.extensions import mail
+    from app.models.absence import Absence
+
+    cfg = _read_mail_config()
+    template = cfg.get("MAIL_JUSTIFICATION_TEMPLATE", "").strip()
+    if not template:
+        flash("No hay plantilla de correo de justificación configurada.", "danger")
+        return False
+
+    teacher = User.query.get(teacher_id)
+    if not teacher:
+        return False
+
+    slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
+    unjustified = (Absence.query
+                   .filter_by(teacher_id=teacher_id, justified=False)
+                   .order_by(Absence.date, Absence.slot_id)
+                   .all())
+    if not unjustified:
+        return False
+
+    # Construir lista de faltas
+    lines = []
+    for a in unjustified:
+        slot = slots_cfg.get(a.slot_id, {})
+        slot_label = f"{slot.get('label', a.slot_id)} ({slot.get('start','')}–{slot.get('end','')})"
+        lines.append(f"  • {a.date.strftime('%d/%m/%Y')} — {slot_label} — {a.reason or '—'}")
+    lista_faltas = "\n".join(lines)
+
+    body = (template
+            .replace("{nombre}", teacher.full_name)
+            .replace("{lista_faltas}", lista_faltas))
+
+    try:
+        mail.send(Message(
+            subject=f"Faltas pendientes de justificación — {current_app.config.get('INSTITUTE_NAME', '')}",
+            recipients=[teacher.email],
+            sender=current_app.config.get("MAIL_DEFAULT_SENDER"),
+            body=body,
+        ))
+        for a in unjustified:
+            a.justification_email_sent = True
+        db.session.commit()
+        return True
+    except Exception as e:
+        cause = e.__context__ or e
+        flash(f"Error al enviar el correo a {teacher.email}: {cause}", "danger")
+        current_app.logger.error("Error enviando justificación a %s: %s", teacher.email, e)
+        return False
+
+
+@admin_bp.route("/justificacion/<int:absence_id>/enviar-correo", methods=["POST"])
+@login_required
+def send_justification_email_single(absence_id):
+    """Envía UN correo al profesor listando TODAS sus faltas sin justificar."""
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.absence import Absence
+
+    absence = Absence.query.get_or_404(absence_id)
+    if absence.status != "returned":
+        flash("No se puede enviar el correo: el profesor aún no se ha reincorporado.", "warning")
+        return redirect(url_for("admin.justification", teacher_id=absence.teacher_id))
+
+    sent = _send_justification_email_for_teacher(absence.teacher_id)
+    if sent:
+        flash(f"Correo enviado a {absence.teacher.email}.", "success")
+    return redirect(url_for("admin.justification", teacher_id=absence.teacher_id))
+
+
+@admin_bp.route("/justificacion/justificar-dia", methods=["POST"])
+@login_required
+def justify_day():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from datetime import date as _date
+    from app.models.absence import Absence
+
+    teacher_id  = int(request.form["teacher_id"])
+    date_str    = request.form["date"]
+    target_date = _date.fromisoformat(date_str)
+    justified   = request.form.get("action") == "justify"
+
+    absences = Absence.query.filter_by(teacher_id=teacher_id, date=target_date).all()
+    for a in absences:
+        a.justified = justified
+    db.session.commit()
+    return redirect(url_for("admin.justification", teacher_id=teacher_id))
+
+
+@admin_bp.route("/justificacion/<int:absence_id>/toggle", methods=["POST"])
+@login_required
+def toggle_justified(absence_id):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.absence import Absence
+    absence = Absence.query.get_or_404(absence_id)
+    absence.justified = not absence.justified
+    db.session.commit()
+    teacher_id = request.form.get("teacher_id", type=int) or absence.teacher_id
+    back = request.form.get("back", "")
+    url = url_for("admin.justification", teacher_id=teacher_id)
+    return redirect(url + (f"#{back}" if back else ""))
+
+
+@admin_bp.route("/justificacion/enviar-correos", methods=["POST"])
+@login_required
+def send_justification_emails():
+    """Envía UN correo por profesor (listando todas sus faltas sin justificar)."""
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.absence import Absence
+
+    absence_ids = [int(x) for x in request.form.getlist("absence_ids")]
+    teacher_id  = request.form.get("teacher_id", type=int)
+    if not absence_ids:
+        flash("No se seleccionó ninguna ausencia.", "warning")
+        return redirect(url_for("admin.justification", teacher_id=teacher_id))
+
+    # Agrupa por profesor y envía un único correo por cada uno
+    teacher_ids = list({Absence.query.get(aid).teacher_id
+                        for aid in absence_ids
+                        if Absence.query.get(aid)})
+    sent = skipped = 0
+    for tid in teacher_ids:
+        ok = _send_justification_email_for_teacher(tid)
+        if ok:
+            sent += 1
+        else:
+            skipped += 1
+
+    if sent:
+        flash(f"Correo{'s' if sent != 1 else ''} enviado{'s' if sent != 1 else ''}: {sent} profesor{'es' if sent != 1 else ''}.", "success")
+    if skipped:
+        flash(f"Omitidos (no reincorporados o error): {skipped}.", "warning")
+    return redirect(url_for("admin.justification"))
 
 
 # ── Página de ayuda ───────────────────────────────────────────────────────────

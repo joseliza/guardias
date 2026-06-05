@@ -54,6 +54,16 @@
             <li><a class="dropdown-item" href="{{ url_for('admin.import_teachers_csv') }}">Importar profesores CSV</a></li>
             <li><a class="dropdown-item" href="{{ url_for('admin.import_schedule_csv') }}">Importar horarios CSV</a></li>
             <li><hr class="dropdown-divider"></li>
+            <li>
+              <a class="dropdown-item d-flex justify-content-between align-items-center"
+                 href="{{ url_for('admin.justification') }}">
+                Justificación de faltas
+                {% if pending_justification %}
+                <span class="badge bg-danger rounded-pill">{{ pending_justification }}</span>
+                {% endif %}
+              </a>
+            </li>
+            <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{{ url_for('guards.report') }}">Informe de guardias</a></li>
             <li><a class="dropdown-item" href="{{ url_for('guards.my_points') }}">Historial de puntos</a></li>
             <li><a class="dropdown-item" href="{{ url_for('chat.report') }}">Informe de incidencias</a></li>
@@ -147,14 +157,19 @@
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>document.querySelectorAll('.toast').forEach(el => new bootstrap.Toast(el).show());</script>
 <script>
+// Normaliza texto: minúsculas + sin tildes
+function normalize(s) {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
 // Buscador rápido reutilizable: <input class="table-filter" data-target="#tabla-id">
 document.querySelectorAll('.table-filter').forEach(input => {
   const tbody = document.querySelector(input.dataset.target + ' tbody');
   if (!tbody) return;
   input.addEventListener('input', () => {
-    const q = input.value.toLowerCase().trim();
+    const q = normalize(input.value.trim());
     tbody.querySelectorAll('tr').forEach(row => {
-      row.style.display = !q || row.textContent.toLowerCase().includes(q) ? '' : 'none';
+      row.style.display = !q || normalize(row.textContent).includes(q) ? '' : 'none';
     });
   });
 });

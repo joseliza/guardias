@@ -6,20 +6,18 @@
 {% if teachers is not none %}
 <div class="card mb-3">
   <div class="card-body py-2">
-    <form class="row g-2 align-items-center" method="GET">
+    <form id="points-form" class="row g-2 align-items-center" method="GET">
       <div class="col-auto">
         <label class="col-form-label fw-semibold">Profesor/a:</label>
       </div>
-      <div class="col">
-        <input type="search" id="points-teacher-search" class="form-control form-control-sm mb-1" placeholder="Buscar profesor...">
-        <select name="teacher_id" class="form-select form-select-sm" id="points-teacher-select" onchange="this.form.submit()">
-          <option value="">— Seleccionar —</option>
-          {% for t in teachers %}
-          <option value="{{ t.id }}" {% if selected_teacher and selected_teacher.id == t.id %}selected{% endif %}>
-            {{ t.full_name }} ({{ "%.2f"|format(t.points) }} pts)
-          </option>
-          {% endfor %}
-        </select>
+      <div class="col position-relative">
+        <input type="text" id="points-teacher-search" class="form-control form-control-sm" autocomplete="off"
+               placeholder="Buscar por apellidos o nombre..."
+               value="{% if selected_teacher %}{{ selected_teacher.full_name }}{% endif %}">
+        <div id="points-suggestions" class="list-group position-absolute shadow-sm"
+             style="z-index:1050;display:none;max-height:260px;overflow-y:auto;min-width:100%"></div>
+        <input type="hidden" name="teacher_id" id="points-teacher-id"
+               value="{{ selected_teacher.id if selected_teacher else '' }}">
       </div>
       {% if selected_teacher %}
       <div class="col-auto">
@@ -30,8 +28,7 @@
       </div>
       {% endif %}
       <div class="col-auto">
-        <a href="{{ url_for('guards.my_points_csv') }}"
-           class="btn btn-sm btn-success">
+        <a href="{{ url_for('guards.my_points_csv') }}" class="btn btn-sm btn-success">
           <i class="bi bi-filetype-csv"></i> CSV todo el profesorado
         </a>
       </div>
@@ -42,19 +39,19 @@
 
 {# ── Cabecera ────────────────────────────────────────────────────────────── #}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h4>
+  <h4 class="mb-0">
     <i class="bi bi-star-half"></i>
-    {% if selected_teacher %}
-      Historial de {{ selected_teacher.full_name }}
-    {% else %}
-      Mis puntos
-    {% endif %}
+    {% if selected_teacher %}Historial de {{ selected_teacher.full_name }}
+    {% else %}Mis puntos{% endif %}
   </h4>
-  {% if total_points is not none %}
-  <span class="fs-4 fw-bold {{ 'text-success' if total_points >= 0 else 'text-danger' }}">
-    {{ "%.2f"|format(total_points) }} pts
-  </span>
-  {% endif %}
+  <div class="d-flex align-items-center gap-2">
+    {% if total_points is not none %}
+    <span class="fs-5 fw-bold {{ 'text-success' if total_points >= 0 else 'text-danger' }}">
+      {{ "%.2f"|format(total_points) }} pts
+    </span>
+    {% endif %}
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+  </div>
 </div>
 
 {# ── Estado vacío ────────────────────────────────────────────────────────── #}
@@ -135,16 +132,76 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
+{% if teachers is not none %}
 <script>
-const search = document.getElementById('points-teacher-search');
-if (search) {
-  search.addEventListener('input', function() {
-    const q = this.value.toLowerCase();
-    const sel = document.getElementById('points-teacher-select');
-    Array.from(sel.options).forEach(opt => {
-      opt.hidden = q && opt.value !== '' && !opt.text.toLowerCase().includes(q);
-    });
+(function() {
+  const teacherData = [
+    {% for t in teachers %}{ id: {{ t.id }}, name: {{ t.full_name | tojson }}, pts: {{ "%.2f"|format(t.points) }} },
+    {% endfor %}
+  ];
+  const input  = document.getElementById('points-teacher-search');
+  const hidden = document.getElementById('points-teacher-id');
+  const sugg   = document.getElementById('points-suggestions');
+  const form   = document.getElementById('points-form');
+
+  function showSugg(q) {
+    const matches = q ? teacherData.filter(t => normalize(t.name).includes(q)) : teacherData;
+    if (!matches.length) { sugg.style.display = 'none'; return; }
+    sugg.innerHTML = matches.slice(0, 15).map(t =>
+      `<button type="button" class="list-group-item list-group-item-action py-1 px-3 d-flex justify-content-between"
+               data-id="${t.id}" data-name="${t.name.replace(/"/g,'&quot;')}">
+        <span>${t.name}</span><small class="text-muted">${t.pts} pts</small>
+      </button>`
+    ).join('');
+    sugg.style.display = 'block';
+  }
+
+  input.addEventListener('focus', function() {
+    showSugg(normalize(this.value.trim()));
   });
-}
+
+  input.addEventListener('input', function() {
+    hidden.value = '';
+    showSugg(normalize(this.value.trim()));
+  });
+
+  sugg.addEventListener('mousedown', function(e) {
+    const btn = e.target.closest('[data-id]');
+    if (!btn) return;
+    e.preventDefault();
+    hidden.value = btn.dataset.id;
+    input.value  = btn.dataset.name;
+    sugg.style.display = 'none';
+    form.submit();
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!input.contains(e.target) && !sugg.contains(e.target)) sugg.style.display = 'none';
+  });
+
+  input.addEventListener('keydown', function(e) {
+    const items = sugg.querySelectorAll('[data-id]');
+    if (!items.length) return;
+    const active = sugg.querySelector('.active');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = active ? active.nextElementSibling : items[0];
+      if (next) { active && active.classList.remove('active'); next.classList.add('active'); }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prev = active ? active.previousElementSibling : items[items.length-1];
+      if (prev) { active && active.classList.remove('active'); prev.classList.add('active'); }
+    } else if (e.key === 'Enter' && active) {
+      e.preventDefault();
+      hidden.value = active.dataset.id;
+      input.value  = active.dataset.name;
+      sugg.style.display = 'none';
+      form.submit();
+    } else if (e.key === 'Escape') {
+      sugg.style.display = 'none';
+    }
+  });
+})();
 </script>
+{% endif %}
 {% endblock %}

@@ -105,9 +105,9 @@
           {% set guard_absence = guard.absence %}
           <div class="guard-row" id="guard-{{ guard.id }}">
             <span class="group-name">{{ guard.group.name if guard.group else '—' }}</span>
-            {% if guard.group and guard.group.room %}
+            {% if guard.room %}
             <span style="background:#1f4068;color:#79c0ff;border:1px solid #388bfd;font-size:.8rem;padding:.15rem .55rem;border-radius:.3rem;font-weight:600;white-space:nowrap;">
-              <i class="bi bi-door-open"></i> {{ guard.group.room.name }}
+              <i class="bi bi-door-open"></i> {{ guard.room.name }}
             </span>
             {% endif %}
 

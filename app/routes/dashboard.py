@@ -12,7 +12,7 @@ from app.models.absence import Absence
 from app.models.schedule import TeacherSchedule
 from app.models.user import User
 from app.models.chat import ChatMessage, ChatClear
-from app.utils.guards import get_available_teachers_for_slot
+from app.utils.guards import get_available_teachers_for_slot, get_support_teachers
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -73,6 +73,7 @@ def index():
 
     absence_groups = {}
     absence_rooms = {}
+    absence_support = {}  # absence.id → lista de profesores de apoyo
     for a in day_absences:
         entry = TeacherSchedule.query.filter_by(
             teacher_id=a.teacher_id,
@@ -82,7 +83,10 @@ def index():
         ).first()
         group = entry.group if entry else None
         absence_groups[a.id] = group.name if group else "—"
-        absence_rooms[a.id] = group.room.name if group and group.room else None
+        absence_rooms[a.id] = entry.room.name if entry and entry.room else None
+        absence_support[a.id] = get_support_teachers(
+            group.id if group else None, a.slot_id, target_date, a.teacher_id
+        )
 
     my_guard_slot_ids = set()
     if not current_user.is_management:
@@ -154,7 +158,9 @@ def index():
 
         real_pending = [
             g for g in guards
-            if g.status == "pending" and g.group_id not in activity_gids
+            if g.status == "pending"
+            and g.group_id not in activity_gids
+            and not absence_support.get(g.absence_id, [])
         ]
 
         pending_guards_info = [
@@ -238,6 +244,7 @@ def index():
         my_guard_slot_ids=my_guard_slot_ids,
         absence_groups=absence_groups,
         absence_rooms=absence_rooms,
+        absence_support=absence_support,
         chat_messages=chat_messages,
         tasks_by_slot=tasks_by_slot,
     )

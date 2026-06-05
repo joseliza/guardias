@@ -25,6 +25,10 @@ class Absence(db.Model):
     # Puntos negativos aplicados al profesor ausente
     penalty_points = db.Column(db.Float, default=-1.0, nullable=False)
 
+    # Justificación
+    justified = db.Column(db.Boolean, default=False, nullable=False)
+    justification_email_sent = db.Column(db.Boolean, default=False, nullable=False)
+
     tasks = db.relationship("Task", backref="absence", lazy="dynamic")
     guard = db.relationship("Guard", backref="absence", uselist=False)
 

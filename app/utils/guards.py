@@ -85,6 +85,27 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
     return primary, ex_guard, secondary
 
 
+def get_support_teachers(group_id, slot_id: int, target_date: date, absent_teacher_id: int):
+    """Devuelve la lista de profesores que pueden actuar como apoyo:
+    comparten grupo y tramo con el ausente y no están ausentes ese día."""
+    if not group_id:
+        return []
+    day_idx = target_date.weekday()
+    others = TeacherSchedule.query.filter_by(
+        group_id=group_id, day_of_week=day_idx,
+        slot_id=slot_id, is_guard_slot=False,
+    ).filter(TeacherSchedule.teacher_id != absent_teacher_id).all()
+    if not others:
+        return []
+    absent_ids = {
+        row[0] for row in Absence.query
+        .filter_by(date=target_date, slot_id=slot_id)
+        .with_entities(Absence.teacher_id).all()
+    }
+    return [User.query.get(e.teacher_id) for e in others
+            if e.teacher_id not in absent_ids and User.query.get(e.teacher_id)]
+
+
 def auto_assign_pending_guards(target_date: date, slot_id: int) -> dict:
     """Asigna una guardia por profesor disponible. Nunca repite profesor.
     Devuelve {'assigned': N, 'pending': N}."""
@@ -109,7 +130,11 @@ def auto_assign_pending_guards(target_date: date, slot_id: int) -> dict:
                 if ag.whole_group:
                     activity_group_ids.add(ag.group_id)
 
-    pending = [g for g in all_pending if g.group_id not in activity_group_ids]
+    pending = [g for g in all_pending
+               if g.group_id not in activity_group_ids
+               and not get_support_teachers(
+                   g.group_id, slot_id, target_date,
+                   g.absence.teacher_id if g.absence else -1)]
     if not pending:
         return {"assigned": 0, "pending": 0}
 
