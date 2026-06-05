@@ -113,7 +113,7 @@ def index():
 
         primary_teachers, ex_guard_teachers, secondary_teachers = get_available_teachers_for_slot(target_date, sid)
 
-        guard_ids_slot = [g.id for g in guards_by_slot.get(sid, [])]
+        guard_ids_slot = [g.id for g in guards_by_slot.get(sid, []) if g.status != "returned"]
         assigned_teacher_ids = set()
         multi_assigned = []
         if guard_ids_slot:
