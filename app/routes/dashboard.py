@@ -36,6 +36,8 @@ def help():
 def index():
     today = date.today()
 
+    is_display_user = current_user.role == "display"
+
     fecha_str = request.args.get("fecha")
     try:
         target_date = date.fromisoformat(fecha_str) if fecha_str else today
@@ -229,7 +231,7 @@ def index():
 
     from collections import defaultdict
     tasks_by_slot = defaultdict(list)
-    if current_user.is_management:
+    if current_user.is_management or is_display_user:
         for a in day_absences:
             task_list = list(a.tasks)
             if task_list:
@@ -249,6 +251,22 @@ def index():
 
     gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
 
+    from datetime import datetime as _dt
+    unmarkable_slot_ids = set()
+    if target_date > today:
+        unmarkable_slot_ids = {s["id"] for s in slots_cfg if not s.get("is_break")}
+    elif is_today:
+        now_t = _dt.now().time()
+        for s in slots_cfg:
+            if s.get("is_break"):
+                continue
+            try:
+                if _dt.strptime(s["start"], "%H:%M").time() <= now_t <= _dt.strptime(s["end"], "%H:%M").time():
+                    unmarkable_slot_ids.add(s["id"])
+            except (KeyError, ValueError):
+                pass
+    # target_date < today → unmarkable_slot_ids queda vacío
+
     return render_template(
         "dashboard/index.html",
         today=today,
@@ -265,4 +283,6 @@ def index():
         chat_messages=chat_messages,
         tasks_by_slot=tasks_by_slot,
         blink_guard_alert=gcfg.get("blink_guard_alert", False),
+        unmarkable_slot_ids=unmarkable_slot_ids,
+        is_display_user=is_display_user,
     )

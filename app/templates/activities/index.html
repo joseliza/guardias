@@ -31,11 +31,6 @@
           <td class="text-end">
             <div class="d-flex gap-1 justify-content-end">
               <a href="{{ url_for('activities.edit', aid=a.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
-              <button type="button" class="btn btn-sm btn-outline-danger"
-                      data-bs-toggle="modal" data-bs-target="#modalEliminar"
-                      data-id="{{ a.id }}" data-name="{{ a.name }}">
-                <i class="bi bi-trash"></i>
-              </button>
             </div>
           </td>
         </tr>
@@ -47,34 +42,4 @@
   </div>
 </div>
 
-<div class="modal fade" id="modalEliminar" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="bi bi-trash"></i> Eliminar actividad</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p>¿Seguro que quieres eliminar <strong id="modal-act-name"></strong>?</p>
-        <p class="text-danger small mb-0"><i class="bi bi-exclamation-triangle"></i>
-          Se eliminarán también las ausencias y guardias generadas automáticamente para los profesores acompañantes.</p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <form id="modal-delete-form" method="POST">
-          <button type="submit" class="btn btn-danger">Sí, eliminar</button>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
-{% endblock %}
-{% block scripts %}
-<script>
-document.getElementById('modalEliminar').addEventListener('show.bs.modal', function(e) {
-  const btn = e.relatedTarget;
-  document.getElementById('modal-act-name').textContent = btn.dataset.name;
-  document.getElementById('modal-delete-form').action = '/extraescolares/' + btn.dataset.id + '/eliminar';
-});
-</script>
 {% endblock %}

@@ -45,6 +45,13 @@
             <div class="d-flex gap-1">
               <a href="{{ url_for('admin.teacher_edit', tid=t.id) }}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="bi bi-pencil"></i></a>
               <a href="{{ url_for('admin.schedules', teacher_id=t.id) }}" class="btn btn-sm btn-outline-secondary" title="Ver horario"><i class="bi bi-calendar3"></i></a>
+              {% if t.role == 'teacher' %}
+              <form method="POST" action="{{ url_for('impersonate.start', uid=t.id) }}" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Ver como este profesor">
+                  <i class="bi bi-person-badge"></i>
+                </button>
+              </form>
+              {% endif %}
             </div>
           </td>
           <td>

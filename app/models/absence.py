@@ -21,6 +21,7 @@ class Absence(db.Model):
     # pending / confirmed / returned
     status = db.Column(db.String(20), default="pending", nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    returned_at = db.Column(db.DateTime, nullable=True)
 
     # Puntos negativos aplicados al profesor ausente
     penalty_points = db.Column(db.Float, default=-1.0, nullable=False)

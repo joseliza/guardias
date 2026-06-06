@@ -8,9 +8,11 @@
     <h4>
       <i class="bi bi-house"></i>
       Panel{% if is_today %} de hoy{% endif %} — {{ target_date | fecha_es }}
-      {% if not is_today and not is_editable %}
+      {% if is_today and not is_display_user %}
+      <span id="live-clock" class="ms-2 fw-bold text-primary" style="font-size:1.6rem;vertical-align:baseline;letter-spacing:.04em;line-height:1;"></span>
+      {% elif not is_editable %}
       <span class="badge bg-secondary ms-2" style="font-size:.65rem;vertical-align:middle;">Pasado</span>
-      {% elif not is_today %}
+      {% else %}
       <span class="badge bg-info text-dark ms-2" style="font-size:.65rem;vertical-align:middle;">Futuro</span>
       {% endif %}
     </h4>
@@ -26,9 +28,8 @@
     <a href="{{ url_for('dashboard.index', fecha=next_date.isoformat()) }}" class="btn btn-outline-secondary btn-sm" title="Día siguiente">
       <i class="bi bi-chevron-right"></i>
     </a>
-    {% if not is_today %}
-    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-primary btn-sm">Hoy</a>
-    {% endif %}
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-primary btn-sm"
+       style="{{ 'visibility:hidden' if is_today }}">Hoy</a>
     {% if is_editable %}
     <a href="{{ url_for('absences.create') }}" class="btn btn-warning btn-sm">
       <i class="bi bi-calendar-plus"></i> Registrar ausencia
@@ -93,7 +94,7 @@
     {% else %}
     {% set has_pending = item.real_pending %}
     {% set is_my_guard = item.is_my_guard %}
-    {% set can_manage = (current_user.is_management or is_my_guard) and is_editable %}
+    {% set can_manage = (current_user.is_management or is_my_guard or is_display_user) and is_editable %}
 
     <div id="slot-{{ s.id }}" class="slot-card card mb-2 {% if has_pending %}border-danger{% elif is_my_guard %}border-primary{% endif %}" data-slot-id="{{ s.id }}">
       <div class="card-header py-2 d-flex justify-content-between align-items-center
@@ -111,7 +112,7 @@
         <span class="d-flex align-items-center gap-2">
           {% if has_pending %}
           <span class="badge bg-white text-danger">{{ has_pending | length }} pendiente{{ 's' if has_pending|length > 1 }}</span>
-          {% if current_user.is_management and is_editable %}
+          {% if (current_user.is_management or is_display_user) and is_editable %}
           <form method="POST" action="{{ url_for('guards.auto_assign_slot', date_str=target_date.isoformat(), slot_id=s.id) }}" class="d-inline">
             <button type="submit" class="btn btn-sm btn-warning py-0 px-2" title="Auto-asignar este tramo">
               <i class="bi bi-magic"></i> Auto-asignar
@@ -228,7 +229,7 @@
               <td>
                 <div class="d-grid gap-1" style="min-width:130px">
                   {% if guard and absence.status != 'returned' %}
-                  <a href="{{ url_for('guards.assign', guard_id=guard.id) }}"
+                  <a href="{{ url_for('guards.assign', guard_id=guard.id, fecha=target_date.isoformat()) }}"
                      class="btn btn-sm {% if guard.status == 'pending' %}btn-outline-danger{% else %}btn-outline-secondary{% endif %}">
                     <i class="bi bi-person-plus"></i> {% if guard.status == 'covered' %}Reasignar{% else %}Asignar{% endif %}
                   </a>
@@ -236,11 +237,15 @@
                   {% if absence.status != 'returned' %}
                   <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=absence.id) }}"
                         onsubmit="return confirm('¿Confirmas que {{ absence.teacher.full_name }} se ha reincorporado?')">
+                    <input type="hidden" name="back_fecha" value="{{ target_date.isoformat() }}">
+                    <input type="hidden" name="back_slot" value="{{ s.id }}">
                     <button class="btn btn-sm btn-outline-success w-100"><i class="bi bi-box-arrow-in-right"></i> Reincorp.</button>
                   </form>
-                  {% else %}
+                  {% elif s.id in unmarkable_slot_ids %}
                   <form method="POST" action="{{ url_for('absences.unmark_returned', absence_id=absence.id) }}"
                         onsubmit="return confirm('¿Deshacer la reincorporación de {{ absence.teacher.full_name }}?')">
+                    <input type="hidden" name="back_fecha" value="{{ target_date.isoformat() }}">
+                    <input type="hidden" name="back_slot" value="{{ s.id }}">
                     <button class="btn btn-sm btn-outline-warning w-100"><i class="bi bi-arrow-counterclockwise"></i> Deshacer reincorp.</button>
                   </form>
                   {% endif %}
@@ -278,7 +283,7 @@
                 <span class="badge bg-warning text-dark" title="Ocupado — cubriendo una ausencia">
                   <i class="bi bi-person-fill-exclamation"></i> {{ t.full_name }} ({{ t.points }} pts)
                 </span>
-                {% elif current_user.is_management and item.all_guards_info %}
+                {% elif (current_user.is_management or is_display_user) and item.all_guards_info %}
                 <button type="button"
                         class="badge bg-success border-0 quick-assign-btn draggable-teacher"
                         style="cursor:grab"
@@ -315,7 +320,7 @@
                       title="Ocupado — cubriendo una ausencia">
                   <i class="bi bi-person-fill-exclamation"></i> {{ t.full_name }} ({{ t.points }} pts)
                 </span>
-                {% elif current_user.is_management and item.all_guards_info %}
+                {% elif (current_user.is_management or is_display_user) and item.all_guards_info %}
                 <button type="button"
                         class="badge border-0 quick-assign-btn draggable-teacher"
                         style="cursor:grab;background-color:#0d9488!important;color:#fff"
@@ -406,7 +411,7 @@
         </div>
       </div>
 
-    {% if current_user.is_management %}
+    {% if current_user.is_management or is_display_user %}
       <!-- Separador arrastrable -->
       <div id="resize-handle"
            style="height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;margin:2px 0;">
@@ -447,7 +452,7 @@
                       <i class="bi bi-person"></i> {{ ab.teacher }} — <strong>{{ ab.group }}</strong>
                     </span>
                     <a href="{{ url_for('absences.tasks_pdf', absence_id=ab.absence_id) }}"
-                       target="_blank" class="btn btn-outline-danger btn-sm py-0 px-1 ms-1" style="font-size:.7rem;"
+                       target="_blank" class="btn btn-outline-secondary btn-sm py-0 px-1 ms-1" style="font-size:.7rem;"
                        title="Imprimir tareas de este grupo">
                       <i class="bi bi-printer"></i> Grupo
                     </a>
@@ -535,7 +540,19 @@ document.getElementById('date-picker').addEventListener('change', function() {
   if (this.value) window.location.href = '/?fecha=' + this.value;
 });
 
-{% if is_today %}
+{% if is_today and not is_display_user %}
+(function liveClock() {
+  function tick() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2,'0');
+    const m = String(now.getMinutes()).padStart(2,'0');
+    const s = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('live-clock').textContent = h + ':' + m + ':' + s;
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+
 const socket = io();
 const channel = "general";
 socket.emit('join', { channel });
@@ -776,7 +793,7 @@ const firstTab = document.querySelector('[data-slot-tab]');
 activateTab(hashSlot || (firstTab && firstTab.dataset.slotTab));
 
 // ── Resize chat / tareas ─────────────────────────────────────────────────────
-{% if current_user.is_management %}
+{% if current_user.is_management or is_display_user %}
 (function() {
   const handle    = document.getElementById('resize-handle');
   const chatBox   = document.getElementById('chat-box');

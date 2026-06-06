@@ -123,6 +123,13 @@ def edit(aid):
     groups = Group.query.filter_by(active=True).order_by(Group.name).all()
     slots = current_app.config["TIME_SLOTS"]
 
+    from datetime import date as _date
+    is_past = activity.date < _date.today()
+
+    if request.method == "POST" and is_past:
+        flash("No se puede editar una actividad pasada.", "warning")
+        return redirect(url_for("activities.edit", aid=aid))
+
     if request.method == "POST":
         new_date = datetime.strptime(request.form["date"], "%Y-%m-%d").date()
         new_slot_ids = request.form.getlist("slot_ids")
@@ -188,7 +195,8 @@ def edit(aid):
         return redirect(url_for("activities.index"))
 
     return render_template("activities/edit.html", activity=activity,
-                           teachers=teachers, groups=groups, slots=slots)
+                           teachers=teachers, groups=groups, slots=slots,
+                           is_past=is_past)
 
 
 @activities_bp.route("/<int:aid>/eliminar", methods=["POST"])
@@ -198,6 +206,10 @@ def delete(aid):
         return redirect(url_for("dashboard.index"))
 
     activity = ExtraActivity.query.get_or_404(aid)
+    from datetime import date as _date
+    if activity.date < _date.today():
+        flash("No se puede eliminar una actividad pasada.", "warning")
+        return redirect(url_for("activities.edit", aid=aid))
     from app.models.guard import Guard, GuardRecord
 
     for at in activity.accompanying_teachers:

@@ -337,7 +337,7 @@ def room_delete(rid):
 @admin_bp.route("/horarios")
 @login_required
 def schedules():
-    if not _require_management():
+    if not current_user.is_management and current_user.role != "display":
         return redirect(url_for("dashboard.index"))
     from flask import current_app
     from sqlalchemy import func
@@ -389,7 +389,8 @@ def schedules():
                            days=days,
                            slots=slots_cfg,
                            groups=groups,
-                           rooms=rooms)
+                           rooms=rooms,
+                           can_edit=current_user.is_management)
 
 
 @admin_bp.route("/horarios/clonar-celda", methods=["POST"])
@@ -594,7 +595,13 @@ def teacher_send_welcome(tid):
 # ── Configuración ─────────────────────────────────────────────────────────────
 
 MAIL_KEYS = ["MAIL_SERVER", "MAIL_PORT", "MAIL_USE_TLS", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_DEFAULT_SENDER", "MAIL_WELCOME_TEMPLATE", "MAIL_JUSTIFICATION_TEMPLATE"]
-GENERAL_DEFAULTS = {"show_future_absences": False, "auto_justify_extracurricular": False, "blink_guard_alert": False}
+GENERAL_DEFAULTS = {
+    "show_future_absences": False,
+    "auto_justify_extracurricular": False,
+    "blink_guard_alert": False,
+    "presence_visible_to": "none",
+    "presence_detail": "count",
+}
 
 
 def _mail_config_path():
@@ -690,7 +697,9 @@ def config_general():
     current["GENERAL"] = {
         "show_future_absences":        bool(request.form.get("show_future_absences")),
         "auto_justify_extracurricular": bool(request.form.get("auto_justify_extracurricular")),
-        "blink_guard_alert":            bool(request.form.get("blink_guard_alert")),
+        "blink_guard_alert":           bool(request.form.get("blink_guard_alert")),
+        "presence_visible_to":         request.form.get("presence_visible_to", "none"),
+        "presence_detail":             request.form.get("presence_detail", "count"),
     }
     _write_mail_config(current)
     flash("Configuración general guardada.", "success")
@@ -1114,14 +1123,12 @@ def justification_report():
                            desde=desde_str, hasta=hasta_str, summary=summary)
 
 
-@admin_bp.route("/informe-justificacion/pdf")
+@admin_bp.route("/informe-justificacion/imprimir")
 @login_required
 def justification_report_pdf():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     from datetime import date as _date
-    from fpdf import FPDF
-    from flask import make_response
 
     desde_str = request.args.get("desde", "")
     hasta_str = request.args.get("hasta", "")
@@ -1134,94 +1141,13 @@ def justification_report_pdf():
 
     rows_data = _build_justification_report_data(desde, hasta)
 
-    FONT   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-
-    pdf = FPDF()
-    pdf.add_font("dv", "",  FONT)
-    pdf.add_font("dv", "B", FONT_B)
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-
-    institute = current_app.config.get("INSTITUTE_NAME", "IES")
-
-    # ── Cabecera ──
-    pdf.set_font("dv", "B", 16)
-    pdf.cell(0, 10, institute, ln=True, align="C")
-    pdf.set_font("dv", "B", 13)
-    pdf.cell(0, 8, "Informe de faltas sin justificar", ln=True, align="C")
-    pdf.set_font("dv", "", 10)
-    pdf.cell(0, 6,
-             f"Del {desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}",
-             ln=True, align="C")
-    pdf.ln(4)
-    pdf.set_draw_color(180, 180, 180)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(5)
-
-    if not rows_data:
-        pdf.set_font("dv", "", 11)
-        pdf.cell(0, 8, "No hay faltas sin justificar en el período seleccionado.", ln=True)
-    else:
-        total_slots = sum(t["total"] for t in rows_data)
-        total_teachers = len(rows_data)
-        pdf.set_font("dv", "", 9)
-        pdf.set_text_color(100, 100, 100)
-        pdf.cell(0, 6,
-                 f"{total_slots} tramo{'s' if total_slots != 1 else ''} sin justificar"
-                 f" en {total_teachers} profesor{'es' if total_teachers != 1 else ''}",
-                 ln=True)
-        pdf.set_text_color(0, 0, 0)
-        pdf.ln(4)
-
-        for teacher_data in rows_data:
-            teacher = teacher_data["teacher"]
-
-            # ── Nombre del profesor ──
-            pdf.set_font("dv", "B", 11)
-            pdf.set_fill_color(240, 240, 240)
-            pdf.cell(0, 7, f"  {teacher.full_name}", ln=True, fill=True)
-            pdf.ln(1)
-
-            for entry in teacher_data["entries"]:
-                # Línea fecha (abreviada: "Lun 01/06/2026")
-                pdf.set_font("dv", "B", 10)
-                pdf.cell(6)
-                pdf.cell(0, 6, entry["date_label"], ln=True)
-
-                # Línea tramos (indentada)
-                pdf.cell(12)
-                pdf.set_font("dv", "", 10)
-                if entry["full_day"]:
-                    pdf.set_text_color(180, 100, 0)
-                    pdf.cell(0, 6, "Día completo", ln=True)
-                    pdf.set_text_color(0, 0, 0)
-                else:
-                    slots_text = "  |  ".join(
-                        label for label, _s, _e in entry["slot_details"]
-                    )
-                    pdf.multi_cell(0, 6, slots_text)
-                pdf.ln(1)
-
-            # Total del profesor
-            pdf.set_font("dv", "", 9)
-            pdf.set_text_color(100, 100, 100)
-            pdf.cell(6)
-            pdf.cell(0, 5,
-                     f"Total: {teacher_data['total']} tramo{'s' if teacher_data['total'] != 1 else ''}"
-                     " sin justificar",
-                     ln=True)
-            pdf.set_text_color(0, 0, 0)
-            pdf.ln(2)
-            pdf.set_draw_color(210, 210, 210)
-            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-            pdf.ln(4)
-
-    response = make_response(bytes(pdf.output()))
-    fname = f"faltas_sin_justificar_{desde_str}_{hasta_str}.pdf"
-    response.headers["Content-Type"] = "application/pdf"
-    response.headers["Content-Disposition"] = f"inline; filename={fname}"
-    return response
+    return render_template(
+        "admin/print_justification.html",
+        desde=desde,
+        hasta=hasta,
+        rows_data=rows_data,
+        institute_name=current_app.config.get("INSTITUTE_NAME", ""),
+    )
 
 
 # ── Página de ayuda ───────────────────────────────────────────────────────────

@@ -5,8 +5,21 @@
 <div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
 <div class="d-flex justify-content-between align-items-center mb-0">
   <h4 class="mb-0"><i class="bi bi-backpack"></i> Editar actividad</h4>
-  <a href="{{ url_for('activities.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+  <div class="d-flex gap-2">
+    {% if not is_past %}
+    <button type="button" class="btn btn-outline-danger btn-sm"
+            data-bs-toggle="modal" data-bs-target="#modalEliminar">
+      <i class="bi bi-trash"></i> Eliminar
+    </button>
+    {% endif %}
+    <a href="{{ url_for('activities.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+  </div>
 </div>
+{% if is_past %}
+<div class="alert alert-secondary py-1 px-3 mb-0 mt-1 small">
+  <i class="bi bi-clock-history"></i> Actividad pasada — solo lectura.
+</div>
+{% endif %}
 </div>
 <div class="card">
   <div class="card-body">
@@ -52,7 +65,11 @@
             <span class="text-muted small fst-italic align-self-center" id="no-groups-msg" style="display:none">Sin grupos seleccionados</span>
           </div>
           <div class="position-relative">
-            <input type="text" id="group-search" class="form-control" autocomplete="off" placeholder="Buscar grupo...">
+            <input type="text" id="group-search" class="form-control pe-4" autocomplete="off" placeholder="Buscar grupo...">
+            <button type="button" id="group-search-clear"
+                    onclick="clearSearch('group-search','group-search-clear','group-suggestions')"
+                    style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;padding:0;line-height:1;cursor:pointer;color:#6c757d;"
+                    tabindex="-1">&#x2715;</button>
             <div id="group-suggestions" class="list-group position-absolute w-100 shadow-sm"
                  style="z-index:1050;display:none;max-height:220px;overflow-y:auto"></div>
           </div>
@@ -63,19 +80,49 @@
             <span class="text-muted small fst-italic align-self-center" id="no-teachers-msg" style="display:none">Sin profesores seleccionados</span>
           </div>
           <div class="position-relative">
-            <input type="text" id="teacher-search" class="form-control" autocomplete="off" placeholder="Buscar profesor...">
+            <input type="text" id="teacher-search" class="form-control pe-4" autocomplete="off" placeholder="Buscar profesor...">
+            <button type="button" id="teacher-search-clear"
+                    onclick="clearSearch('teacher-search','teacher-search-clear','teacher-suggestions')"
+                    style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;padding:0;line-height:1;cursor:pointer;color:#6c757d;"
+                    tabindex="-1">&#x2715;</button>
             <div id="teacher-suggestions" class="list-group position-absolute w-100 shadow-sm"
                  style="z-index:1050;display:none;max-height:220px;overflow-y:auto"></div>
           </div>
         </div>
       </div>
+      {% if not is_past %}
       <div class="mt-4">
         <button type="submit" class="btn btn-primary">Guardar cambios</button>
         <a href="{{ url_for('activities.index') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
       </div>
+      {% endif %}
     </form>
   </div>
 </div>
+
+{% if not is_past %}
+<div class="modal fade" id="modalEliminar" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-trash"></i> Eliminar actividad</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Seguro que quieres eliminar <strong>{{ activity.name }}</strong>?</p>
+        <p class="text-danger small mb-0"><i class="bi bi-exclamation-triangle"></i>
+          Se eliminarán también las ausencias y guardias generadas automáticamente para los profesores acompañantes.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form method="POST" action="{{ url_for('activities.delete', aid=activity.id) }}">
+          <button type="submit" class="btn btn-danger">Sí, eliminar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 <script>
@@ -136,9 +183,18 @@ document.getElementById('selected-teachers').addEventListener('click', function(
   if (!selTeachers.size) document.getElementById('no-teachers-msg').style.display = '';
 });
 
-function makeAutocomplete(inputId, suggId, data, onSelect) {
+function clearSearch(inputId, clearId, suggId) {
   const input = document.getElementById(inputId);
-  const sugg  = document.getElementById(suggId);
+  input.value = '';
+  document.getElementById(clearId).style.display = 'none';
+  document.getElementById(suggId).style.display = 'none';
+  input.focus();
+}
+
+function makeAutocomplete(inputId, clearId, suggId, data, onSelect) {
+  const input    = document.getElementById(inputId);
+  const clearBtn = document.getElementById(clearId);
+  const sugg     = document.getElementById(suggId);
   function render(q) {
     const matches = q ? data.filter(x => normalize(x.name).includes(q)) : data;
     if (!matches.length) { sugg.style.display = 'none'; return; }
@@ -149,13 +205,17 @@ function makeAutocomplete(inputId, suggId, data, onSelect) {
     sugg.style.display = 'block';
   }
   input.addEventListener('focus', () => render(normalize(input.value.trim())));
-  input.addEventListener('input', () => render(normalize(input.value.trim())));
+  input.addEventListener('input', function() {
+    clearBtn.style.display = this.value ? 'block' : 'none';
+    render(normalize(this.value.trim()));
+  });
   sugg.addEventListener('mousedown', function(e) {
     const btn = e.target.closest('[data-id]');
     if (!btn) return;
     e.preventDefault();
     onSelect(parseInt(btn.dataset.id), btn.dataset.name);
     input.value = '';
+    clearBtn.style.display = 'none';
     sugg.style.display = 'none';
   });
   document.addEventListener('click', function(e) {
@@ -163,8 +223,8 @@ function makeAutocomplete(inputId, suggId, data, onSelect) {
   });
 }
 
-makeAutocomplete('group-search',   'group-suggestions',   groupData,   addGroup);
-makeAutocomplete('teacher-search', 'teacher-suggestions', teacherData, addTeacher);
+makeAutocomplete('group-search',   'group-search-clear',   'group-suggestions',   groupData,   addGroup);
+makeAutocomplete('teacher-search', 'teacher-search-clear', 'teacher-suggestions', teacherData, addTeacher);
 
 // Pre-cargar grupos y profesores existentes
 {% for ag in activity.groups %}

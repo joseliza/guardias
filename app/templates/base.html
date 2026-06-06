@@ -11,7 +11,46 @@
 </head>
 <body>
 
-{% if current_user.is_authenticated %}
+{% if impersonating %}
+<div style="position:sticky;top:0;z-index:1100;background:#dc3545;color:#fff;padding:6px 16px;display:flex;align-items:center;justify-content:space-between;font-size:.9rem;">
+  <span><i class="bi bi-person-fill-exclamation"></i>
+    Viendo como <strong>{{ impersonating_as.full_name }}</strong> — solo lectura.
+    Sesión real: <strong>{{ real_user.full_name }}</strong>
+  </span>
+  <form method="POST" action="{{ url_for('impersonate.stop') }}" class="m-0">
+    <button type="submit" class="btn btn-sm btn-light text-danger fw-semibold py-0 px-2">
+      <i class="bi bi-box-arrow-right"></i> Volver a mi sesión
+    </button>
+  </form>
+</div>
+{% endif %}
+
+{% if current_user.is_authenticated and current_user.role == 'display' %}
+<nav class="navbar navbar-dark bg-primary sticky-top py-1" style="min-height:0;">
+  <div class="container-fluid">
+    <span class="navbar-brand mb-0 fw-bold" style="font-size:.95rem;">
+      <i class="bi bi-shield-check"></i> {{ config.INSTITUTE_NAME }}
+    </span>
+    <span id="display-nav-clock" class="text-white fw-bold mx-auto" style="font-size:1.5rem;font-variant-numeric:tabular-nums;letter-spacing:.04em;">--:--:--</span>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin.schedules') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-calendar3"></i> Horarios
+      </a>
+      {% if pantalla_mode %}
+      <form method="POST" action="{{ url_for('impersonate.leave_display') }}" class="m-0">
+        <button type="submit" class="btn btn-warning btn-sm text-dark fw-semibold">
+          <i class="bi bi-arrow-left-circle"></i> Volver a Admin
+        </button>
+      </form>
+      {% else %}
+      <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-box-arrow-right"></i> Salir
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</nav>
+{% elif current_user.is_authenticated %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
   <div class="container-fluid">
     <a class="navbar-brand fw-bold" href="{{ url_for('dashboard.index') }}">
@@ -40,9 +79,11 @@
         {% endif %}
         {% if current_user.is_management %}
         <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('display.index') }}" target="_blank">
-            <i class="bi bi-display"></i> Pantalla
-          </a>
+          <form method="POST" action="{{ url_for('impersonate.go_display') }}" class="d-inline m-0">
+            <button type="submit" class="btn btn-link nav-link px-2">
+              <i class="bi bi-display"></i> Pantalla
+            </button>
+          </form>
         </li>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-gear"></i> Admin</a>
@@ -71,6 +112,15 @@
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{{ url_for('admin.config') }}"><i class="bi bi-sliders"></i> Configuración</a></li>
             <li><hr class="dropdown-divider"></li>
+            {% if not impersonating %}
+            <li>
+              <a class="dropdown-item" href="#"
+                 data-bs-toggle="modal" data-bs-target="#modalVerComo">
+                <i class="bi bi-person-badge"></i> Ver como...
+              </a>
+            </li>
+            {% endif %}
+            <li><hr class="dropdown-divider"></li>
             <li>
               <a class="dropdown-item text-danger" href="#"
                  data-bs-toggle="modal" data-bs-target="#modalLimpiarChatNav">
@@ -82,6 +132,23 @@
         {% endif %}
       </ul>
       <ul class="navbar-nav align-items-center">
+        {% if presence_cfg.can_see %}
+        <li class="nav-item {% if presence_cfg.detail == 'names' %}dropdown{% endif %} me-1">
+          <a class="nav-link {% if presence_cfg.detail == 'names' %}dropdown-toggle{% endif %} d-flex align-items-center gap-1"
+             href="#" id="presence-toggle"
+             {% if presence_cfg.detail == 'names' %}data-bs-toggle="dropdown"{% endif %}
+             title="Usuarios conectados">
+            <i class="bi bi-people-fill"></i>
+            <span id="presence-count" class="badge bg-light text-primary">—</span>
+          </a>
+          {% if presence_cfg.detail == 'names' %}
+          <ul class="dropdown-menu dropdown-menu-end" id="presence-list" style="min-width:220px">
+            <li><h6 class="dropdown-header">Conectados ahora</h6></li>
+            <li><span class="dropdown-item-text text-muted small" id="presence-names">Cargando...</span></li>
+          </ul>
+          {% endif %}
+        </li>
+        {% endif %}
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('dashboard.help') }}" title="Ayuda">
             <i class="bi bi-question-circle"></i>
@@ -129,6 +196,36 @@
 <main class="{% block main_class %}container-fluid py-4{% endblock %}">
   {% block content %}{% endblock %}
 </main>
+
+{% if current_user.is_authenticated and current_user.is_management and not impersonating %}
+<div class="modal fade" id="modalVerComo" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-person-badge"></i> Ver como...</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">Simularás la vista de ese profesor en modo solo lectura. No podrás realizar ninguna acción en su nombre.</p>
+        <div class="position-relative mb-2">
+          <input type="text" id="impersonate-search" class="form-control pe-4" autocomplete="off" placeholder="Buscar profesor...">
+          <button type="button" id="impersonate-search-clear"
+                  style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;padding:0;cursor:pointer;color:#6c757d;"
+                  tabindex="-1">&#x2715;</button>
+          <div id="impersonate-suggestions" class="list-group position-absolute w-100 shadow-sm"
+               style="z-index:1060;display:none;max-height:260px;overflow-y:auto"></div>
+        </div>
+        <form id="impersonate-form" method="POST" action="">
+          <input type="hidden" id="impersonate-uid" name="uid" value="">
+          <button type="submit" id="impersonate-submit" class="btn btn-primary w-100" disabled>
+            <i class="bi bi-person-badge"></i> Simular sesión
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 {% if current_user.is_authenticated and current_user.is_management %}
 <div class="modal fade" id="modalLimpiarChatNav" tabindex="-1">
@@ -220,6 +317,114 @@ document.querySelectorAll('input[type="date"]').forEach(function(el) {
   window.addEventListener('resize', setStickyPageHeaders);
 })();
 </script>
+{% if current_user.is_authenticated %}
+<script>
+(function() {
+  // Heartbeat — mantiene al usuario como "conectado"
+  function sendHeartbeat() {
+    fetch('/api/presencia', {method:'POST'}).catch(function(){});
+  }
+  sendHeartbeat();
+  setInterval(sendHeartbeat, 30000);
+
+  {% if presence_cfg.can_see %}
+  var showNames = {{ 'true' if presence_cfg.detail == 'names' else 'false' }};
+  var countEl  = document.getElementById('presence-count');
+  var namesEl  = document.getElementById('presence-names');
+
+  function refreshPresence() {
+    fetch('/api/presencia')
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        if (countEl) countEl.textContent = data.count;
+        if (showNames && namesEl) {
+          namesEl.textContent = data.users.length
+            ? data.users.map(function(u){ return u.name; }).join('\n')
+            : 'Nadie más conectado';
+          namesEl.style.whiteSpace = 'pre';
+        }
+      })
+      .catch(function(){});
+  }
+  refreshPresence();
+  setInterval(refreshPresence, 45000);
+  {% endif %}
+})();
+</script>
+{% endif %}
+{% if current_user.is_authenticated and current_user.role == 'display' %}
+<script>
+(function() {
+  function tick() {
+    const now = new Date();
+    document.getElementById('display-nav-clock').textContent =
+      String(now.getHours()).padStart(2,'0') + ':' +
+      String(now.getMinutes()).padStart(2,'0') + ':' +
+      String(now.getSeconds()).padStart(2,'0');
+  }
+  tick(); setInterval(tick, 1000);
+})();
+</script>
+{% endif %}
+
 {% block scripts %}{% endblock %}
+
+{% if current_user.is_authenticated and current_user.is_management and not impersonating %}
+<script>
+(function() {
+  const teachers = [{% for t in impersonate_teachers %}{ id: {{ t.id }}, name: {{ t.full_name|tojson }} },{% endfor %}];
+  const input    = document.getElementById('impersonate-search');
+  const clearBtn = document.getElementById('impersonate-search-clear');
+  const sugg     = document.getElementById('impersonate-suggestions');
+  const form     = document.getElementById('impersonate-form');
+  const submit   = document.getElementById('impersonate-submit');
+  const uidInput = document.getElementById('impersonate-uid');
+  if (!input) return;
+
+  function render(q) {
+    const matches = q ? teachers.filter(t => normalize(t.name).includes(normalize(q))) : teachers;
+    if (!matches.length) { sugg.style.display = 'none'; return; }
+    sugg.innerHTML = matches.slice(0, 20).map(t =>
+      `<button type="button" class="list-group-item list-group-item-action py-1 px-3"
+               data-id="${t.id}" data-name="${t.name.replace(/"/g,'&quot;')}">${t.name}</button>`
+    ).join('');
+    sugg.style.display = 'block';
+  }
+
+  input.addEventListener('focus', () => render(input.value.trim()));
+  input.addEventListener('input', function() {
+    clearBtn.style.display = this.value ? 'block' : 'none';
+    if (!this.value) { submit.disabled = true; uidInput.value = ''; }
+    render(this.value.trim());
+  });
+  clearBtn.addEventListener('click', function() {
+    input.value = ''; this.style.display = 'none';
+    sugg.style.display = 'none';
+    submit.disabled = true; uidInput.value = '';
+    input.focus();
+  });
+  sugg.addEventListener('mousedown', function(e) {
+    const btn = e.target.closest('[data-id]');
+    if (!btn) return;
+    e.preventDefault();
+    input.value = btn.dataset.name;
+    uidInput.value = btn.dataset.id;
+    form.action = '/admin/simular/' + btn.dataset.id;
+    submit.disabled = false;
+    clearBtn.style.display = 'block';
+    sugg.style.display = 'none';
+  });
+  document.addEventListener('click', function(e) {
+    if (!input.contains(e.target) && !sugg.contains(e.target)) sugg.style.display = 'none';
+  });
+
+  document.getElementById('modalVerComo').addEventListener('shown.bs.modal', function() {
+    input.value = ''; uidInput.value = ''; submit.disabled = true;
+    clearBtn.style.display = 'none'; sugg.style.display = 'none';
+    input.focus();
+  });
+})();
+</script>
+{% endif %}
 </body>
 </html>

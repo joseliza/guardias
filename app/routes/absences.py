@@ -25,49 +25,69 @@ absences_bp = Blueprint("absences", __name__, url_prefix="/ausencias")
 @login_required
 def index():
     from collections import defaultdict
-    if current_user.is_management:
-        absences = Absence.query.order_by(Absence.date.desc(), Absence.slot_id).all()
-    else:
-        absences = Absence.query.filter_by(teacher_id=current_user.id).order_by(Absence.date.desc(), Absence.slot_id).all()
-
-    slots_cfg = current_app.config["TIME_SLOTS"]
-    slot_map = {s["id"]: s for s in slots_cfg}
-
-    # Agrupar por fecha → lista de (slot_cfg, [absences])
-    by_date = defaultdict(lambda: defaultdict(list))
-    for a in absences:
-        by_date[a.date][a.slot_id].append(a)
-
-    # Ordenar: fechas desc, slots asc
-    grouped = []
-    for d in sorted(by_date.keys(), reverse=True):
-        slots_in_day = []
-        for sid in sorted(by_date[d].keys()):
-            slots_in_day.append({
-                "slot": slot_map.get(sid),
-                "absences": by_date[d][sid],
-            })
-        grouped.append({"date": d, "slots": slots_in_day})
+    from datetime import timedelta
 
     today = date.today()
+    fecha_str = request.args.get("fecha")
+    try:
+        target_date = date.fromisoformat(fecha_str) if fecha_str else today
+    except ValueError:
+        target_date = today
+
+    is_today    = target_date == today
+    is_editable = target_date >= today
+    prev_date   = target_date - timedelta(days=1)
+    next_date   = target_date + timedelta(days=1)
 
     # Modal de advertencia de tareas — persiste en sesión hasta descartar o completar
     if request.args.get("dismiss_tasks"):
         session.pop("task_prompt_ids", None)
-        return redirect(url_for("absences.index"))
+        return redirect(url_for("absences.index", fecha=target_date.isoformat()))
+
+    if current_user.is_management:
+        absences = Absence.query.filter_by(date=target_date).order_by(Absence.slot_id).all()
+    else:
+        absences = Absence.query.filter_by(teacher_id=current_user.id, date=target_date).order_by(Absence.slot_id).all()
+
+    slots_cfg = current_app.config["TIME_SLOTS"]
+    slot_map = {s["id"]: s for s in slots_cfg}
+
+    by_slot = defaultdict(list)
+    for a in absences:
+        by_slot[a.slot_id].append(a)
+
+    slots_in_day = [
+        {"slot": slot_map.get(sid), "absences": by_slot[sid]}
+        for sid in sorted(by_slot.keys())
+    ]
 
     prompt_ids = session.get("task_prompt_ids", [])
     prompt_absences = []
     if prompt_ids:
         for a in Absence.query.filter(Absence.id.in_(prompt_ids)).all():
             prompt_absences.append({"absence": a, "has_tasks": a.tasks.count() > 0})
-        # Auto-limpiar cuando todas las ausencias ya tienen tareas
         if all(p["has_tasks"] for p in prompt_absences):
             session.pop("task_prompt_ids", None)
             prompt_absences = []
 
-    return render_template("absences/index.html", grouped=grouped, slots=slots_cfg,
-                           slot_map=slot_map, today=today, prompt_absences=prompt_absences)
+    now_t = datetime.now().time()
+    active_slot_ids = set()
+    for s in slots_cfg:
+        if s.get("is_break"):
+            continue
+        try:
+            if datetime.strptime(s["start"], "%H:%M").time() <= now_t <= datetime.strptime(s["end"], "%H:%M").time():
+                active_slot_ids.add(s["id"])
+        except (KeyError, ValueError):
+            pass
+
+    return render_template("absences/index.html",
+                           slots_in_day=slots_in_day, slots=slots_cfg,
+                           slot_map=slot_map, today=today,
+                           target_date=target_date, prev_date=prev_date,
+                           next_date=next_date, is_today=is_today, is_editable=is_editable,
+                           prompt_absences=prompt_absences,
+                           active_slot_ids=active_slot_ids)
 
 
 @absences_bp.route("/nueva", methods=["GET", "POST"])
@@ -87,10 +107,19 @@ def create():
         slot_ids = request.form.getlist("slot_ids")
         reason = request.form.get("comment", "") or request.form.get("reason", "")
 
+        today_d = date.today()
+        now_t = datetime.now().time()
+
+        if absence_date < today_d:
+            flash("No se pueden registrar ausencias para fechas pasadas.", "danger")
+            return redirect(url_for("absences.create"))
+
         day_idx = absence_date.weekday()
         configured_penalty = current_app.config.get("ABSENCE_PENALTY", -1.0)
         slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
         skipped_free = []
+        skipped_past = []
+        skipped_duplicate = []
         normal_slot_ids = []  # tramos normales para auto-asignar después
         created_ids = []
 
@@ -98,11 +127,23 @@ def create():
             slot_id = int(slot_id)
             slot_cfg = slots_cfg.get(slot_id, {})
             is_break = slot_cfg.get("is_break", False)
+            label = slot_cfg.get("label", f"Tramo {slot_id}")
+
+            # Tramo ya pasado (solo aplica si es hoy)
+            if absence_date == today_d:
+                try:
+                    slot_end_t = datetime.strptime(slot_cfg["end"], "%H:%M").time()
+                    if now_t > slot_end_t:
+                        skipped_past.append(label)
+                        continue
+                except (KeyError, ValueError):
+                    pass
 
             existing = Absence.query.filter_by(
                 teacher_id=teacher_id, date=absence_date, slot_id=slot_id
             ).filter(Absence.status != "returned").first()
             if existing:
+                skipped_duplicate.append(label)
                 continue
 
             if is_break:
@@ -196,10 +237,16 @@ def create():
         for slot_id in normal_slot_ids:
             auto_assign_pending_guards(absence_date, slot_id)
 
+        if skipped_past:
+            flash(f"Tramos omitidos (ya han finalizado): {', '.join(skipped_past)}.", "warning")
+        if skipped_duplicate:
+            flash(f"Ausencia ya existente para: {', '.join(skipped_duplicate)}.", "warning")
         if skipped_free:
             flash(f"Tramos omitidos (el profesor no tiene clase ni guardia asignada): {', '.join(skipped_free)}.", "warning")
-        flash("Ausencia registrada correctamente.", "success")
-        return redirect(url_for("absences.index"))
+        if created_ids:
+            flash("Ausencia registrada correctamente.", "success")
+            return redirect(url_for("absences.index"))
+        return redirect(url_for("absences.create"))
 
     return render_template("absences/create.html", teachers=teachers, slots=slots,
                            today=date.today().isoformat())
@@ -224,26 +271,6 @@ def schedule_json(tid, day_idx):
     result.sort(key=lambda x: x["id"])
     return jsonify(result)
 
-
-def _append_attachments(main_bytes, tasks, upload_dir):
-    """Añade las páginas de los PDFs adjuntos a las tareas al PDF principal."""
-    import io
-    from pypdf import PdfWriter, PdfReader
-
-    attachments = [t.attachment for t in tasks if t.attachment]
-    if not attachments:
-        return main_bytes
-
-    writer = PdfWriter()
-    writer.append(PdfReader(io.BytesIO(main_bytes)))
-    for filename in attachments:
-        path = os.path.join(upload_dir, filename)
-        if os.path.exists(path):
-            writer.append(PdfReader(path))
-
-    buf = io.BytesIO()
-    writer.write(buf)
-    return buf.getvalue()
 
 
 def _save_task_pdf(file):
@@ -387,11 +414,88 @@ def delete_task(task_id):
     return redirect(url_for("absences.tasks", absence_id=absence.id))
 
 
-@absences_bp.route("/<int:absence_id>/tareas/pdf")
+@absences_bp.route("/<int:absence_id>/tareas/imprimir")
 @login_required
 def tasks_pdf(absence_id):
+    absence = Absence.query.get_or_404(absence_id)
+    tasks = absence.tasks.all()
+
+    slots = current_app.config["TIME_SLOTS"]
+    slot = next((s for s in slots if s["id"] == absence.slot_id), None)
+    slot_label = f"{slot['label']} ({slot['start']}-{slot['end']})" if slot else str(absence.slot_id)
+
+    schedule_entry = TeacherSchedule.query.filter_by(
+        teacher_id=absence.teacher_id,
+        day_of_week=absence.date.weekday(),
+        slot_id=absence.slot_id,
+        is_guard_slot=False,
+    ).first()
+    group = schedule_entry.group if schedule_entry else None
+
+    return render_template(
+        "absences/print_tasks.html",
+        absence=absence,
+        tasks=tasks,
+        slot_label=slot_label,
+        group_name=group.name if group else "—",
+        room_name=schedule_entry.room.name if schedule_entry and schedule_entry.room else "—",
+        institute_name=current_app.config.get("INSTITUTE_NAME", ""),
+        has_attachments=any(t.attachment for t in tasks),
+    )
+
+
+@absences_bp.route("/imprimir-tramo/<date_str>/<int:slot_id>")
+@login_required
+def slot_pdf(date_str, slot_id):
+    from datetime import date as date_type
+
+    target_date = date_type.fromisoformat(date_str)
+    absences = Absence.query.filter_by(date=target_date, slot_id=slot_id).order_by(Absence.id).all()
+    if not absences:
+        flash("No hay ausencias en este tramo.", "warning")
+        return redirect(url_for("dashboard.index"))
+
+    slots = current_app.config["TIME_SLOTS"]
+    slot = next((s for s in slots if s["id"] == slot_id), None)
+    slot_label = f"{slot['label']} ({slot['start']}-{slot['end']})" if slot else str(slot_id)
+
+    entries = []
+    for absence in absences:
+        tasks = absence.tasks.all()
+        entry = TeacherSchedule.query.filter_by(
+            teacher_id=absence.teacher_id,
+            day_of_week=target_date.weekday(),
+            slot_id=slot_id,
+            is_guard_slot=False,
+        ).first()
+        group = entry.group if entry else None
+        entries.append({
+            "teacher_name": absence.teacher.full_name,
+            "group_name": group.name if group else "—",
+            "room_name": entry.room.name if entry and entry.room else "—",
+            "tasks": tasks,
+        })
+
+    return render_template(
+        "absences/print_slot.html",
+        target_date=target_date,
+        slot_label=slot_label,
+        entries=entries,
+        institute_name=current_app.config.get("INSTITUTE_NAME", ""),
+        has_attachments=any(t.attachment for item in entries for t in item["tasks"]),
+        date_str=date_str,
+        slot_id=slot_id,
+    )
+
+
+@absences_bp.route("/<int:absence_id>/tareas/descargar")
+@login_required
+def tasks_download(absence_id):
+    """Descarga PDF fusionado con adjuntos (solo cuando hay archivos adjuntos)."""
+    import io
     from fpdf import FPDF
     from flask import make_response
+    from pypdf import PdfWriter, PdfReader
 
     absence = Absence.query.get_or_404(absence_id)
     tasks = absence.tasks.all()
@@ -400,8 +504,6 @@ def tasks_pdf(absence_id):
     slot = next((s for s in slots if s["id"] == absence.slot_id), None)
     slot_label = f"{slot['label']} ({slot['start']}-{slot['end']})" if slot else str(absence.slot_id)
 
-    # Grupo del profesor en ese tramo
-    from app.models.schedule import TeacherSchedule
     schedule_entry = TeacherSchedule.query.filter_by(
         teacher_id=absence.teacher_id,
         day_of_week=absence.date.weekday(),
@@ -412,7 +514,7 @@ def tasks_pdf(absence_id):
     group_name = group.name if group else "-"
     room_name = schedule_entry.room.name if schedule_entry and schedule_entry.room else "-"
 
-    FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    FONT   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
     pdf = FPDF()
@@ -421,37 +523,29 @@ def tasks_pdf(absence_id):
     pdf.add_page()
 
     pdf.set_font("dv", "B", 16)
-    pdf.cell(0, 10, current_app.config["INSTITUTE_NAME"], ln=True, align="C")
+    pdf.cell(0, 10, current_app.config.get("INSTITUTE_NAME", ""), ln=True, align="C")
     pdf.set_font("dv", "", 11)
     pdf.cell(0, 7, "Tareas para guardia", ln=True, align="C")
-    pdf.ln(5)
+    pdf.ln(4)
+    pdf.set_draw_color(180, 180, 180)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(4)
 
-    pdf.set_font("dv", "B", 11)
-    pdf.cell(40, 7, "Fecha:")
-    pdf.set_font("dv", "", 11)
-    pdf.cell(0, 7, absence.date.strftime("%d/%m/%Y"), ln=True)
+    for label, value in [
+        ("Fecha:",      absence.date.strftime("%d/%m/%Y")),
+        ("Tramo:",      slot_label),
+        ("Profesor/a:", absence.teacher.full_name),
+        ("Grupo:",      group_name),
+        ("Aula:",       room_name),
+    ]:
+        pdf.set_font("dv", "B", 11)
+        pdf.cell(42, 7, label)
+        pdf.set_font("dv", "", 11)
+        pdf.cell(0, 7, value, ln=True)
 
-    pdf.set_font("dv", "B", 11)
-    pdf.cell(40, 7, "Tramo:")
-    pdf.set_font("dv", "", 11)
-    pdf.cell(0, 7, slot_label, ln=True)
-
-    pdf.set_font("dv", "B", 11)
-    pdf.cell(40, 7, "Profesor/a:")
-    pdf.set_font("dv", "", 11)
-    pdf.cell(0, 7, absence.teacher.full_name, ln=True)
-
-    pdf.set_font("dv", "B", 11)
-    pdf.cell(40, 7, "Grupo:")
-    pdf.set_font("dv", "", 11)
-    pdf.cell(0, 7, group_name, ln=True)
-
-    pdf.set_font("dv", "B", 11)
-    pdf.cell(40, 7, "Aula:")
-    pdf.set_font("dv", "", 11)
-    pdf.cell(0, 7, room_name, ln=True)
-
-    pdf.ln(5)
+    pdf.ln(4)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(4)
     pdf.set_font("dv", "B", 12)
     pdf.cell(0, 8, "Tareas:", ln=True)
     pdf.set_font("dv", "", 11)
@@ -465,22 +559,32 @@ def tasks_pdf(absence_id):
         pdf.cell(0, 7, "Sin tareas registradas.", ln=True)
 
     upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
-    pdf_bytes = _append_attachments(bytes(pdf.output()), tasks, upload_dir)
+    writer = PdfWriter()
+    writer.append(PdfReader(io.BytesIO(bytes(pdf.output()))))
+    for task in tasks:
+        if task.attachment:
+            path = os.path.join(upload_dir, task.attachment)
+            if os.path.exists(path):
+                writer.append(PdfReader(path))
 
-    response = make_response(pdf_bytes)
+    buf = io.BytesIO()
+    writer.write(buf)
+    response = make_response(buf.getvalue())
     filename = f"tareas_{absence.date.isoformat()}_tramo{absence.slot_id}.pdf"
     response.headers["Content-Type"] = "application/pdf"
     response.headers["Content-Disposition"] = f"attachment; filename={filename}"
     return response
 
 
-@absences_bp.route("/pdf-tramo/<date_str>/<int:slot_id>")
+@absences_bp.route("/descargar-tramo/<date_str>/<int:slot_id>")
 @login_required
-def slot_pdf(date_str, slot_id):
+def slot_download(date_str, slot_id):
+    """Descarga PDF fusionado de todas las ausencias del tramo, con adjuntos."""
+    import io
     from fpdf import FPDF
     from flask import make_response
+    from pypdf import PdfWriter, PdfReader
     from datetime import date as date_type
-    from app.models.schedule import TeacherSchedule
 
     target_date = date_type.fromisoformat(date_str)
     absences = Absence.query.filter_by(date=target_date, slot_id=slot_id).order_by(Absence.id).all()
@@ -492,13 +596,9 @@ def slot_pdf(date_str, slot_id):
     slot = next((s for s in slots if s["id"] == slot_id), None)
     slot_label = f"{slot['label']} ({slot['start']}-{slot['end']})" if slot else str(slot_id)
 
-    import io
-    from pypdf import PdfWriter, PdfReader
-
     FONT   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
     upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
-
     writer = PdfWriter()
 
     for absence in absences:
@@ -510,33 +610,27 @@ def slot_pdf(date_str, slot_id):
             is_guard_slot=False,
         ).first()
         group = entry.group if entry else None
-        group_name = group.name if group else "-"
-        room_name = entry.room.name if entry and entry.room else "-"
 
         pdf = FPDF()
         pdf.add_font("dv", "",  FONT)
         pdf.add_font("dv", "B", FONT_B)
         pdf.add_page()
 
-        # Cabecera
         pdf.set_font("dv", "B", 16)
-        pdf.cell(0, 10, current_app.config["INSTITUTE_NAME"], ln=True, align="C")
+        pdf.cell(0, 10, current_app.config.get("INSTITUTE_NAME", ""), ln=True, align="C")
         pdf.set_font("dv", "", 11)
         pdf.cell(0, 7, "Tareas para guardia", ln=True, align="C")
         pdf.ln(4)
-
-        # Línea separadora
         pdf.set_draw_color(180, 180, 180)
         pdf.line(10, pdf.get_y(), 200, pdf.get_y())
         pdf.ln(4)
 
-        # Datos
         for label, value in [
             ("Fecha:",      target_date.strftime("%d/%m/%Y")),
             ("Tramo:",      slot_label),
             ("Profesor/a:", absence.teacher.full_name),
-            ("Grupo:",      group_name),
-            ("Aula:",       room_name),
+            ("Grupo:",      group.name if group else "-"),
+            ("Aula:",       entry.room.name if entry and entry.room else "-"),
         ]:
             pdf.set_font("dv", "B", 11)
             pdf.cell(42, 7, label)
@@ -546,7 +640,6 @@ def slot_pdf(date_str, slot_id):
         pdf.ln(4)
         pdf.line(10, pdf.get_y(), 200, pdf.get_y())
         pdf.ln(4)
-
         pdf.set_font("dv", "B", 12)
         pdf.cell(0, 8, "Tareas:", ln=True)
         pdf.set_font("dv", "", 11)
@@ -559,10 +652,7 @@ def slot_pdf(date_str, slot_id):
         else:
             pdf.cell(0, 7, "El profesor/a no ha dejado tareas.", ln=True)
 
-        # Añadir página(s) de esta ausencia al ensamblador
         writer.append(PdfReader(io.BytesIO(bytes(pdf.output()))))
-
-        # Adjuntos de las tareas de esta ausencia, justo a continuación
         for task in tasks:
             if task.attachment:
                 path = os.path.join(upload_dir, task.attachment)
@@ -571,9 +661,7 @@ def slot_pdf(date_str, slot_id):
 
     buf = io.BytesIO()
     writer.write(buf)
-    pdf_bytes = buf.getvalue()
-
-    response = make_response(pdf_bytes)
+    response = make_response(buf.getvalue())
     filename = f"tareas_{date_str}_tramo{slot_id}.pdf"
     response.headers["Content-Type"] = "application/pdf"
     response.headers["Content-Disposition"] = f"attachment; filename={filename}"
@@ -601,6 +689,7 @@ def mark_returned(absence_id):
             return redirect(url_for("dashboard.index", fecha=absence.date.isoformat()))
 
     absence.status = "returned"
+    absence.returned_at = datetime.now()
     if absence.guard:
         absence.guard.status = "returned"
     db.session.commit()
@@ -613,19 +702,54 @@ def mark_returned(absence_id):
         return redirect(url_for("display.index"))
     if back == "absences":
         return redirect(url_for("absences.index"))
-    return redirect(url_for("dashboard.index", fecha=absence.date.isoformat()) + f"#slot-{absence.slot_id}")
+    fecha = request.form.get("back_fecha") or absence.date.isoformat()
+    slot  = request.form.get("back_slot") or absence.slot_id
+    return redirect(url_for("dashboard.index", fecha=fecha) + f"#slot-{slot}")
 
 
 @absences_bp.route("/<int:absence_id>/deshacer-reincorporacion", methods=["POST"])
 @login_required
 def unmark_returned(absence_id):
+    from datetime import datetime as _dt
+
     absence = Absence.query.get_or_404(absence_id)
 
-    if not current_user.is_management:
-        flash("Sin permiso.", "danger")
+    today = date.today()
+    # Fecha pasada: nunca se puede deshacer
+    if absence.date < today:
+        flash("No se puede deshacer una reincorporación de un día pasado.", "danger")
         return redirect(url_for("dashboard.index", fecha=absence.date.isoformat()))
 
+    # Hoy: solo dentro del tramo horario
+    if absence.date == today:
+        slots_cfg = current_app.config["TIME_SLOTS"]
+        slot = next((s for s in slots_cfg if s["id"] == absence.slot_id), None)
+        now_t = _dt.now().time()
+        if slot:
+            try:
+                slot_start = _dt.strptime(slot["start"], "%H:%M").time()
+                slot_end   = _dt.strptime(slot["end"],   "%H:%M").time()
+                if not (slot_start <= now_t <= slot_end):
+                    flash("Solo se puede deshacer la reincorporación dentro del tramo horario.", "danger")
+                    return redirect(url_for("dashboard.index", fecha=absence.date.isoformat()))
+            except (KeyError, ValueError):
+                pass
+    # Fecha futura: siempre permitido (el tramo aún no ha ocurrido)
+
+    # Permitido a: directivos, y profesor con guardia en ese tramo
+    if not current_user.is_management:
+        has_guard = TeacherSchedule.query.filter_by(
+            teacher_id=current_user.id,
+            day_of_week=today.weekday(),
+            slot_id=absence.slot_id,
+            is_guard_slot=True,
+        ).first()
+        if not has_guard:
+            flash("Sin permiso.", "danger")
+            return redirect(url_for("dashboard.index", fecha=absence.date.isoformat()))
+
     absence.status = "pending"
+    absence.returned_at = None
     if absence.guard and absence.guard.status == "returned":
         for rec in absence.guard.records.all():
             teacher = db.session.get(User, rec.teacher_id)
@@ -635,4 +759,10 @@ def unmark_returned(absence_id):
         absence.guard.status = "pending"
     db.session.commit()
     flash("Reincorporación deshecha. El profesor figura de nuevo como ausente.", "warning")
-    return redirect(url_for("absences.index"))
+
+    back = request.form.get("back", "dashboard")
+    if back == "absences":
+        return redirect(url_for("absences.index"))
+    fecha = request.form.get("back_fecha") or absence.date.isoformat()
+    slot  = request.form.get("back_slot") or absence.slot_id
+    return redirect(url_for("dashboard.index", fecha=fecha) + f"#slot-{slot}")

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Tareas – {{ absence.teacher.full_name }} – {{ absence.date.strftime('%d/%m/%Y') }}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #000; padding: 1.5cm; }
+    h1 { font-size: 16px; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 4px; }
+    .meta { font-size: 11px; color: #555; margin-bottom: 16px; }
+    .info-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    .info-table td { padding: 3px 6px; font-size: 11px; }
+    .info-table td:first-child { font-weight: bold; width: 110px; }
+    .tasks-header { font-weight: bold; font-size: 13px; margin-bottom: 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+    .task-row { padding: 5px 0; border-bottom: 1px solid #eee; font-size: 11px; }
+    .task-row:last-child { border-bottom: none; }
+    .task-num { font-weight: bold; min-width: 20px; display: inline-block; }
+    .task-attachment { font-size: 10px; color: #c00; margin-left: 6px; }
+    .no-tasks { color: #888; font-style: italic; }
+    @media print {
+      body { padding: 1cm; }
+      .no-print { display: none; }
+      a { text-decoration: none; color: inherit; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="no-print" style="margin-bottom:16px;">
+  <button onclick="window.print()" style="padding:6px 14px;font-size:13px;cursor:pointer;">🖨 Imprimir</button>
+  {% if has_attachments %}
+  <a href="{{ url_for('absences.tasks_download', absence_id=absence.id) }}"
+     style="padding:6px 14px;font-size:13px;margin-left:8px;cursor:pointer;text-decoration:none;display:inline-block;border:1px solid #c00;color:#c00;border-radius:4px;">
+    ⬇ Descargar PDF (con adjuntos)
+  </a>
+  {% endif %}
+  <button onclick="window.close()" style="padding:6px 14px;font-size:13px;margin-left:8px;cursor:pointer;">Cerrar</button>
+</div>
+
+<h1>{{ institute_name }}</h1>
+<div class="meta">Tareas para guardia &nbsp;·&nbsp; {{ absence.date | fecha_es }}</div>
+
+<table class="info-table">
+  <tr><td>Tramo:</td><td>{{ slot_label }}</td></tr>
+  <tr><td>Profesor/a:</td><td>{{ absence.teacher.full_name }}</td></tr>
+  <tr><td>Grupo:</td><td>{{ group_name }}</td></tr>
+  <tr><td>Aula:</td><td>{{ room_name }}</td></tr>
+</table>
+
+<div class="tasks-header">Tareas</div>
+
+{% if tasks %}
+  {% for task in tasks %}
+  <div class="task-row">
+    <span class="task-num">{{ loop.index }}.</span>
+    {{ task.description }}
+    {% if task.attachment %}
+    <a href="{{ url_for('absences.task_attachment', task_id=task.id) }}" target="_blank"
+       class="task-attachment no-print">[Ver PDF adjunto]</a>
+    <span class="task-attachment" style="display:none" id="print-att-{{ task.id }}"> [adjunto PDF]</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="no-tasks">Sin tareas registradas.</p>
+{% endif %}
+
+<script>
+  window.addEventListener('load', function() {
+    // Muestra texto de adjunto al imprimir
+    document.querySelectorAll('[id^="print-att-"]').forEach(function(el) {
+      el.style.display = 'inline';
+    });
+    window.print();
+  });
+</script>
+</body>
+</html>

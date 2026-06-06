@@ -51,7 +51,11 @@
             <span class="text-muted small fst-italic align-self-center" id="no-groups-msg">Sin grupos seleccionados</span>
           </div>
           <div class="position-relative">
-            <input type="text" id="group-search" class="form-control" autocomplete="off" placeholder="Buscar grupo...">
+            <input type="text" id="group-search" class="form-control pe-4" autocomplete="off" placeholder="Buscar grupo...">
+            <button type="button" id="group-search-clear"
+                    onclick="clearSearch('group-search','group-search-clear','group-suggestions')"
+                    style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;padding:0;line-height:1;cursor:pointer;color:#6c757d;"
+                    tabindex="-1">&#x2715;</button>
             <div id="group-suggestions" class="list-group position-absolute w-100 shadow-sm"
                  style="z-index:1050;display:none;max-height:220px;overflow-y:auto"></div>
           </div>
@@ -62,7 +66,11 @@
             <span class="text-muted small fst-italic align-self-center" id="no-teachers-msg">Sin profesores seleccionados</span>
           </div>
           <div class="position-relative">
-            <input type="text" id="teacher-search" class="form-control" autocomplete="off" placeholder="Buscar profesor...">
+            <input type="text" id="teacher-search" class="form-control pe-4" autocomplete="off" placeholder="Buscar profesor...">
+            <button type="button" id="teacher-search-clear"
+                    onclick="clearSearch('teacher-search','teacher-search-clear','teacher-suggestions')"
+                    style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;padding:0;line-height:1;cursor:pointer;color:#6c757d;"
+                    tabindex="-1">&#x2715;</button>
             <div id="teacher-suggestions" class="list-group position-absolute w-100 shadow-sm"
                  style="z-index:1050;display:none;max-height:220px;overflow-y:auto"></div>
           </div>
@@ -140,9 +148,19 @@ document.getElementById('selected-teachers').addEventListener('click', function(
   if (!selTeachers.size) document.getElementById('no-teachers-msg').style.display = '';
 });
 
-// ── Autocomplete genérico ─────────────────────────────────────────────────────
-function makeAutocomplete(inputId, suggId, data, onSelect) {
+// ── X clear button ────────────────────────────────────────────────────────────
+function clearSearch(inputId, clearId, suggId) {
   const input = document.getElementById(inputId);
+  input.value = '';
+  document.getElementById(clearId).style.display = 'none';
+  document.getElementById(suggId).style.display = 'none';
+  input.focus();
+}
+
+// ── Autocomplete genérico ─────────────────────────────────────────────────────
+function makeAutocomplete(inputId, clearId, suggId, data, onSelect) {
+  const input = document.getElementById(inputId);
+  const clearBtn = document.getElementById(clearId);
   const sugg  = document.getElementById(suggId);
 
   function render(q) {
@@ -156,7 +174,10 @@ function makeAutocomplete(inputId, suggId, data, onSelect) {
   }
 
   input.addEventListener('focus',  () => render(normalize(input.value.trim())));
-  input.addEventListener('input',  () => render(normalize(input.value.trim())));
+  input.addEventListener('input',  function() {
+    clearBtn.style.display = this.value ? 'block' : 'none';
+    render(normalize(this.value.trim()));
+  });
 
   sugg.addEventListener('mousedown', function(e) {
     const btn = e.target.closest('[data-id]');
@@ -164,6 +185,7 @@ function makeAutocomplete(inputId, suggId, data, onSelect) {
     e.preventDefault();
     onSelect(parseInt(btn.dataset.id), btn.dataset.name);
     input.value = '';
+    clearBtn.style.display = 'none';
     sugg.style.display = 'none';
   });
 
@@ -172,7 +194,7 @@ function makeAutocomplete(inputId, suggId, data, onSelect) {
   });
 }
 
-makeAutocomplete('group-search',   'group-suggestions',   groupData,   addGroup);
-makeAutocomplete('teacher-search', 'teacher-suggestions', teacherData, addTeacher);
+makeAutocomplete('group-search',   'group-search-clear',   'group-suggestions',   groupData,   addGroup);
+makeAutocomplete('teacher-search', 'teacher-search-clear', 'teacher-suggestions', teacherData, addTeacher);
 </script>
 {% endblock %}

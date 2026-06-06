@@ -50,6 +50,7 @@ def create_app():
     from app.models.user import User
     from app.models.room import Room  # noqa
     from app.models.chat import ChatMessage, ChatClear  # noqa
+    from app.models.presence import UserPresence  # noqa
 
     @login_manager.user_loader
     def load_user(user_id):
@@ -74,6 +75,86 @@ def create_app():
             pass
         return {"pending_justification": 0}
 
+    @app.context_processor
+    def inject_presence_cfg():
+        try:
+            if current_user.is_authenticated:
+                from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
+                gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
+                visible_to = gcfg.get("presence_visible_to", "none")
+                can_see = (
+                    visible_to == "all" or
+                    (visible_to == "management" and current_user.is_management)
+                )
+                return {"presence_cfg": {
+                    "can_see": can_see,
+                    "detail": gcfg.get("presence_detail", "count"),
+                }}
+        except Exception:
+            pass
+        return {"presence_cfg": {"can_see": False, "detail": "count"}}
+
+    from flask import session, request as _request, redirect as _redirect, url_for as _url_for, flash as _flash
+
+    @app.before_request
+    def block_writes_during_impersonation():
+        if not session.get("impersonate_real_id"):
+            return
+        if _request.method in ("GET", "HEAD", "OPTIONS"):
+            return
+        if _request.endpoint == "impersonate.stop":
+            return
+        _flash("Modo solo lectura: no se pueden realizar cambios mientras se simula otro usuario.", "warning")
+        return _redirect(_request.referrer or _url_for("dashboard.index"))
+
+    @app.context_processor
+    def inject_impersonation():
+        try:
+            real_id = session.get("impersonate_real_id")
+            pantalla_real_id = session.get("pantalla_real_id")
+            if real_id and current_user.is_authenticated:
+                from app.models.user import User as _User
+                real_user = _User.query.get(real_id)
+                return {
+                    "impersonating": True,
+                    "impersonating_as": current_user,
+                    "real_user": real_user,
+                    "impersonate_teachers": [],
+                    "pantalla_mode": False,
+                }
+            if pantalla_real_id and current_user.is_authenticated:
+                from app.models.user import User as _User
+                real_user = _User.query.get(pantalla_real_id)
+                return {
+                    "impersonating": False,
+                    "impersonating_as": None,
+                    "real_user": real_user,
+                    "impersonate_teachers": [],
+                    "pantalla_mode": True,
+                }
+            if current_user.is_authenticated and current_user.is_management:
+                from app.models.user import User as _User
+                teachers = _User.query.filter(
+                    _User.active == True,
+                    _User.role.in_(["teacher", "display"]),
+                ).order_by(_User.surname, _User.name).all()
+                return {
+                    "impersonating": False,
+                    "impersonating_as": None,
+                    "real_user": None,
+                    "impersonate_teachers": teachers,
+                    "pantalla_mode": False,
+                }
+        except Exception:
+            pass
+        return {
+            "impersonating": False,
+            "impersonating_as": None,
+            "real_user": None,
+            "impersonate_teachers": [],
+            "pantalla_mode": False,
+        }
+
     from app.routes.auth import auth_bp
     from app.routes.dashboard import dashboard_bp
     from app.routes.absences import absences_bp
@@ -82,6 +163,8 @@ def create_app():
     from app.routes.admin import admin_bp
     from app.routes.chat import chat_bp
     from app.routes.display import display_bp
+    from app.routes.presence import presence_bp
+    from app.routes.impersonate import impersonate_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -91,6 +174,8 @@ def create_app():
     app.register_blueprint(admin_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(display_bp)
+    app.register_blueprint(presence_bp)
+    app.register_blueprint(impersonate_bp)
 
     if not scheduler.running:
         scheduler.start()

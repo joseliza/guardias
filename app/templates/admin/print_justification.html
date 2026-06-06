@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Faltas sin justificar – {{ desde.strftime('%d/%m/%Y') }} / {{ hasta.strftime('%d/%m/%Y') }}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #000; padding: 1.5cm; }
+    h1 { font-size: 16px; text-align: center; margin-bottom: 4px; }
+    h2 { font-size: 13px; text-align: center; margin-bottom: 4px; }
+    .periodo { font-size: 11px; text-align: center; color: #555; margin-bottom: 6px; }
+    .resumen { font-size: 10px; color: #666; text-align: center; margin-bottom: 12px; }
+    hr { border: none; border-top: 1px solid #bbb; margin: 10px 0; }
+    .teacher-block { margin-bottom: 14px; page-break-inside: avoid; }
+    .teacher-name { background: #f0f0f0; font-weight: bold; font-size: 12px; padding: 4px 8px; }
+    .entry { padding: 3px 16px; font-size: 11px; }
+    .entry-date { font-weight: bold; }
+    .entry-slots { color: #333; padding-left: 16px; }
+    .entry-slots.full-day { color: #a04000; }
+    .teacher-total { font-size: 10px; color: #777; padding: 2px 16px 4px; }
+    .no-data { color: #888; font-style: italic; }
+    @media print {
+      body { padding: 1cm; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="no-print" style="margin-bottom:16px;">
+  <button onclick="window.print()" style="padding:6px 14px;font-size:13px;cursor:pointer;">🖨 Imprimir</button>
+  <button onclick="window.close()" style="padding:6px 14px;font-size:13px;margin-left:8px;cursor:pointer;">Cerrar</button>
+</div>
+
+<h1>{{ institute_name }}</h1>
+<h2>Informe de faltas sin justificar</h2>
+<div class="periodo">Del {{ desde.strftime('%d/%m/%Y') }} al {{ hasta.strftime('%d/%m/%Y') }}</div>
+<hr>
+
+{% if not rows_data %}
+  <p class="no-data">No hay faltas sin justificar en el período seleccionado.</p>
+{% else %}
+  {% set total_slots = rows_data | sum(attribute='total') %}
+  <div class="resumen">
+    {{ total_slots }} tramo{{ 's' if total_slots != 1 }} sin justificar
+    en {{ rows_data | length }} profesor{{ 'es' if rows_data | length != 1 }}
+  </div>
+  {% for teacher_data in rows_data %}
+  <div class="teacher-block">
+    <div class="teacher-name">{{ teacher_data.teacher.full_name }}</div>
+    {% for entry in teacher_data.entries %}
+    <div class="entry">
+      <span class="entry-date">{{ entry.date_label }}</span>
+      <div class="entry-slots {% if entry.full_day %}full-day{% endif %}">
+        {% if entry.full_day %}
+          Día completo
+        {% else %}
+          {{ entry.slots_label }}
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    <div class="teacher-total">Total: {{ teacher_data.total }} tramo{{ 's' if teacher_data.total != 1 }} sin justificar</div>
+    <hr>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<script>
+  window.addEventListener('load', function() { window.print(); });
+</script>
+</body>
+</html>

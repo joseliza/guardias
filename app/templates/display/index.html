@@ -7,81 +7,101 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
-    html, body { height: 100%; margin: 0; background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; }
+    html, body { height: 100%; margin: 0; background: #f8f9fa; font-family: 'Segoe UI', sans-serif; }
     #layout { display: flex; height: 100vh; flex-direction: column; }
-    #topbar { background: #161b22; padding: .6rem 1.2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; flex-shrink: 0; }
-    #topbar-left { flex: 1; display: flex; align-items: center; min-width: 0; }
-    #topbar-left h1 { font-size: 1.1rem; margin: 0; color: #58a6ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #topbar-center { flex: 0 0 auto; padding: 0 1.5rem; }
-    #clock { font-size: 1.6rem; font-weight: bold; color: #f0f6fc; font-variant-numeric: tabular-nums; }
-    #topbar-right { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: .5rem; }
+
+    /* ── Topbar ── */
+    #topbar {
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,.08);
+      padding: .5rem 1.2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+      z-index: 100;
+    }
+    #topbar h1 { font-size: 1.05rem; margin: 0; color: #0d6efd; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #clock { font-size: 1.8rem; font-weight: 700; color: #0d6efd; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+    #topbar-actions { display: flex; align-items: center; gap: .5rem; }
+
+    /* ── Layout ── */
     #main { display: flex; flex: 1; overflow: hidden; }
-    #guards-panel { flex: 1 1 50%; overflow-y: auto; padding: 1rem; border-right: 1px solid #30363d; transition: flex .3s; }
-    #tasks-panel { flex: 0 0 25%; overflow-y: auto; padding: .8rem; border-right: 1px solid #30363d; display: flex; flex-direction: column; transition: flex .3s; }
+    #guards-panel { flex: 1 1 50%; overflow-y: auto; padding: .75rem; border-right: 1px solid #dee2e6; }
+    #tasks-panel  { flex: 0 0 24%; overflow-y: auto; padding: .75rem; border-right: 1px solid #dee2e6; display: flex; flex-direction: column; }
     #tasks-panel.hidden { display: none; }
-    #tasks-panel.hidden ~ #guards-panel { flex: 1 1 65%; }
-    #chat-panel { flex: 0 0 25%; display: flex; flex-direction: column; transition: flex .3s; }
+    #chat-panel   { flex: 0 0 26%; display: flex; flex-direction: column; }
     #main.no-tasks #guards-panel { flex: 1 1 65%; }
-    #main.no-tasks #chat-panel { flex: 0 0 35%; }
-    .tasks-slot-header { font-size: .8rem; font-weight: 700; color: #58a6ff; text-transform: uppercase; letter-spacing: .05em; margin: .6rem 0 .3rem; padding-bottom: .2rem; border-bottom: 1px solid #30363d; }
-    .task-card { background: #21262d; border-radius: .3rem; padding: .5rem .7rem; margin-bottom: .5rem; font-size: .82rem; }
-    .task-card .tc-meta { color: #8b949e; font-size: .75rem; margin-bottom: .2rem; }
-    .task-card .tc-desc { color: #e6edf3; }
-    #tasks-header { background: #161b22; padding: .6rem 1rem; border-bottom: 1px solid #30363d; font-size: .9rem; color: #8b949e; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-    #chat-header { background: #161b22; padding: .6rem 1rem; border-bottom: 1px solid #30363d; font-size: .9rem; color: #8b949e; display: flex; justify-content: space-between; align-items: center; }
-    #chat-box { flex: 1; overflow-y: auto; padding: .8rem; background: #0d1117; }
-    #chat-box .msg { margin-bottom: .7rem; border-bottom: 1px solid #21262d; padding-bottom: .5rem; }
-    #chat-box .msg .author { font-weight: 600; color: #58a6ff; font-size: .82rem; }
-    #chat-box .msg .time { color: #8b949e; font-size: .75rem; margin-left: .4rem; }
-    #chat-box .msg .text { font-size: .9rem; margin-top: .1rem; }
-    #chat-footer { padding: .6rem; border-top: 1px solid #30363d; background: #161b22; }
-    .slot-block { background: #161b22; border: 1px solid #30363d; border-radius: .5rem; margin-bottom: .8rem; overflow: hidden; }
-    .slot-header { background: #21262d; padding: .4rem .8rem; display: flex; justify-content: space-between; align-items: center; }
-    .slot-header.active { background: #1f4068; border-left: 4px solid #58a6ff; }
-    .slot-title { font-weight: 600; font-size: .95rem; }
-    .slot-time { font-size: .8rem; color: #8b949e; }
-    .guard-row { padding: .5rem .8rem; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+    #main.no-tasks #chat-panel   { flex: 0 0 35%; }
+
+    /* ── Slot tabs ── */
+    #slot-tabs { background: #fff; border-bottom: 1px solid #dee2e6; padding: 0 .75rem; flex-shrink: 0; overflow-x: auto; white-space: nowrap; }
+
+    /* ── Guard rows ── */
+    .guard-row { padding: .5rem .75rem; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
     .guard-row:last-child { border-bottom: none; }
-    .badge-covered { background: #1a4731; color: #3fb950; border: 1px solid #238636; }
-    .badge-pending { background: #4a1515; color: #f85149; border: 1px solid #da3633; }
-    .badge-returned { background: #2d3748; color: #8b949e; border: 1px solid #484f58; }
-    .group-name { font-weight: 600; min-width: 120px; }
-    .teacher-name { color: #79c0ff; font-size: .9rem; }
-    .btn-dark-sm { background: #21262d; border: 1px solid #30363d; color: #e6edf3; font-size: .8rem; padding: .2rem .6rem; border-radius: .3rem; cursor: pointer; }
-    .btn-dark-sm:hover { background: #30363d; }
-    .btn-danger-sm { background: #4a1515; border: 1px solid #da3633; color: #f85149; font-size: .8rem; padding: .2rem .5rem; border-radius: .3rem; cursor: pointer; }
-    .btn-danger-sm:hover { background: #da3633; color: #fff; }
-    .btn-print { background: #1f4068; border: 1px solid #58a6ff; color: #58a6ff; font-size: .8rem; padding: .2rem .6rem; border-radius: .3rem; cursor: pointer; text-decoration: none; }
-    .btn-print:hover { background: #58a6ff; color: #0d1117; }
-    .modal-content { background: #161b22; color: #e6edf3; border: 1px solid #30363d; }
-    .modal-header { border-bottom: 1px solid #30363d; }
-    .modal-footer { border-top: 1px solid #30363d; }
-    .form-control, .form-select { background: #0d1117; border-color: #30363d; color: #e6edf3; }
-    .form-control:focus, .form-select:focus { background: #0d1117; border-color: #58a6ff; color: #e6edf3; box-shadow: none; }
-    .form-label { color: #8b949e; font-size: .85rem; }
+    .group-name { font-weight: 600; min-width: 110px; }
+
+    /* ── Tasks panel ── */
+    .tasks-slot-header { font-size: .75rem; font-weight: 700; color: #0d6efd; text-transform: uppercase; letter-spacing: .06em; margin: .6rem 0 .3rem; padding-bottom: .2rem; border-bottom: 1px solid #dee2e6; }
+    .task-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: .3rem; padding: .45rem .65rem; margin-bottom: .4rem; font-size: .82rem; }
+    .task-card .tc-meta { color: #6c757d; font-size: .73rem; margin-bottom: .15rem; }
+
+    /* ── Chat panel ── */
+    #chat-header { background: #fff; padding: .5rem 1rem; border-bottom: 1px solid #dee2e6; font-size: .88rem; font-weight: 600; color: #495057; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    #chat-box { flex: 1; overflow-y: auto; padding: .75rem; background: #fff; }
+    #chat-box .msg { margin-bottom: .65rem; padding-bottom: .5rem; border-bottom: 1px solid #f0f0f0; }
+    #chat-box .msg:last-child { border-bottom: none; }
+    #chat-box .msg .author { font-weight: 600; color: #0d6efd; font-size: .82rem; }
+    #chat-box .msg .time { color: #adb5bd; font-size: .73rem; margin-left: .35rem; }
+    #chat-box .msg .text { font-size: .88rem; margin-top: .1rem; color: #212529; }
+    #chat-footer { padding: .5rem; border-top: 1px solid #dee2e6; background: #f8f9fa; flex-shrink: 0; }
+
+    /* ── Tasks panel header ── */
+    #tasks-header { background: #fff; padding: .5rem 1rem; border-bottom: 1px solid #dee2e6; font-size: .88rem; font-weight: 600; color: #495057; flex-shrink: 0; }
   </style>
 </head>
 <body>
 <div id="layout">
 
+  <!-- Topbar -->
   <div id="topbar">
-    <div id="topbar-left">
-      <h1><i class="bi bi-shield-check"></i> {{ config.INSTITUTE_NAME }} — Panel de Guardia</h1>
-    </div>
-    <div id="topbar-center">
-      <div id="clock">--:--:--</div>
-    </div>
-    <div id="topbar-right">
-      <button id="btn-toggle-tasks" class="btn-dark-sm" title="Mostrar/ocultar tareas">
+    <h1><i class="bi bi-shield-check text-primary"></i> {{ config.INSTITUTE_NAME }} — Panel de Guardia</h1>
+    <div id="clock">--:--:--</div>
+    <div id="topbar-actions">
+      <button id="btn-toggle-tasks" class="btn btn-outline-secondary btn-sm" title="Mostrar/ocultar tareas">
         <i class="bi bi-list-task"></i> Tareas
       </button>
       {% if current_user.is_management %}
-      <a href="{{ url_for('dashboard.index') }}" class="btn-dark-sm" title="Ir al panel de administración">
+      <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-primary btn-sm">
         <i class="bi bi-grid"></i> Admin
       </a>
       {% endif %}
-      <a href="{{ url_for('auth.logout') }}" class="btn-dark-sm"><i class="bi bi-box-arrow-right"></i> Salir</a>
+      <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-box-arrow-right"></i> Salir
+      </a>
     </div>
+  </div>
+
+  <!-- Slot tabs -->
+  <div id="slot-tabs">
+    <ul class="nav nav-tabs border-0 flex-nowrap" style="gap:.1rem;">
+      {% for slot in slots %}
+      {% set slot_guards = guards | selectattr('slot_id','eq', slot.id) | list %}
+      {% set pending = slot_guards | selectattr('status','eq','pending') | list %}
+      {% set covered = slot_guards | selectattr('status','ne','pending') | list %}
+      <li class="nav-item">
+        <a class="nav-link py-2 px-3 {% if slot.is_break %}text-muted{% endif %}"
+           href="#slot-{{ slot.id }}"
+           onclick="event.preventDefault(); document.getElementById('slot-{{ slot.id }}').scrollIntoView({behavior:'smooth', block:'start'});">
+          {% if slot.is_break %}<i class="bi bi-cup-hot"></i>{% endif %}
+          {{ slot.label }}
+          {% if pending %}<span class="badge bg-danger ms-1">{{ pending|length }}</span>
+          {% elif slot_guards %}<span class="badge bg-success ms-1"><i class="bi bi-check2"></i></span>{% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
   </div>
 
   <div id="main">
@@ -90,189 +110,203 @@
     <div id="guards-panel">
       {% for slot in slots %}
       {% set slot_guards = guards | selectattr('slot_id','eq', slot.id) | list %}
-      <div class="slot-block" id="slot-{{ slot.id }}">
-        <div class="slot-header {% if slot.active %}active{% endif %}">
-          <span class="slot-title"><i class="bi bi-clock"></i> {{ slot.label }}</span>
-          <div class="d-flex align-items-center gap-2">
-            <span class="slot-time">{{ slot.start }} – {{ slot.end }}</span>
-            <a href="{{ url_for('display.print_slot', date_str=today.isoformat(), slot_id=slot.id) }}"
-               target="_blank" class="btn-print"><i class="bi bi-printer"></i> Imprimir tareas</a>
-          </div>
+      {% set pending = slot_guards | selectattr('status','eq','pending') | list %}
+
+      {% if slot.is_break %}
+      <div id="slot-{{ slot.id }}" class="card mb-2 border-0 bg-light">
+        <div class="card-body py-2 text-muted text-center small">
+          <i class="bi bi-cup-hot"></i> Recreo · {{ slot.start }}–{{ slot.end }}
+        </div>
+      </div>
+
+      {% else %}
+      <div id="slot-{{ slot.id }}" class="card mb-2 border-0 shadow-sm">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center
+          {% if pending %}bg-danger text-white
+          {% elif slot_guards %}bg-success text-white
+          {% elif slot.active %}bg-primary text-white
+          {% else %}bg-light{% endif %}">
+          <span>
+            <strong>{{ slot.label }}</strong>
+            <small class="ms-2 opacity-75">{{ slot.start }}–{{ slot.end }}</small>
+            {% if slot.active %}<span class="badge bg-white text-primary ms-2" style="font-size:.65rem;">Activo</span>{% endif %}
+          </span>
+          <a href="{{ url_for('display.print_slot', date_str=today.isoformat(), slot_id=slot.id) }}"
+             target="_blank"
+             class="btn btn-sm {% if pending or slot_guards or slot.active %}btn-light{% else %}btn-outline-secondary{% endif %} py-0 px-2"
+             style="font-size:.75rem;">
+            <i class="bi bi-printer"></i> Imprimir
+          </a>
         </div>
 
-        {% if slot_guards %}
-          {% for guard in slot_guards %}
-          {% set guard_absence = guard.absence %}
-          <div class="guard-row" id="guard-{{ guard.id }}">
-            <span class="group-name">{{ guard.group.name if guard.group else '—' }}</span>
-            {% if guard.room %}
-            <span style="background:#1f4068;color:#79c0ff;border:1px solid #388bfd;font-size:.8rem;padding:.15rem .55rem;border-radius:.3rem;font-weight:600;white-space:nowrap;">
-              <i class="bi bi-door-open"></i> {{ guard.room.name }}
-            </span>
-            {% endif %}
+        <div class="card-body p-0">
+          {% if slot_guards %}
+            {% for guard in slot_guards %}
+            {% set guard_absence = guard.absence %}
+            <div class="guard-row" id="guard-{{ guard.id }}">
+              <span class="group-name">{{ guard.group.name if guard.group else '—' }}</span>
 
-            {% if guard.status == 'returned' %}
-              <span class="badge badge-returned"><i class="bi bi-box-arrow-in-right"></i> Reincorporado</span>
-            {% elif guard.status == 'covered' %}
-              <span class="badge badge-covered"><i class="bi bi-check-circle"></i> Cubierta</span>
-            {% else %}
-              <span class="badge badge-pending"><i class="bi bi-exclamation-circle"></i> Pendiente</span>
-            {% endif %}
+              {% if guard.room %}
+              <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle" style="font-size:.78rem;">
+                <i class="bi bi-door-open"></i> {{ guard.room.name }}
+              </span>
+              {% endif %}
 
-            <!-- Profesores asignados con × -->
-            {% for r in guard.records %}
-            <span class="teacher-name d-flex align-items-center gap-1">
-              <i class="bi bi-person"></i> {{ r.teacher.full_name }} ({{ r.effective_minutes }} min)
+              {% if guard.status == 'returned' %}
+                <span class="badge bg-secondary"><i class="bi bi-box-arrow-in-right"></i> Reincorporado</span>
+              {% elif guard.status == 'covered' %}
+                <span class="badge bg-success"><i class="bi bi-check-circle"></i> Cubierta</span>
+              {% else %}
+                <span class="badge bg-danger"><i class="bi bi-exclamation-circle"></i> Pendiente</span>
+              {% endif %}
+
+              {% for r in guard.records %}
+              <span class="d-inline-flex align-items-center gap-1 text-primary" style="font-size:.88rem;">
+                <i class="bi bi-person"></i> {{ r.teacher.full_name }} ({{ r.effective_minutes }} min)
+                {% if guard.status != 'returned' %}
+                <form method="POST" action="{{ url_for('display.remove_record', record_id=r.id) }}" class="d-inline"
+                      onsubmit="return confirm('¿Eliminar asignación de {{ r.teacher.full_name }}?')">
+                  <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size:.7rem;" title="Eliminar">
+                    <i class="bi bi-x"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </span>
+              {% endfor %}
+
               {% if guard.status != 'returned' %}
-              <form method="POST" action="{{ url_for('display.remove_record', record_id=r.id) }}" class="d-inline"
-                    onsubmit="return confirm('¿Eliminar asignación de {{ r.teacher.full_name }}?')">
-                <button type="submit" class="btn-danger-sm" title="Eliminar asignación"><i class="bi bi-x"></i></button>
+              <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.8rem;"
+                      data-bs-toggle="modal" data-bs-target="#modalAsignar{{ guard.id }}">
+                <i class="bi bi-person-plus"></i>
+                {{ 'Reasignar' if guard.status == 'covered' else 'Asignar' }}
+              </button>
+              {% endif %}
+
+              {% if guard_absence and guard_absence.status != 'returned' %}
+              <form method="POST" action="{{ url_for('display.incorporar', absence_id=guard_absence.id) }}" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-outline-success py-0 px-2" style="font-size:.8rem;">
+                  <i class="bi bi-box-arrow-in-right"></i> Incorporar
+                </button>
               </form>
               {% endif %}
-            </span>
-            {% endfor %}
 
-            <!-- Asignar / Reasignar -->
-            {% if guard.status != 'returned' %}
-            <button class="btn-dark-sm" data-bs-toggle="modal" data-bs-target="#modalAsignar{{ guard.id }}">
-              <i class="bi bi-person-plus"></i>
-              {{ 'Reasignar' if guard.status == 'covered' else 'Asignar' }}
-            </button>
-            {% endif %}
-
-            <!-- Incorporar -->
-            {% if guard_absence and guard_absence.status not in ('returned',) %}
-            <form method="POST" action="{{ url_for('display.incorporar', absence_id=guard_absence.id) }}" class="d-inline">
-              <button type="submit" class="btn-dark-sm" title="Marcar incorporación">
-                <i class="bi bi-box-arrow-in-right"></i> Incorporar
+              {% if guard_absence %}
+              <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.8rem;"
+                      data-bs-toggle="modal" data-bs-target="#modalTarea{{ guard.id }}">
+                <i class="bi bi-list-task"></i> Tareas ({{ guard_absence.tasks.count() }})
               </button>
-            </form>
-            {% endif %}
-
-            <!-- Tareas -->
-            {% if guard_absence %}
-            <button class="btn-dark-sm" data-bs-toggle="modal" data-bs-target="#modalTarea{{ guard.id }}">
-              <i class="bi bi-list-task"></i> Tareas ({{ guard_absence.tasks.count() }})
-            </button>
-            {% endif %}
-          </div>
-
-          <!-- Modal asignar/reasignar -->
-          {% if guard.status != 'returned' %}
-          <div class="modal fade" id="modalAsignar{{ guard.id }}" tabindex="-1">
-            <div class="modal-dialog">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h5 class="modal-title">
-                    {{ 'Reasignar' if guard.status == 'covered' else 'Asignar' }} – {{ guard.group.name if guard.group else '—' }}
-                  </h5>
-                  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <form method="POST" action="{{ url_for('display.assign', guard_id=guard.id) }}">
-                  <div class="modal-body">
-                    <div class="mb-3">
-                      <label class="form-label">Profesor disponible <small>(ordenado por puntos)</small></label>
-                      <select name="teacher_id" class="form-select" required>
-                        {% set avail = available_by_slot.get(slot.id, ([], [])) %}
-                        {% set prim = avail[0] if avail is iterable and avail | length > 0 else [] %}
-                        {% set sec  = avail[1] if avail is iterable and avail | length > 1 else [] %}
-                        {% if prim %}
-                        <optgroup label="— Guardia asignada —">
-                          {% for t in prim %}
-                          <option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>
-                          {% endfor %}
-                        </optgroup>
-                        {% endif %}
-                        {% if sec %}
-                        <optgroup label="— Libres en este tramo —">
-                          {% for t in sec %}
-                          <option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>
-                          {% endfor %}
-                        </optgroup>
-                        {% endif %}
-                        {% if not prim and not sec %}
-                        <option disabled>No hay profesores disponibles</option>
-                        {% endif %}
-                      </select>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Minutos efectivos</label>
-                      <input type="number" name="effective_minutes" class="form-control" value="60" min="1" max="60">
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Notas</label>
-                      <input type="text" name="notes" class="form-control" placeholder="Observaciones...">
-                    </div>
-                  </div>
-                  <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Confirmar</button>
-                  </div>
-                </form>
-              </div>
+              {% endif %}
             </div>
-          </div>
-          {% endif %}
 
-          <!-- Modal tareas -->
-          {% if guard_absence %}
-          <div class="modal fade" id="modalTarea{{ guard.id }}" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h5 class="modal-title"><i class="bi bi-list-task"></i> Tareas – {{ guard.group.name if guard.group else '—' }}</h5>
-                  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                  {% for task in guard_absence.tasks %}
-                  <div class="mb-2 p-2" style="background:#21262d;border-radius:.3rem;">
-                    <small class="text-muted">{{ task.group.name }}</small>
-                    <div>{{ task.description }}</div>
-                    {% if task.attachment %}
-                    <a href="{{ url_for('absences.task_attachment', task_id=task.id) }}" target="_blank"
-                       class="btn btn-sm btn-outline-danger py-0 mt-1" style="font-size:.75rem;">
-                      <i class="bi bi-file-earmark-pdf"></i> Ver PDF
-                    </a>
-                    {% endif %}
+            <!-- Modal asignar/reasignar -->
+            {% if guard.status != 'returned' %}
+            <div class="modal fade" id="modalAsignar{{ guard.id }}" tabindex="-1">
+              <div class="modal-dialog">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">
+                      {{ 'Reasignar' if guard.status == 'covered' else 'Asignar' }} – {{ guard.group.name if guard.group else '—' }}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                   </div>
-                  {% else %}
-                  <p class="text-muted">No hay tareas registradas todavía.</p>
-                  {% endfor %}
-                  <hr style="border-color:#30363d;">
-                  <p class="text-muted mb-2" style="font-size:.85rem;">Añadir tarea</p>
-                  <form method="POST" action="{{ url_for('display.add_task', absence_id=guard_absence.id) }}" enctype="multipart/form-data">
-                    <input type="hidden" name="group_id" value="{{ guard.group_id }}">
-                    <div class="mb-2">
-                      <input type="text" name="description" class="form-control form-control-sm" placeholder="Descripción de la tarea..." required>
+                  <form method="POST" action="{{ url_for('display.assign', guard_id=guard.id) }}">
+                    <div class="modal-body">
+                      <div class="mb-3">
+                        <label class="form-label">Profesor disponible <small class="text-muted">(ordenado por puntos)</small></label>
+                        <select name="teacher_id" class="form-select" required>
+                          {% set avail = available_by_slot.get(slot.id, ([], [])) %}
+                          {% set prim = avail[0] if avail is iterable and avail | length > 0 else [] %}
+                          {% set sec  = avail[1] if avail is iterable and avail | length > 1 else [] %}
+                          {% if prim %}
+                          <optgroup label="— Guardia asignada —">
+                            {% for t in prim %}<option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>{% endfor %}
+                          </optgroup>
+                          {% endif %}
+                          {% if sec %}
+                          <optgroup label="— Libres en este tramo —">
+                            {% for t in sec %}<option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>{% endfor %}
+                          </optgroup>
+                          {% endif %}
+                          {% if not prim and not sec %}
+                          <option disabled>No hay profesores disponibles</option>
+                          {% endif %}
+                        </select>
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">Minutos efectivos</label>
+                        <input type="number" name="effective_minutes" class="form-control" value="60" min="1" max="60">
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">Notas</label>
+                        <input type="text" name="notes" class="form-control" placeholder="Observaciones...">
+                      </div>
                     </div>
-                    <div class="mb-2">
-                      <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf">
-                      <small class="text-muted">PDF opcional</small>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                      <button type="submit" class="btn btn-primary">Confirmar</button>
                     </div>
-                    <button type="submit" class="btn btn-sm btn-primary">Añadir</button>
                   </form>
                 </div>
               </div>
             </div>
-          </div>
-          {% endif %}
-          {% endfor %}
+            {% endif %}
 
-        {% else %}
-          <div class="guard-row text-muted" style="font-size:.85rem;">Sin ausencias registradas en este tramo.</div>
-        {% endif %}
+            <!-- Modal tareas -->
+            {% if guard_absence %}
+            <div class="modal fade" id="modalTarea{{ guard.id }}" tabindex="-1">
+              <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-list-task"></i> Tareas – {{ guard.group.name if guard.group else '—' }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                  </div>
+                  <div class="modal-body">
+                    {% for task in guard_absence.tasks %}
+                    <div class="mb-2 p-2 bg-light border rounded">
+                      <small class="text-muted">{{ task.group.name }}</small>
+                      <div>{{ task.description }}</div>
+                      {% if task.attachment %}
+                      <a href="{{ url_for('absences.task_attachment', task_id=task.id) }}" target="_blank"
+                         class="btn btn-sm btn-outline-secondary py-0 mt-1" style="font-size:.75rem;">
+                        <i class="bi bi-file-earmark-pdf"></i> Ver PDF
+                      </a>
+                      {% endif %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No hay tareas registradas todavía.</p>
+                    {% endfor %}
+                    <hr>
+                    <p class="text-muted mb-2 small">Añadir tarea</p>
+                    <form method="POST" action="{{ url_for('display.add_task', absence_id=guard_absence.id) }}" enctype="multipart/form-data">
+                      <input type="hidden" name="group_id" value="{{ guard.group_id }}">
+                      <div class="mb-2">
+                        <input type="text" name="description" class="form-control form-control-sm" placeholder="Descripción de la tarea..." required>
+                      </div>
+                      <div class="mb-2">
+                        <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf">
+                        <small class="text-muted">PDF opcional</small>
+                      </div>
+                      <button type="submit" class="btn btn-sm btn-primary">Añadir</button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+          {% else %}
+          <div class="guard-row text-muted small">Sin ausencias registradas en este tramo.</div>
+          {% endif %}
+        </div>
       </div>
+      {% endif %}
       {% endfor %}
     </div>
 
     <!-- Panel de tareas -->
     <div id="tasks-panel">
-      <div id="tasks-header">
-        <span><i class="bi bi-list-task"></i> Tareas del día</span>
-      </div>
-      <div style="overflow-y:auto; flex:1; padding:.4rem 0;">
-        {% set slot_map = {} %}
-        {% for s in slots %}{% set _ = slot_map.update({s.id: s}) %}{% endfor %}
+      <div id="tasks-header"><i class="bi bi-list-task text-primary"></i> Tareas del día</div>
+      <div style="overflow-y:auto;flex:1;padding:.4rem 0;">
         {% set has_tasks = namespace(value=false) %}
         {% for slot in slots %}
           {% set slot_tasks = tasks_by_slot.get(slot.id, []) %}
@@ -281,11 +315,11 @@
             <div class="tasks-slot-header"><i class="bi bi-clock"></i> {{ slot.label }} · {{ slot.start }}–{{ slot.end }}</div>
             {% for t in slot_tasks %}
             <div class="task-card">
-              <div class="tc-meta"><i class="bi bi-person"></i> {{ t.teacher }} &mdash; {{ t.group }}</div>
-              <div class="tc-desc">{{ t.description }}</div>
+              <div class="tc-meta"><i class="bi bi-person"></i> {{ t.teacher }} — {{ t.group }}</div>
+              <div>{{ t.description }}</div>
               {% if t.attachment %}
               <a href="{{ url_for('absences.task_attachment', task_id=t.task_id) }}" target="_blank"
-                 style="font-size:.73rem;color:#f85149;text-decoration:none;">
+                 class="text-danger small text-decoration-none">
                 <i class="bi bi-file-earmark-pdf"></i> Ver PDF
               </a>
               {% endif %}
@@ -294,7 +328,7 @@
           {% endif %}
         {% endfor %}
         {% if not has_tasks.value %}
-        <p style="color:#8b949e;font-size:.85rem;padding:.5rem;">Sin tareas registradas hoy.</p>
+        <p class="text-muted small px-2 pt-2">Sin tareas registradas hoy.</p>
         {% endif %}
       </div>
     </div>
@@ -302,20 +336,17 @@
     <!-- Panel de chat -->
     <div id="chat-panel">
       <div id="chat-header">
-        <span><i class="bi bi-chat-dots"></i> Canal de incidencias</span>
+        <span><i class="bi bi-chat-dots text-primary"></i> Canal de incidencias</span>
         {% if current_user.is_management %}
-        <button class="btn-danger-sm" id="btn-clear-chat" title="Limpiar chat">
+        <button class="btn btn-sm btn-outline-danger py-0 px-2" id="btn-clear-chat" title="Limpiar chat">
           <i class="bi bi-trash"></i>
         </button>
         {% endif %}
       </div>
-      <div id="chat-box">
-        <!-- Los mensajes se cargan vía Socket.IO -->
-      </div>
+      <div id="chat-box"></div>
       <div id="chat-footer">
         <div class="input-group input-group-sm">
-          <input type="text" id="msg-input" class="form-control" placeholder="Escribe una incidencia..." autocomplete="off"
-                 style="background:#0d1117;border-color:#30363d;color:#e6edf3;">
+          <input type="text" id="msg-input" class="form-control" placeholder="Escribe una incidencia..." autocomplete="off">
           <button class="btn btn-primary btn-sm" id="send-btn"><i class="bi bi-send"></i></button>
         </div>
       </div>
@@ -324,19 +355,17 @@
   </div>
 </div>
 
-<!-- Modal confirmar limpiar chat -->
 {% if current_user.is_management %}
 <div class="modal fade" id="modalLimpiarChat" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title"><i class="bi bi-trash"></i> Limpiar chat</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <p>El chat quedará vacío en pantalla para todos los usuarios.</p>
-        <p class="mb-0" style="color:#8b949e;font-size:.9rem;"><i class="bi bi-info-circle"></i>
-          Los mensajes <strong>no se eliminan</strong> de la base de datos.</p>
+        <p class="text-muted mb-0 small"><i class="bi bi-info-circle"></i> Los mensajes <strong>no se eliminan</strong> de la base de datos.</p>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -352,20 +381,23 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
-function updateClock() {
-  const now = new Date();
-  document.getElementById('clock').textContent = now.toLocaleTimeString('es-ES');
-}
-setInterval(updateClock, 1000);
-updateClock();
+(function() {
+  function tick() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2,'0');
+    const m = String(now.getMinutes()).padStart(2,'0');
+    const s = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('clock').textContent = h + ':' + m + ':' + s;
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
 
 const socket = io();
 socket.emit('join', { channel: 'general' });
 socket.emit('join', { channel: 'display' });
 
-socket.on('connect', () => {
-  socket.emit('load_messages', { channel: 'general' });
-});
+socket.on('connect', () => { socket.emit('load_messages', { channel: 'general' }); });
 
 socket.on('message_history', (data) => {
   const box = document.getElementById('chat-box');
@@ -380,13 +412,8 @@ socket.on('new_message', (data) => {
   box.scrollTop = box.scrollHeight;
 });
 
-socket.on('chat_cleared', () => {
-  document.getElementById('chat-box').innerHTML = '';
-});
-
-socket.on('guard_updated', () => {
-  location.reload();
-});
+socket.on('chat_cleared', () => { document.getElementById('chat-box').innerHTML = ''; });
+socket.on('guard_updated', () => { location.reload(); });
 
 function appendMessage(data) {
   const box = document.getElementById('chat-box');
@@ -405,9 +432,7 @@ function sendMessage() {
 }
 
 document.getElementById('send-btn').addEventListener('click', sendMessage);
-document.getElementById('msg-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') sendMessage();
-});
+document.getElementById('msg-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
 
 {% if current_user.is_management %}
 document.getElementById('btn-clear-chat').addEventListener('click', () => {
@@ -421,24 +446,13 @@ const btnToggle  = document.getElementById('btn-toggle-tasks');
 const TASKS_KEY  = 'display_tasks_visible';
 
 function setTasksVisible(visible) {
-  if (visible) {
-    tasksPanel.classList.remove('hidden');
-    mainPanel.classList.remove('no-tasks');
-    btnToggle.style.opacity = '1';
-    localStorage.setItem(TASKS_KEY, '1');
-  } else {
-    tasksPanel.classList.add('hidden');
-    mainPanel.classList.add('no-tasks');
-    btnToggle.style.opacity = '.5';
-    localStorage.setItem(TASKS_KEY, '0');
-  }
+  tasksPanel.classList.toggle('hidden', !visible);
+  mainPanel.classList.toggle('no-tasks', !visible);
+  btnToggle.classList.toggle('active', visible);
+  localStorage.setItem(TASKS_KEY, visible ? '1' : '0');
 }
 
-btnToggle.addEventListener('click', () => {
-  setTasksVisible(tasksPanel.classList.contains('hidden'));
-});
-
-// Restaurar preferencia al cargar
+btnToggle.addEventListener('click', () => setTasksVisible(tasksPanel.classList.contains('hidden')));
 setTasksVisible(localStorage.getItem(TASKS_KEY) !== '0');
 </script>
 </body>

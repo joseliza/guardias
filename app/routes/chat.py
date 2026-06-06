@@ -91,68 +91,23 @@ def report_csv():
     )
 
 
-@chat_bp.route("/informe/pdf")
+@chat_bp.route("/informe/imprimir")
 @login_required
 def report_pdf():
     if not current_user.is_management:
         flash("Sin permiso.", "danger")
         return redirect(url_for("dashboard.index"))
 
-    from fpdf import FPDF
-    from flask import make_response
-    from itertools import groupby
-
-    FONT   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-
     desde, hasta = _parse_range()
     msgs = _query_range(desde, hasta)
 
-    pdf = FPDF()
-    pdf.add_font("dv", "",  FONT)
-    pdf.add_font("dv", "B", FONT_B)
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-
-    # Cabecera
-    pdf.set_font("dv", "B", 16)
-    pdf.cell(0, 10, current_app.config["INSTITUTE_NAME"], ln=True, align="C")
-    pdf.set_font("dv", "", 11)
-    pdf.cell(0, 7, "Informe de incidencias (chat)", ln=True, align="C")
-    rango = f"{desde.strftime('%d/%m/%Y')} – {hasta.strftime('%d/%m/%Y')}"
-    pdf.cell(0, 7, rango, ln=True, align="C")
-    pdf.ln(4)
-
-    if not msgs:
-        pdf.set_font("dv", "", 11)
-        pdf.cell(0, 8, "Sin mensajes en el período seleccionado.", ln=True)
-    else:
-        # Agrupar por fecha
-        for day, day_msgs in groupby(msgs, key=lambda m: m.created_at.date()):
-            pdf.set_font("dv", "B", 12)
-            pdf.set_fill_color(230, 230, 230)
-            from app.utils import fecha_es as _fecha_es
-            pdf.cell(0, 8, _fecha_es(day), ln=True, fill=True)
-            pdf.ln(1)
-
-            for m in day_msgs:
-                hora    = m.created_at.strftime("%H:%M:%S")
-                autor   = m.author.full_name
-                canal   = f"[{m.channel}]" if m.channel != "general" else ""
-                cabecera = f"{hora}  {autor}  {canal}".strip()
-
-                pdf.set_font("dv", "B", 9)
-                pdf.cell(0, 5, cabecera, ln=True)
-                pdf.set_font("dv", "", 10)
-                pdf.multi_cell(0, 5, m.message)
-                pdf.ln(1)
-
-            pdf.ln(3)
-
-    resp = make_response(bytes(pdf.output()))
-    resp.headers["Content-Type"] = "application/pdf"
-    resp.headers["Content-Disposition"] = "attachment; filename=chat_incidencias.pdf"
-    return resp
+    return render_template(
+        "chat/print_report.html",
+        desde=desde,
+        hasta=hasta,
+        msgs=msgs,
+        institute_name=current_app.config.get("INSTITUTE_NAME", ""),
+    )
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

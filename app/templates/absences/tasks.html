@@ -15,14 +15,21 @@
 <div class="card mb-4">
   <div class="card-header">Añadir tarea</div>
   <div class="card-body">
-    <form method="POST" enctype="multipart/form-data">
+    <form method="POST" enctype="multipart/form-data" id="add-task-form">
       <div class="mb-3">
         <label class="form-label">Grupo</label>
-        <select name="group_id" class="form-select" required>
-          {% for g in groups %}
-          <option value="{{ g.id }}" {% if g.id == default_group_id %}selected{% endif %}>{{ g.name }}</option>
-          {% endfor %}
-        </select>
+        <div class="position-relative">
+          <div class="input-group">
+            <input type="search" id="group-search" class="form-control" autocomplete="off"
+                   placeholder="Buscar grupo...">
+            <button type="button" class="btn btn-outline-secondary" id="group-clear" tabindex="-1">
+              <i class="bi bi-x"></i>
+            </button>
+          </div>
+          <div id="group-suggestions" class="list-group position-absolute shadow-sm"
+               style="z-index:1050;display:none;max-height:220px;overflow-y:auto;width:calc(100% - 0px)"></div>
+          <input type="hidden" name="group_id" id="group-select">
+        </div>
       </div>
       <div class="mb-3">
         <label class="form-label">Descripción de la tarea</label>
@@ -98,11 +105,21 @@
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Grupo</label>
-            <select name="group_id" class="form-select" required>
-              {% for g in groups %}
-              <option value="{{ g.id }}" {% if g.id == t.group_id %}selected{% endif %}>{{ g.name }}</option>
-              {% endfor %}
-            </select>
+            <div class="position-relative">
+              <div class="input-group">
+                <input type="search" id="group-search-{{ t.id }}" class="form-control" autocomplete="off"
+                       placeholder="Buscar grupo..."
+                       data-init-name="{{ t.group.name }}">
+                <button type="button" class="btn btn-outline-secondary"
+                        onclick="clearPicker('group-search-{{ t.id }}','group-select-{{ t.id }}')"
+                        tabindex="-1">
+                  <i class="bi bi-x"></i>
+                </button>
+              </div>
+              <div id="group-suggestions-{{ t.id }}" class="list-group position-absolute shadow-sm"
+                   style="z-index:1060;display:none;max-height:220px;overflow-y:auto;width:100%"></div>
+              <input type="hidden" name="group_id" id="group-select-{{ t.id }}" value="{{ t.group_id }}">
+            </div>
           </div>
           <div class="mb-3">
             <label class="form-label">Descripción</label>
@@ -125,4 +142,105 @@
   </div>
 </div>
 {% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const groupData = [
+  {% for g in groups %}{ id: {{ g.id }}, name: {{ g.name | tojson }} },{% endfor %}
+];
+
+const defaultGroupId   = {{ default_group_id or 'null' }};
+const defaultGroupName = groupData.find(g => g.id === defaultGroupId)?.name || '';
+
+function normalize(s) {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function initPicker(searchId, hiddenId, suggestionsId, initId, initName) {
+  const inp  = document.getElementById(searchId);
+  const hid  = document.getElementById(hiddenId);
+  const sugg = document.getElementById(suggestionsId);
+  if (!inp) return;
+
+  if (initId)   { hid.value = initId; inp.value = initName || ''; }
+
+  function showSuggestions(q) {
+    const matches = q
+      ? groupData.filter(g => normalize(g.name).includes(normalize(q)))
+      : [...groupData];
+    if (!matches.length) { sugg.style.display = 'none'; return; }
+    sugg.innerHTML = matches.slice(0, 20).map(g =>
+      `<button type="button" class="list-group-item list-group-item-action py-1 px-3"
+               data-id="${g.id}" data-name="${g.name.replace(/"/g,'&quot;')}">${g.name}</button>`
+    ).join('');
+    sugg.style.display = 'block';
+  }
+
+  inp.addEventListener('focus', () => showSuggestions(inp.value.trim()));
+  inp.addEventListener('input', () => { hid.value = ''; showSuggestions(inp.value.trim()); });
+
+  sugg.addEventListener('mousedown', function(e) {
+    const btn = e.target.closest('[data-id]');
+    if (!btn) return;
+    e.preventDefault();
+    hid.value = btn.dataset.id;
+    inp.value = btn.dataset.name;
+    sugg.style.display = 'none';
+  });
+
+  inp.addEventListener('keydown', function(e) {
+    const items = sugg.querySelectorAll('[data-id]');
+    if (!items.length) return;
+    const active = sugg.querySelector('.active');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = active ? active.nextElementSibling : items[0];
+      if (next) { active && active.classList.remove('active'); next.classList.add('active'); }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prev = active ? active.previousElementSibling : items[items.length - 1];
+      if (prev) { active && active.classList.remove('active'); prev.classList.add('active'); }
+    } else if (e.key === 'Enter' && active) {
+      e.preventDefault();
+      hid.value = active.dataset.id;
+      inp.value = active.dataset.name;
+      sugg.style.display = 'none';
+    } else if (e.key === 'Escape') {
+      sugg.style.display = 'none';
+    }
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!inp.contains(e.target) && !sugg.contains(e.target)) sugg.style.display = 'none';
+  });
+}
+
+function clearPicker(searchId, hiddenId) {
+  const inp = document.getElementById(searchId);
+  const hid = document.getElementById(hiddenId);
+  if (inp) inp.value = '';
+  if (hid) hid.value = '';
+  if (inp) inp.focus();
+}
+
+// Formulario principal
+document.getElementById('group-clear').addEventListener('click', function() {
+  clearPicker('group-search', 'group-select');
+});
+document.getElementById('add-task-form').addEventListener('submit', function(e) {
+  if (!document.getElementById('group-select').value) {
+    e.preventDefault();
+    document.getElementById('group-search').classList.add('is-invalid');
+    document.getElementById('group-search').focus();
+  }
+});
+initPicker('group-search', 'group-select', 'group-suggestions', null, '');
+
+// Modales de edición
+{% for t in absence.tasks %}
+initPicker('group-search-{{ t.id }}', 'group-select-{{ t.id }}', 'group-suggestions-{{ t.id }}',
+           {{ t.group_id }}, {{ t.group.name | tojson }});
+{% endfor %}
+</script>
 {% endblock %}

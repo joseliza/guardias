@@ -362,8 +362,19 @@ def remove_record(record_id):
 @guards_bp.route("/mi-guardia")
 @login_required
 def my_guard():
+    from datetime import timedelta
     today = date.today()
-    day_idx = today.weekday()
+
+    fecha_str = request.args.get("fecha")
+    try:
+        target_date = date.fromisoformat(fecha_str) if fecha_str else today
+    except ValueError:
+        target_date = today
+
+    is_today = target_date == today
+    prev_date = target_date - timedelta(days=1)
+    next_date = target_date + timedelta(days=1)
+    day_idx = target_date.weekday()
 
     slots_cfg = current_app.config["TIME_SLOTS"]
     slot_map = {s["id"]: s for s in slots_cfg}
@@ -371,11 +382,11 @@ def my_guard():
     guard_slots = []
     if day_idx <= 4:
         from app.models.activity import ExtraActivity
-        _today_acts = ExtraActivity.query.filter_by(date=today).all()
+        _day_acts = ExtraActivity.query.filter_by(date=target_date).all()
 
         def _activity_gids(slot_id):
             ids = set()
-            for act in _today_acts:
+            for act in _day_acts:
                 if slot_id in act.slot_id_list:
                     for ag in act.groups:
                         if ag.whole_group:
@@ -390,9 +401,9 @@ def my_guard():
 
         for entry in sorted(entries, key=lambda e: e.slot_id):
             slot_cfg = slot_map.get(entry.slot_id)
-            guards_in_slot = Guard.query.filter_by(date=today, slot_id=entry.slot_id).all()
-            absences_in_slot = Absence.query.filter_by(date=today, slot_id=entry.slot_id).all()
-            primary, ex_guard, secondary = get_available_teachers_for_slot(today, entry.slot_id)
+            guards_in_slot = Guard.query.filter_by(date=target_date, slot_id=entry.slot_id).all()
+            absences_in_slot = Absence.query.filter_by(date=target_date, slot_id=entry.slot_id).all()
+            primary, ex_guard, secondary = get_available_teachers_for_slot(target_date, entry.slot_id)
             guard_slots.append({
                 "slot": slot_cfg,
                 "guards": guards_in_slot,
@@ -405,7 +416,11 @@ def my_guard():
 
     return render_template("guards/my_guard.html",
                            guard_slots=guard_slots,
-                           today=today)
+                           today=today,
+                           target_date=target_date,
+                           prev_date=prev_date,
+                           next_date=next_date,
+                           is_today=is_today)
 
 
 def _build_events(teacher_id, slot_map):

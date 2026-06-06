@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Tareas tramo {{ slot_label }} – {{ target_date.strftime('%d/%m/%Y') }}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #000; padding: 1.5cm; }
+    h1 { font-size: 16px; text-align: center; margin-bottom: 4px; }
+    .subtitle { font-size: 12px; text-align: center; color: #444; margin-bottom: 2px; }
+    .slot-info { font-size: 11px; text-align: center; color: #666; margin-bottom: 14px; }
+    hr { border: none; border-top: 1px solid #bbb; margin: 10px 0; }
+    .absence-block { margin-bottom: 18px; page-break-inside: avoid; border: 1px solid #ddd; border-radius: 4px; padding: 10px 14px; }
+    .absence-header { font-weight: bold; font-size: 13px; margin-bottom: 6px; }
+    .info-row { font-size: 11px; margin-bottom: 2px; }
+    .info-label { font-weight: bold; display: inline-block; width: 90px; }
+    .tasks-title { font-weight: bold; font-size: 11px; margin: 8px 0 4px; border-top: 1px solid #eee; padding-top: 6px; }
+    .task-row { padding: 3px 0; font-size: 11px; }
+    .task-num { font-weight: bold; display: inline-block; min-width: 18px; }
+    .task-attachment { font-size: 10px; color: #c00; margin-left: 4px; }
+    .no-tasks { color: #888; font-style: italic; font-size: 11px; }
+    @media print {
+      body { padding: 1cm; }
+      .no-print { display: none; }
+      a { text-decoration: none; color: inherit; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="no-print" style="margin-bottom:16px;">
+  <button onclick="window.print()" style="padding:6px 14px;font-size:13px;cursor:pointer;">🖨 Imprimir</button>
+  {% if has_attachments %}
+  <a href="{{ url_for('absences.slot_download', date_str=date_str, slot_id=slot_id) }}"
+     style="padding:6px 14px;font-size:13px;margin-left:8px;cursor:pointer;text-decoration:none;display:inline-block;border:1px solid #c00;color:#c00;border-radius:4px;">
+    ⬇ Descargar PDF (con adjuntos)
+  </a>
+  {% endif %}
+  <button onclick="window.close()" style="padding:6px 14px;font-size:13px;margin-left:8px;cursor:pointer;">Cerrar</button>
+</div>
+
+<h1>{{ institute_name }}</h1>
+<div class="subtitle">Tareas para guardia</div>
+<div class="slot-info">{{ slot_label }} &nbsp;·&nbsp; {{ target_date.strftime('%d/%m/%Y') }}</div>
+<hr>
+
+{% for item in entries %}
+<div class="absence-block">
+  <div class="absence-header">{{ item.teacher_name }}</div>
+  <div class="info-row"><span class="info-label">Grupo:</span> {{ item.group_name }}</div>
+  <div class="info-row"><span class="info-label">Aula:</span> {{ item.room_name }}</div>
+  <div class="tasks-title">Tareas</div>
+  {% if item.tasks %}
+    {% for task in item.tasks %}
+    <div class="task-row">
+      <span class="task-num">{{ loop.index }}.</span>
+      {{ task.description }}
+      {% if task.attachment %}
+      <a href="{{ url_for('absences.task_attachment', task_id=task.id) }}" target="_blank"
+         class="task-attachment no-print">[Ver PDF adjunto]</a>
+      <span class="task-attachment" style="display:none" id="pa-{{ task.id }}"> [adjunto PDF]</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="no-tasks">Sin tareas registradas.</p>
+  {% endif %}
+</div>
+{% endfor %}
+
+<script>
+  window.addEventListener('load', function() {
+    document.querySelectorAll('[id^="pa-"]').forEach(function(el) { el.style.display = 'inline'; });
+    window.print();
+  });
+</script>
+</body>
+</html>

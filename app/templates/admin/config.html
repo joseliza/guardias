@@ -68,6 +68,24 @@
               </label>
             </div>
           </div>
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Indicador de usuarios conectados</label>
+            <div class="mb-2">
+              <label class="form-label text-muted small mb-1">Visible para</label>
+              <select name="presence_visible_to" class="form-select form-select-sm" style="max-width:280px">
+                <option value="none"       {% if general_config.get('presence_visible_to','none') == 'none'       %}selected{% endif %}>Nadie (desactivado)</option>
+                <option value="management" {% if general_config.get('presence_visible_to','none') == 'management' %}selected{% endif %}>Solo dirección</option>
+                <option value="all"        {% if general_config.get('presence_visible_to','none') == 'all'        %}selected{% endif %}>Todos los usuarios</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label text-muted small mb-1">Detalle mostrado</label>
+              <select name="presence_detail" class="form-select form-select-sm" style="max-width:280px">
+                <option value="count" {% if general_config.get('presence_detail','count') == 'count' %}selected{% endif %}>Solo número de conectados</option>
+                <option value="names" {% if general_config.get('presence_detail','count') == 'names' %}selected{% endif %}>Número y nombres</option>
+              </select>
+            </div>
+          </div>
           <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
         </form>
       </div>

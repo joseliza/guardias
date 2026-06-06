@@ -29,7 +29,8 @@
 
       <div class="mb-3">
         <label class="form-label">Fecha</label>
-        <input type="date" name="date" id="absence-date" class="form-control" value="{{ today }}" required>
+        <input type="date" name="date" id="absence-date" class="form-control"
+               value="{{ today }}" min="{{ today }}" required>
       </div>
 
       <div class="mb-3">
@@ -212,7 +213,47 @@ tInput.addEventListener('keydown', function(e) {
 });
 {% endif %}
 
+// Datos de tramos con sus horas de fin
+const slotEndTimes = {
+  {% for slot in slots %}{% if not slot.is_break %}
+  {{ slot.id }}: "{{ slot.end }}",
+  {% endif %}{% endfor %}
+};
+
+function updatePastSlots() {
+  const dateVal = document.getElementById('absence-date').value;
+  const isToday = dateVal === "{{ today }}";
+  const nowMins = isToday ? (new Date().getHours() * 60 + new Date().getMinutes()) : -1;
+
+  document.querySelectorAll('.slot-item').forEach(item => {
+    const slotId = parseInt(item.dataset.slotId);
+    const endStr = slotEndTimes[slotId];
+    const cb = item.querySelector('.slot-checkbox');
+    if (isToday && endStr) {
+      const [h, m] = endStr.split(':').map(Number);
+      const endMins = h * 60 + m;
+      if (nowMins > endMins) {
+        cb.disabled = true;
+        cb.checked = false;
+        item.style.opacity = '0.4';
+        item.title = 'Tramo ya finalizado';
+      } else {
+        cb.disabled = false;
+        item.style.opacity = '';
+        item.title = '';
+      }
+    } else {
+      cb.disabled = false;
+      item.style.opacity = '';
+      item.title = '';
+    }
+  });
+}
+
+document.getElementById('absence-date').addEventListener('change', updatePastSlots);
+
 // Carga inicial
 loadSchedule();
+updatePastSlots();
 </script>
 {% endblock %}
