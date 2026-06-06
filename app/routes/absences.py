@@ -5,7 +5,7 @@ para el grupo que queda sin clase, marcar reincorporaciones y generar PDFs
 """
 import os
 from datetime import date, datetime
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify, session
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.absence import Absence
@@ -14,6 +14,7 @@ from app.models.task import Task
 from app.models.user import User
 from app.models.group import Group
 from app.models.schedule import TeacherSchedule
+from app.models.activity import ExtraActivity, ExtraActivityTeacher
 from app.utils.points import apply_absence_penalty
 from app.utils.guards import auto_assign_pending_guards
 
@@ -48,7 +49,25 @@ def index():
             })
         grouped.append({"date": d, "slots": slots_in_day})
 
-    return render_template("absences/index.html", grouped=grouped, slots=slots_cfg)
+    today = date.today()
+
+    # Modal de advertencia de tareas — persiste en sesión hasta descartar o completar
+    if request.args.get("dismiss_tasks"):
+        session.pop("task_prompt_ids", None)
+        return redirect(url_for("absences.index"))
+
+    prompt_ids = session.get("task_prompt_ids", [])
+    prompt_absences = []
+    if prompt_ids:
+        for a in Absence.query.filter(Absence.id.in_(prompt_ids)).all():
+            prompt_absences.append({"absence": a, "has_tasks": a.tasks.count() > 0})
+        # Auto-limpiar cuando todas las ausencias ya tienen tareas
+        if all(p["has_tasks"] for p in prompt_absences):
+            session.pop("task_prompt_ids", None)
+            prompt_absences = []
+
+    return render_template("absences/index.html", grouped=grouped, slots=slots_cfg,
+                           slot_map=slot_map, today=today, prompt_absences=prompt_absences)
 
 
 @absences_bp.route("/nueva", methods=["GET", "POST"])
@@ -73,6 +92,7 @@ def create():
         slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
         skipped_free = []
         normal_slot_ids = []  # tramos normales para auto-asignar después
+        created_ids = []
 
         for slot_id in slot_ids:
             slot_id = int(slot_id)
@@ -81,7 +101,7 @@ def create():
 
             existing = Absence.query.filter_by(
                 teacher_id=teacher_id, date=absence_date, slot_id=slot_id
-            ).first()
+            ).filter(Absence.status != "returned").first()
             if existing:
                 continue
 
@@ -95,7 +115,7 @@ def create():
                 if not has_break_slot:
                     skipped_free.append(slot_cfg.get("label", f"Tramo {slot_id}"))
                     continue
-                db.session.add(Absence(
+                ab = Absence(
                     teacher_id=teacher_id,
                     date=absence_date,
                     slot_id=slot_id,
@@ -103,7 +123,10 @@ def create():
                     reported_by_role="self" if teacher_id == current_user.id else "management",
                     reported_by_id=current_user.id,
                     penalty_points=0.0,
-                ))
+                )
+                db.session.add(ab)
+                db.session.flush()
+                created_ids.append(ab.id)
                 continue
 
             # Tramo normal: verificar que el profesor tiene algo asignado
@@ -137,6 +160,7 @@ def create():
             )
             db.session.add(absence)
             db.session.flush()
+            created_ids.append(absence.id)
 
             db.session.add(Guard(
                 absence_id=absence.id,
@@ -147,12 +171,26 @@ def create():
             ))
 
             if has_guard_slot:
-                absence.penalty_points = configured_penalty
-                apply_absence_penalty(teacher_id, configured_penalty)
+                # Sin penalización si el profe está de actividad extraescolar ese día/tramo
+                on_activities = (
+                    ExtraActivityTeacher.query
+                    .join(ExtraActivity, ExtraActivity.id == ExtraActivityTeacher.activity_id)
+                    .filter(
+                        ExtraActivityTeacher.teacher_id == teacher_id,
+                        ExtraActivity.date == absence_date,
+                    ).all()
+                )
+                is_on_activity = any(slot_id in eat.activity.slot_id_list
+                                     for eat in on_activities)
+                if not is_on_activity:
+                    absence.penalty_points = configured_penalty
+                    apply_absence_penalty(teacher_id, configured_penalty)
 
             normal_slot_ids.append(slot_id)
 
         db.session.commit()
+        if created_ids:
+            session["task_prompt_ids"] = created_ids
 
         # Auto-asignación solo en tramos normales (no recreo)
         for slot_id in normal_slot_ids:
@@ -239,7 +277,16 @@ def task_attachment(task_id):
 @login_required
 def tasks(absence_id):
     absence = Absence.query.get_or_404(absence_id)
-    if absence.teacher_id != current_user.id and not current_user.is_management:
+    can_access = (absence.teacher_id == current_user.id or current_user.is_management)
+    if not can_access:
+        has_guard = TeacherSchedule.query.filter_by(
+            teacher_id=current_user.id,
+            day_of_week=absence.date.weekday(),
+            slot_id=absence.slot_id,
+            is_guard_slot=True,
+        ).first()
+        can_access = bool(has_guard)
+    if not can_access:
         flash("No tienes acceso a esta ausencia.", "danger")
         return redirect(url_for("absences.index"))
 
@@ -564,6 +611,8 @@ def mark_returned(absence_id):
         return redirect(url_for("guards.my_guard") + f"#slot-{absence.slot_id}")
     if back == "display":
         return redirect(url_for("display.index"))
+    if back == "absences":
+        return redirect(url_for("absences.index"))
     return redirect(url_for("dashboard.index") + f"#slot-{absence.slot_id}")
 
 
@@ -576,7 +625,7 @@ def unmark_returned(absence_id):
         flash("Sin permiso.", "danger")
         return redirect(url_for("dashboard.index"))
 
-    absence.status = "absent"
+    absence.status = "pending"
     if absence.guard and absence.guard.status == "returned":
         for rec in absence.guard.records.all():
             teacher = db.session.get(User, rec.teacher_id)
@@ -586,4 +635,4 @@ def unmark_returned(absence_id):
         absence.guard.status = "pending"
     db.session.commit()
     flash("Reincorporación deshecha. El profesor figura de nuevo como ausente.", "warning")
-    return redirect(url_for("dashboard.index") + f"#slot-{absence.slot_id}")
+    return redirect(url_for("absences.index"))

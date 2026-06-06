@@ -1,14 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Grupos{% endblock %}
+{% block main_class %}container-fluid pb-4{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4><i class="bi bi-diagram-3"></i> Grupos</h4>
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+<div class="d-flex justify-content-between align-items-center mb-1">
+  <h4 class="mb-0"><i class="bi bi-diagram-3"></i> Grupos</h4>
   <div class="d-flex gap-2">
     <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
     <a href="{{ url_for('admin.group_create') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nuevo grupo</a>
   </div>
 </div>
-<input type="search" class="table-filter form-control mb-2" data-target="#tabla-grupos" placeholder="Buscar grupo...">
+<input type="search" class="table-filter form-control mb-0" data-target="#tabla-grupos" placeholder="Buscar grupo...">
+</div>
 <div class="card">
   <div class="card-body p-0">
     <table class="table table-hover mb-0" id="tabla-grupos">

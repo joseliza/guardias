@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Inicio{% endblock %}
+{% block main_class %}container-fluid{% endblock %}
 {% block content %}
-<div class="row mb-2 align-items-center">
+<div id="dash-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+<div class="row mb-0 align-items-center">
   <div class="col">
     <h4>
       <i class="bi bi-house"></i>
@@ -35,18 +37,19 @@
   </div>
 </div>
 {% if not is_editable %}
-<div class="alert alert-secondary py-1 px-3 mb-2 small">
+<div class="alert alert-secondary py-1 px-3 mb-0 mt-1 small">
   <i class="bi bi-clock-history"></i> Vista de solo lectura — los datos de esta fecha no se pueden modificar.
 </div>
 {% endif %}
+</div>{# /dash-header #}
 
 {% set has_side_panel = true %}
-<div class="row g-3">
+<div class="row g-0 mt-0" id="dash-content" style="overflow:hidden;">
   <!-- Tramos horarios -->
-  <div class="{{ 'col-md-8' if has_side_panel else 'col-md-12' }}">
+  <div class="{{ 'col-md-8 d-flex flex-column' if has_side_panel else 'col-md-12' }}" style="overflow:hidden;padding:0 8px 0 0;height:100%;">
 
     {# Barra de pestañas #}
-    <div id="slot-tabs-nav" class="mb-2">
+    <div id="slot-tabs-nav" class="mb-0" style="flex-shrink:0;background:#fff;padding-bottom:4px;box-shadow:0 2px 3px rgba(0,0,0,.05);">
       <ul class="nav nav-tabs flex-nowrap" style="overflow-x:auto;overflow-y:hidden">
         {% for item in slots_data %}
         <li class="nav-item flex-shrink-0">
@@ -60,6 +63,7 @@
         {% endfor %}
       </ul>
     </div>
+    <div id="slot-scroll-area" style="flex:1;overflow-y:auto;min-height:0;">
 
     {% for item in slots_data %}
     {% set s = item.slot %}
@@ -78,7 +82,8 @@
 
     <div id="slot-{{ s.id }}" class="slot-card card mb-2 {% if has_pending %}border-danger{% elif is_my_guard %}border-primary{% endif %}" data-slot-id="{{ s.id }}">
       <div class="card-header py-2 d-flex justify-content-between align-items-center
-        {% if has_pending %}bg-danger text-white{% elif is_my_guard %}bg-primary text-white{% else %}bg-light{% endif %}">
+        {% if has_pending %}bg-danger text-white{% elif is_my_guard %}bg-primary text-white{% else %}bg-light{% endif %}"
+        style="position:sticky;top:0;z-index:11;">
         <span>
           <strong>{{ s.label }}</strong>
           <small class="ms-2 {% if has_pending or is_my_guard %}opacity-75{% else %}text-muted{% endif %}">
@@ -108,7 +113,7 @@
       <div class="card-body p-0">
         <table class="table table-sm mb-0">
           <thead class="table-light">
-            <tr>
+            <tr style="position:sticky;top:0;z-index:10;background:#f8f9fa;">
               <th>Profesor/a ausente</th>
               <th>Grupo</th>
               <th>Motivo</th>
@@ -189,7 +194,9 @@
                   {% endif %}
                   </div>
                   {% else %}
-                  <span class="badge bg-secondary d-block text-center" style="min-width:120px">{{ guard.status }}</span>
+                  <span class="badge bg-secondary d-block text-center" style="min-width:120px">
+                    {% if guard.status == 'returned' %}Reincorporado{% else %}{{ guard.status }}{% endif %}
+                  </span>
                   {% endif %}
                 {% else %}
                 <span class="text-muted small">—</span>
@@ -322,15 +329,15 @@
     </div>
     {% endif %}
     {% endfor %}
-  </div>
+    </div>{# /slot-scroll-area #}
+  </div>{# /col-md-8 #}
 
   <!-- Chat y tareas -->
   {% if has_side_panel %}
-  <div class="col-md-4">
-    <div style="position:sticky;top:1rem;">
+  <div class="col-md-4 d-flex flex-column" id="side-panel-col" style="overflow:hidden;padding:0 0 0 8px;height:100%;">
 
       <!-- Chat / Incidencias -->
-      <div class="card">
+      <div class="card" style="flex-shrink:0;">
         <div class="card-header d-flex justify-content-between align-items-center py-2">
           <span><i class="bi bi-chat-dots"></i> Incidencias</span>
           <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
@@ -371,16 +378,16 @@
       </div>
 
       <!-- Tareas -->
-      <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center py-2">
+      <div class="card d-flex flex-column" id="tasks-card" style="flex:1;min-height:0;overflow:hidden;">
+        <div class="card-header d-flex justify-content-between align-items-center py-2" style="flex-shrink:0;">
           <span><i class="bi bi-list-task"></i> Tareas del día</span>
           <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
                   data-bs-toggle="collapse" data-bs-target="#tasks-panel-dash">
             <i class="bi bi-chevron-up"></i>
           </button>
         </div>
-        <div class="collapse show" id="tasks-panel-dash">
-          <div class="card-body p-2" style="max-height:300px;overflow-y:auto;">
+        <div class="collapse show" id="tasks-panel-dash" style="flex:1;min-height:0;overflow:hidden;">
+          <div class="card-body p-2" id="tasks-body" style="height:100%;overflow-y:auto;">
             {% set ns = namespace(has_tasks=false) %}
             {% for sd in slots_data %}
               {% if not sd.slot.is_break %}
@@ -433,8 +440,7 @@
       </div>
     {% endif %}
 
-    </div>
-  </div>
+  </div>{# /side-panel-col #}
   {% endif %}{# has_side_panel #}
 </div>
 
@@ -469,6 +475,25 @@
 
 {% block scripts %}
 <script>
+// Layout: fija la altura del área principal al espacio restante y bloquea el scroll de página
+(function() {
+  function setLayout() {
+    const navbar  = document.querySelector('.navbar.sticky-top');
+    const header  = document.getElementById('dash-header');
+    const content = document.getElementById('dash-content');
+    const navH    = navbar ? navbar.offsetHeight : 56;
+    const headerH = header ? header.offsetHeight : 0;
+    const availH  = window.innerHeight - navH - headerH;
+    if (header)  header.style.top    = navH + 'px';
+    if (content) content.style.height = availH + 'px';
+    // Bloquea scroll de página; cada área tiene su propio scroll interno
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+  }
+  setLayout();
+  window.addEventListener('resize', setLayout);
+})();
+
 // Navegación por datepicker
 document.getElementById('date-picker').addEventListener('change', function() {
   if (this.value) window.location.href = '/?fecha=' + this.value;
@@ -542,7 +567,25 @@ function activateTab(slotId) {
   document.querySelectorAll('[data-slot-tab]').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector(`[data-slot-tab="${slotId}"]`);
   if (btn) btn.classList.add('active');
-  document.querySelectorAll('.slot-card').forEach(c => c.classList.toggle('d-none', c.dataset.slotId !== String(slotId)));
+
+  let activeCard = null;
+  document.querySelectorAll('.slot-card').forEach(c => {
+    const show = c.dataset.slotId === String(slotId);
+    c.classList.toggle('d-none', !show);
+    if (show) activeCard = c;
+  });
+
+  // Ajusta el top del thead para que quede justo bajo el card-header
+  if (activeCard) {
+    const cardHeader = activeCard.querySelector('.card-header');
+    const theadRow   = activeCard.querySelector('thead tr');
+    if (cardHeader && theadRow) {
+      theadRow.style.top = cardHeader.offsetHeight + 'px';
+    }
+    // Vuelve el scroll del área al inicio al cambiar de tramo
+    const scrollArea = document.getElementById('slot-scroll-area');
+    if (scrollArea) scrollArea.scrollTop = 0;
+  }
 }
 
 document.querySelectorAll('[data-slot-tab]').forEach(btn => {
@@ -559,7 +602,6 @@ activateTab(hashSlot || (firstTab && firstTab.dataset.slotTab));
 (function() {
   const handle    = document.getElementById('resize-handle');
   const chatBox   = document.getElementById('chat-box');
-  const tasksBody = document.querySelector('#tasks-panel-dash .card-body');
   if (!handle || !chatBox) return;
 
   const STORAGE_KEY = 'dash_chat_height';
@@ -567,8 +609,7 @@ activateTab(hashSlot || (firstTab && firstTab.dataset.slotTab));
   const MIN_H = 80;
 
   function applyHeight(h) {
-    chatBox.style.height = h + 'px';
-    if (tasksBody) tasksBody.style.maxHeight = Math.max(MIN_H, 620 - h) + 'px';
+    chatBox.style.height = Math.max(MIN_H, h) + 'px';
   }
 
   const saved = parseInt(localStorage.getItem(STORAGE_KEY));

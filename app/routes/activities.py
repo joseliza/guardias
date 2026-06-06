@@ -77,7 +77,7 @@ def create():
             for slot_id in slot_ids:
                 existing = Absence.query.filter_by(
                     teacher_id=int(tid), date=activity_date, slot_id=int(slot_id)
-                ).first()
+                ).filter(Absence.status != "returned").first()
                 if not existing:
                     absence = Absence(
                         teacher_id=int(tid),
@@ -87,6 +87,7 @@ def create():
                         reported_by_role="extracurricular",
                         reported_by_id=current_user.id,
                         justified=auto_justify,
+                        penalty_points=0.0,
                     )
                     db.session.add(absence)
                     db.session.flush()
@@ -165,7 +166,7 @@ def edit(aid):
             for slot_id in new_slot_ids:
                 existing = Absence.query.filter_by(
                     teacher_id=tid, date=new_date, slot_id=int(slot_id)
-                ).first()
+                ).filter(Absence.status != "returned").first()
                 if not existing:
                     absence = Absence(
                         teacher_id=tid, date=new_date, slot_id=int(slot_id),
@@ -173,6 +174,7 @@ def edit(aid):
                         reported_by_role="extracurricular",
                         reported_by_id=current_user.id,
                         justified=auto_justify,
+                        penalty_points=0.0,
                     )
                     db.session.add(absence)
                     db.session.flush()

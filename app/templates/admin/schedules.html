@@ -1,12 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Horarios del profesorado{% endblock %}
+{% block main_class %}container-fluid pb-4{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4><i class="bi bi-calendar3"></i> Horarios del profesorado</h4>
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+<div class="d-flex justify-content-between align-items-center mb-{% if not selected %}1{% else %}0{% endif %}">
+  <h4 class="mb-0"><i class="bi bi-calendar3"></i> Horarios del profesorado</h4>
   <div class="d-flex gap-2">
     <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
     <a href="{{ url_for('admin.import_schedule_csv') }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-arrow-up"></i> Importar CSV</a>
   </div>
+</div>
+{% if not selected %}
+<input type="search" class="table-filter form-control mb-0" data-target="#tabla-horarios" placeholder="Buscar profesor...">
+{% endif %}
 </div>
 
 {% if selected %}
@@ -20,7 +26,7 @@
       <a href="{{ url_for('admin.schedules') }}" class="btn btn-sm btn-outline-secondary ms-auto"><i class="bi bi-x-lg"></i></a>
     </div>
 
-    <div class="table-responsive">
+    <div class="table-responsive js-internal-scroll">
       <table class="table table-bordered table-sm align-middle text-center mb-0" style="min-width:600px">
         <thead class="table-light">
           <tr>
@@ -236,7 +242,6 @@
 {% endif %}
 
 {% if not selected %}
-<input type="search" class="table-filter form-control mb-2" data-target="#tabla-horarios" placeholder="Buscar profesor...">
 <div class="card">
   <div class="card-body p-0">
     <table class="table table-hover mb-0" id="tabla-horarios">

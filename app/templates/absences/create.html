@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Nueva ausencia{% endblock %}
+{% block main_class %}container-fluid pb-4{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+<div class="d-flex justify-content-between align-items-center mb-0">
   <h4 class="mb-0"><i class="bi bi-calendar-plus"></i> Registrar ausencia</h4>
   <a href="{{ url_for('absences.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+</div>
 </div>
 <div class="card">
   <div class="card-body">
@@ -13,7 +16,7 @@
       <div class="mb-3">
         <label class="form-label">Profesor/a</label>
         <div class="position-relative">
-          <input type="text" id="teacher-search" class="form-control" autocomplete="off"
+          <input type="search" id="teacher-search" class="form-control" autocomplete="off"
                  placeholder="Buscar por apellidos o nombre...">
           <div id="teacher-suggestions" class="list-group position-absolute w-100 shadow-sm"
                style="z-index:1050;display:none;max-height:260px;overflow-y:auto"></div>

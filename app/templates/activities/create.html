@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Nueva actividad extraescolar{% endblock %}
+{% block main_class %}container-fluid pb-4{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+<div class="d-flex justify-content-between align-items-center mb-0">
   <h4 class="mb-0"><i class="bi bi-backpack"></i> Registrar actividad extraescolar</h4>
   <a href="{{ url_for('activities.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+</div>
 </div>
 <div class="card">
   <div class="card-body">

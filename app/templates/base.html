@@ -126,7 +126,7 @@
   {% endwith %}
 </div>
 
-<main class="container-fluid py-4">
+<main class="{% block main_class %}container-fluid py-4{% endblock %}">
   {% block content %}{% endblock %}
 </main>
 
@@ -192,6 +192,33 @@ document.querySelectorAll('input[type="date"]').forEach(function(el) {
     allowInput: true,
   });
 });
+</script>
+<script>
+(function() {
+  function setStickyPageHeaders() {
+    var navbar = document.querySelector('.navbar.sticky-top');
+    var navH = navbar ? navbar.offsetHeight : 56;
+    var theadTop = navH;
+    document.querySelectorAll('.sticky-page-header').forEach(function(el) {
+      el.style.top = navH + 'px';
+      theadTop = navH + el.offsetHeight;
+    });
+    // Sticky thead justo bajo el sticky-page-header (excluye el dashboard, que lo gestiona por su cuenta)
+    document.querySelectorAll('table.table thead').forEach(function(thead) {
+      if (thead.closest('#slot-scroll-area') || thead.closest('.js-internal-scroll')) return;
+      var top = theadTop + 'px';
+      thead.querySelectorAll('th').forEach(function(th) {
+        th.style.position = 'sticky';
+        th.style.top = top;
+        th.style.zIndex = '9';
+        var bg = window.getComputedStyle(th).backgroundColor;
+        th.style.backgroundColor = (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') ? '#f8f9fa' : bg;
+      });
+    });
+  }
+  setStickyPageHeaders();
+  window.addEventListener('resize', setStickyPageHeaders);
+})();
 </script>
 {% block scripts %}{% endblock %}
 </body>

@@ -1,12 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Ausencias{% endblock %}
+{% block main_class %}container-fluid pb-4{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4><i class="bi bi-calendar-x"></i> Ausencias</h4>
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+<div class="d-flex justify-content-between align-items-center mb-0">
+  <h4 class="mb-0"><i class="bi bi-calendar-x"></i> Ausencias</h4>
   <div class="d-flex gap-2">
     <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
     <a href="{{ url_for('absences.create') }}" class="btn btn-warning"><i class="bi bi-plus-lg"></i> Nueva ausencia</a>
   </div>
+</div>
 </div>
 
 {% if not grouped %}
@@ -51,20 +54,42 @@
             <td>{{ a.teacher.full_name }}</td>
             <td class="text-muted">{{ a.reason or '—' }}</td>
             <td>
-              <span class="badge bg-{{ 'success' if a.status=='returned' else 'warning text-dark' if a.status=='pending' else 'secondary' }}">
-                {{ a.status }}
-              </span>
-            </td>
-            <td class="d-flex gap-1">
-              <a href="{{ url_for('absences.tasks', absence_id=a.id) }}" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-list-task"></i> Tareas
-              </a>
-              {% set tasks = a.tasks.all() %}
-              {% if tasks %}
-              <a href="{{ url_for('absences.tasks_pdf', absence_id=a.id) }}" class="btn btn-sm btn-outline-danger" title="Descargar PDF">
-                <i class="bi bi-file-earmark-pdf"></i>
-              </a>
+              {% if a.status == 'returned' %}
+              <span class="badge bg-success">Reincorporado</span>
+              {% elif a.status == 'confirmed' %}
+              <span class="badge bg-info text-dark">Confirmada</span>
+              {% else %}
+              <span class="badge bg-warning text-dark">Pendiente</span>
               {% endif %}
+            </td>
+            <td>
+              <div class="d-flex gap-1 flex-wrap">
+                <a href="{{ url_for('absences.tasks', absence_id=a.id) }}" class="btn btn-sm btn-outline-secondary">
+                  <i class="bi bi-list-task"></i> Tareas
+                </a>
+                {% set tasks = a.tasks.all() %}
+                {% if tasks %}
+                <a href="{{ url_for('absences.tasks_pdf', absence_id=a.id) }}" class="btn btn-sm btn-outline-danger" title="Descargar PDF">
+                  <i class="bi bi-file-earmark-pdf"></i>
+                </a>
+                {% endif %}
+                {% if current_user.is_management and a.status != 'returned' %}
+                <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=a.id) }}" class="d-inline">
+                  <input type="hidden" name="back" value="absences">
+                  <button type="submit" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-box-arrow-in-right"></i> Reincorporar
+                  </button>
+                </form>
+                {% endif %}
+                {% if current_user.is_management and a.status == 'returned' %}
+                <form method="POST" action="{{ url_for('absences.unmark_returned', absence_id=a.id) }}" class="d-inline"
+                      onsubmit="return confirm('¿Deshacer la reincorporación?')">
+                  <button type="submit" class="btn btn-sm btn-outline-warning">
+                    <i class="bi bi-arrow-counterclockwise"></i> Deshacer
+                  </button>
+                </form>
+                {% endif %}
+              </div>
             </td>
           </tr>
           {% endfor %}
@@ -75,4 +100,68 @@
   {% endfor %}
 </div>
 {% endfor %}
+
+{# ── Modal: advertencia de tareas (persiste hasta completar o descartar) ── #}
+{% if prompt_absences %}
+{% set pending_count = prompt_absences | selectattr('has_tasks', 'equalto', False) | list | length %}
+<div class="modal fade" id="modalAskTasks" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          Ausencia registrada — deja tareas para el grupo
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        {% if pending_count < prompt_absences | length %}
+        <div class="alert alert-success py-2 mb-3 small">
+          <i class="bi bi-check-circle"></i>
+          {{ prompt_absences | length - pending_count }} de {{ prompt_absences | length }} tramo{{ 's' if prompt_absences | length != 1 }} con tareas añadidas.
+        </div>
+        {% endif %}
+        <div class="d-flex flex-column gap-2">
+          {% for p in prompt_absences %}
+          {% set a = p.absence %}
+          {% set s = slot_map.get(a.slot_id, {}) %}
+          <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2
+                       {{ 'border-success bg-success-subtle' if p.has_tasks else 'border-warning' }}">
+            <div>
+              <span class="fw-semibold">{{ s.get('label', 'Tramo ' ~ a.slot_id) }}</span>
+              <small class="text-muted ms-1">{{ s.get('start','') }}–{{ s.get('end','') }}</small>
+              <br><small class="text-muted">{{ a.date.strftime('%d/%m/%Y') }} · {{ a.teacher.full_name }}</small>
+            </div>
+            {% if p.has_tasks %}
+            <a href="{{ url_for('absences.tasks', absence_id=a.id) }}" class="btn btn-sm btn-outline-success ms-3">
+              <i class="bi bi-check-lg"></i> Añadir más
+            </a>
+            {% else %}
+            <a href="{{ url_for('absences.tasks', absence_id=a.id) }}" class="btn btn-sm btn-warning ms-3">
+              <i class="bi bi-exclamation-triangle"></i> Añadir tareas
+            </a>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a href="{{ url_for('absences.index', dismiss_tasks=1) }}" class="btn btn-outline-secondary">
+          <i class="bi bi-x-lg"></i> Descartar aviso
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if prompt_absences %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  new bootstrap.Modal(document.getElementById('modalAskTasks')).show();
+});
+</script>
+{% endif %}
 {% endblock %}

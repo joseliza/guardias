@@ -1,56 +1,52 @@
 {% extends "base.html" %}
 {% block title %}{% if selected_teacher %}Puntos – {{ selected_teacher.full_name }}{% else %}Mis puntos{% endif %}{% endblock %}
+{% block main_class %}container-fluid{% endblock %}
 {% block content %}
 
-{# ── Selector de profesor (solo directivos) ─────────────────────────────── #}
-{% if teachers is not none %}
-<div class="card mb-3">
-  <div class="card-body py-2">
-    <form id="points-form" class="row g-2 align-items-center" method="GET">
-      <div class="col-auto">
-        <label class="col-form-label fw-semibold">Profesor/a:</label>
-      </div>
-      <div class="col position-relative">
-        <input type="text" id="points-teacher-search" class="form-control form-control-sm" autocomplete="off"
-               placeholder="Buscar por apellidos o nombre..."
-               value="{% if selected_teacher %}{{ selected_teacher.full_name }}{% endif %}">
-        <div id="points-suggestions" class="list-group position-absolute shadow-sm"
-             style="z-index:1050;display:none;max-height:260px;overflow-y:auto;min-width:100%"></div>
-        <input type="hidden" name="teacher_id" id="points-teacher-id"
-               value="{{ selected_teacher.id if selected_teacher else '' }}">
-      </div>
-      {% if selected_teacher %}
-      <div class="col-auto">
-        <a href="{{ url_for('guards.my_points_csv', teacher_id=selected_teacher.id) }}"
-           class="btn btn-sm btn-outline-success">
-          <i class="bi bi-filetype-csv"></i> CSV este profesor
-        </a>
-      </div>
-      {% endif %}
-      <div class="col-auto">
-        <a href="{{ url_for('guards.my_points_csv') }}" class="btn btn-sm btn-success">
-          <i class="bi bi-filetype-csv"></i> CSV todo el profesorado
-        </a>
-      </div>
-    </form>
-  </div>
-</div>
-{% endif %}
-
-{# ── Cabecera ────────────────────────────────────────────────────────────── #}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="mb-0">
-    <i class="bi bi-star-half"></i>
-    {% if selected_teacher %}Historial de {{ selected_teacher.full_name }}
-    {% else %}Mis puntos{% endif %}
-  </h4>
-  <div class="d-flex align-items-center gap-2">
-    {% if total_points is not none %}
-    <span class="fs-5 fw-bold {{ 'text-success' if total_points >= 0 else 'text-danger' }}">
-      {{ "%.2f"|format(total_points) }} pts
-    </span>
+<div id="points-header" class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+  {% if teachers is not none %}
+  <form id="points-form" class="row g-2 align-items-center mb-2" method="GET">
+    <div class="col-auto">
+      <label class="col-form-label fw-semibold small">Profesor/a:</label>
+    </div>
+    <div class="col position-relative">
+      <input type="search" id="points-teacher-search" class="form-control form-control-sm" autocomplete="off"
+             placeholder="Buscar por apellidos o nombre..."
+             value="{% if selected_teacher %}{{ selected_teacher.full_name }}{% endif %}">
+      <div id="points-suggestions" class="list-group position-absolute shadow-sm"
+           style="z-index:1050;display:none;max-height:260px;overflow-y:auto;min-width:100%"></div>
+      <input type="hidden" name="teacher_id" id="points-teacher-id"
+             value="{{ selected_teacher.id if selected_teacher else '' }}">
+    </div>
+    {% if selected_teacher %}
+    <div class="col-auto">
+      <a href="{{ url_for('guards.my_points_csv', teacher_id=selected_teacher.id) }}"
+         class="btn btn-sm btn-outline-success">
+        <i class="bi bi-filetype-csv"></i> CSV este profesor
+      </a>
+    </div>
     {% endif %}
-    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+    <div class="col-auto">
+      <a href="{{ url_for('guards.my_points_csv') }}" class="btn btn-sm btn-success">
+        <i class="bi bi-filetype-csv"></i> CSV todo el profesorado
+      </a>
+    </div>
+  </form>
+  {% endif %}
+  <div class="d-flex justify-content-between align-items-center mb-0">
+    <h4 class="mb-0">
+      <i class="bi bi-star-half"></i>
+      {% if selected_teacher %}Historial de {{ selected_teacher.full_name }}
+      {% else %}Mis puntos{% endif %}
+    </h4>
+    <div class="d-flex align-items-center gap-2">
+      {% if total_points is not none %}
+      <span class="fs-5 fw-bold {{ 'text-success' if total_points >= 0 else 'text-danger' }}">
+        {{ "%.2f"|format(total_points) }} pts
+      </span>
+      {% endif %}
+      <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+    </div>
   </div>
 </div>
 
@@ -66,9 +62,9 @@
 
 {% else %}
 {# ── Tabla ───────────────────────────────────────────────────────────────── #}
-<div class="table-responsive">
-  <table class="table table-sm table-hover align-middle">
-    <thead class="table-dark">
+<div id="points-scroll" class="js-internal-scroll" style="overflow:auto;">
+  <table class="table table-sm table-hover align-middle mb-0">
+    <thead class="table-dark" style="position:sticky;top:0;z-index:5;">
       <tr>
         <th>Fecha</th>
         <th>Tramo</th>
@@ -132,6 +128,26 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
+<script>
+(function() {
+  function setLayout() {
+    var navbar  = document.querySelector('.navbar.sticky-top');
+    var header  = document.getElementById('points-header');
+    var scroll  = document.getElementById('points-scroll');
+    var navH    = navbar ? navbar.offsetHeight : 56;
+    var headerH = header ? header.offsetHeight : 0;
+    var availH  = window.innerHeight - navH - headerH;
+    if (header) header.style.top = navH + 'px';
+    if (scroll) {
+      scroll.style.height = availH + 'px';
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    }
+  }
+  setLayout();
+  window.addEventListener('resize', setLayout);
+})();
+</script>
 {% if teachers is not none %}
 <script>
 (function() {

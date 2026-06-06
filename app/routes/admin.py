@@ -829,6 +829,14 @@ def justification():
 
     has_template = bool(cfg.get("MAIL_JUSTIFICATION_TEMPLATE", "").strip())
 
+    # Profesores con ausencia activa hoy o futura (status != returned) → se consideran aún ausentes
+    still_absent_ids = {
+        a.teacher_id
+        for a in Absence.query
+        .filter(Absence.date >= today, Absence.status != "returned")
+        .all()
+    }
+
     return render_template("admin/justification.html",
                            teachers_with_absences=teachers_with_absences,
                            selected_teacher=selected_teacher,
@@ -836,7 +844,8 @@ def justification():
                            absence_groups=absence_groups,
                            slots_cfg=slots_cfg,
                            pending_email=pending_email,
-                           has_template=has_template)
+                           has_template=has_template,
+                           still_absent_ids=still_absent_ids)
 
 
 def _send_justification_email_for_teacher(teacher_id: int) -> bool:
@@ -903,12 +912,24 @@ def send_justification_email_single(absence_id):
     from app.models.absence import Absence
 
     absence = Absence.query.get_or_404(absence_id)
-    if absence.status != "returned":
-        flash("Aviso: el profesor aún no se ha reincorporado. El correo se envía igualmente.", "warning")
+    teacher = absence.teacher
+
+    if not teacher.receive_emails:
+        flash(f"Aviso: {teacher.full_name} tiene desactivado el envío automático de correos. "
+              "El correo se envía igualmente por ser manual.", "warning")
+
+    from datetime import date as _date
+    still_absent = Absence.query.filter(
+        Absence.teacher_id == absence.teacher_id,
+        Absence.date >= _date.today(),
+        Absence.status != "returned",
+    ).first()
+    if still_absent:
+        flash("Aviso: el profesor tiene ausencia activa a partir de hoy. El correo se envía igualmente.", "warning")
 
     sent = _send_justification_email_for_teacher(absence.teacher_id)
     if sent:
-        flash(f"Correo enviado a {absence.teacher.email}.", "success")
+        flash(f"Correo enviado a {teacher.email}.", "success")
     return redirect(url_for("admin.justification", teacher_id=absence.teacher_id))
 
 
@@ -967,6 +988,10 @@ def send_justification_emails():
                         if Absence.query.get(aid)})
     sent = skipped = 0
     for tid in teacher_ids:
+        t = User.query.get(tid)
+        if t and not t.receive_emails:
+            flash(f"Aviso: {t.full_name} tiene desactivado el envío automático de correos. "
+                  "El correo se envía igualmente por ser manual.", "warning")
         ok = _send_justification_email_for_teacher(tid)
         if ok:
             sent += 1
@@ -976,7 +1001,7 @@ def send_justification_emails():
     if sent:
         flash(f"Correo{'s' if sent != 1 else ''} enviado{'s' if sent != 1 else ''}: {sent} profesor{'es' if sent != 1 else ''}.", "success")
     if skipped:
-        flash(f"Omitidos (no reincorporados o error): {skipped}.", "warning")
+        flash(f"Omitidos (sin faltas pendientes o error): {skipped}.", "warning")
     return redirect(url_for("admin.justification", teacher_id=teacher_id))
 
 
