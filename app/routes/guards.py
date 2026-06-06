@@ -6,7 +6,7 @@ El helper _can_manage_slot() permite que profesores de guardia actúen sobre
 su propio tramo sin necesidad de rol directivo.
 """
 from datetime import date
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.guard import Guard, GuardRecord
@@ -119,7 +119,7 @@ def assign(guard_id):
 
         if back == "my_guard":
             return redirect(url_for("guards.my_guard") + f"#slot-{guard.slot_id}")
-        return redirect(url_for("dashboard.index") + f"#slot-{guard.slot_id}")
+        return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()) + f"#slot-{guard.slot_id}")
 
     return render_template("guards/assign.html", guard=guard, slot=slot,
                            primary=primary, ex_guard=ex_guard,
@@ -155,7 +155,7 @@ def self_register(guard_id):
             award_guard_points(current_user.id, points)
         db.session.commit()
         flash("Guardia registrada.", "success")
-        return redirect(url_for("dashboard.index") + f"#slot-{guard.slot_id}")
+        return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()) + f"#slot-{guard.slot_id}")
 
     return render_template("guards/self_register.html", guard=guard, slot=slot)
 
@@ -199,7 +199,113 @@ def quick_assign():
         _recalculate_guard_records(guard, slot)
     db.session.commit()
     flash("Guardia asignada.", "success")
-    return redirect(url_for("dashboard.index") + f"#slot-{guard.slot_id}")
+    return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()) + f"#slot-{guard.slot_id}")
+
+
+@guards_bp.route("/asignar-ajax", methods=["POST"])
+@login_required
+def quick_assign_ajax():
+    guard_id   = request.form.get("guard_id",   type=int)
+    teacher_id = request.form.get("teacher_id", type=int)
+    if not guard_id or not teacher_id:
+        return jsonify(ok=False, error="Datos incompletos.")
+
+    guard = Guard.query.get(guard_id)
+    if not guard:
+        return jsonify(ok=False, error="Guardia no encontrada.")
+
+    can_assign = current_user.is_management
+    if not can_assign:
+        has_guard = TeacherSchedule.query.filter_by(
+            teacher_id=current_user.id,
+            day_of_week=guard.date.weekday(),
+            slot_id=guard.slot_id,
+            is_guard_slot=True,
+        ).first()
+        can_assign = bool(has_guard)
+    if not can_assign:
+        return jsonify(ok=False, error="Sin permiso.")
+
+    warning = None
+    clash = (GuardRecord.query
+             .join(Guard)
+             .filter(Guard.date == guard.date,
+                     Guard.slot_id == guard.slot_id,
+                     Guard.id != guard.id,
+                     GuardRecord.teacher_id == teacher_id)
+             .first())
+    if clash:
+        teacher_name = User.query.get(teacher_id).full_name
+        warning = (f"Aviso: {teacher_name} ya cubre otra guardia en este tramo. "
+                   f"La asignación se ha registrado igualmente.")
+
+    db.session.add(GuardRecord(
+        guard_id=guard.id,
+        teacher_id=teacher_id,
+        effective_minutes=0,
+        notes="Asignación rápida",
+        points_awarded=0.0,
+    ))
+    guard.status = "covered"
+    db.session.flush()
+    slots_cfg = current_app.config["TIME_SLOTS"]
+    slot = next((s for s in slots_cfg if s["id"] == guard.slot_id), None)
+    if slot:
+        _recalculate_guard_records(guard, slot)
+    db.session.commit()
+    return jsonify(ok=True, slot_id=guard.slot_id, warning=warning)
+
+
+@guards_bp.route("/<int:guard_id>/reordenar", methods=["POST"])
+@login_required
+def reorder_records(guard_id):
+    guard = Guard.query.get_or_404(guard_id)
+
+    can_assign = current_user.is_management
+    if not can_assign:
+        has_guard = TeacherSchedule.query.filter_by(
+            teacher_id=current_user.id,
+            day_of_week=guard.date.weekday(),
+            slot_id=guard.slot_id,
+            is_guard_slot=True,
+        ).first()
+        can_assign = bool(has_guard)
+    if not can_assign:
+        return jsonify(ok=False, error="Sin permiso.")
+
+    record_ids_str = request.form.get("record_ids", "")
+    try:
+        new_order_ids = [int(x) for x in record_ids_str.split(",") if x.strip()]
+    except ValueError:
+        return jsonify(ok=False, error="Orden inválido.")
+
+    records_by_id = guard.records.order_by(GuardRecord.id).all()
+    if len(new_order_ids) != len(records_by_id):
+        return jsonify(ok=False, error="Número de registros incorrecto.")
+
+    records_map = {r.id: r for r in records_by_id}
+    if any(rid not in records_map for rid in new_order_ids):
+        return jsonify(ok=False, error="Registro no encontrado.")
+
+    # Revertir puntos actuales antes del swap para no desajustar contadores
+    for rec in records_by_id:
+        teacher = db.session.get(User, rec.teacher_id)
+        if teacher:
+            teacher.points = round(teacher.points - rec.points_awarded, 2)
+        rec.points_awarded = 0.0
+
+    # Asignar teacher_ids en el nuevo orden sobre los registros ordenados por id
+    new_teacher_ids = [records_map[rid].teacher_id for rid in new_order_ids]
+    for rec, new_tid in zip(records_by_id, new_teacher_ids):
+        rec.teacher_id = new_tid
+
+    db.session.flush()
+    slots_cfg = current_app.config["TIME_SLOTS"]
+    slot = next((s for s in slots_cfg if s["id"] == guard.slot_id), None)
+    if slot:
+        _recalculate_guard_records(guard, slot)
+    db.session.commit()
+    return jsonify(ok=True, slot_id=guard.slot_id)
 
 
 @guards_bp.route("/auto-asignar/<date_str>/<int:slot_id>", methods=["POST"])
@@ -216,7 +322,7 @@ def auto_assign_slot(date_str, slot_id):
         flash(f"{result['pending']} guardia(s) sin cubrir: no hay profesores disponibles suficientes.", "danger")
     if not result["assigned"] and not result["pending"]:
         flash("No hay guardias pendientes en este tramo.", "info")
-    return redirect(url_for("dashboard.index") + f"#slot-{slot_id}")
+    return redirect(url_for("dashboard.index", fecha=target_date.isoformat()) + f"#slot-{slot_id}")
 
 
 @guards_bp.route("/registro/<int:record_id>/eliminar", methods=["POST"])
@@ -227,7 +333,7 @@ def remove_record(record_id):
 
     if not _can_manage_slot(guard.slot_id):
         flash("Sin permiso.", "danger")
-        return redirect(url_for("dashboard.index"))
+        return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()))
 
     teacher = db.session.get(User, record.teacher_id)
     if teacher:
@@ -250,7 +356,7 @@ def remove_record(record_id):
     back = request.form.get("back", "dashboard")
     if back == "my_guard":
         return redirect(url_for("guards.my_guard") + f"#slot-{guard.slot_id}")
-    return redirect(url_for("dashboard.index") + f"#slot-{guard.slot_id}")
+    return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()) + f"#slot-{guard.slot_id}")
 
 
 @guards_bp.route("/mi-guardia")

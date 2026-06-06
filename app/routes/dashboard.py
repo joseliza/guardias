@@ -7,6 +7,7 @@ para mostrar los controles de gestión directamente en el panel.
 from datetime import date, timedelta
 from flask import Blueprint, render_template, current_app, request
 from flask_login import login_required, current_user
+from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
 from app.models.guard import Guard, GuardRecord
 from app.models.absence import Absence
 from app.models.schedule import TeacherSchedule
@@ -246,6 +247,8 @@ def index():
                     ],
                 })
 
+    gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
+
     return render_template(
         "dashboard/index.html",
         today=today,
@@ -261,4 +264,5 @@ def index():
         absence_support=absence_support,
         chat_messages=chat_messages,
         tasks_by_slot=tasks_by_slot,
+        blink_guard_alert=gcfg.get("blink_guard_alert", False),
     )

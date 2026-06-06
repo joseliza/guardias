@@ -598,7 +598,7 @@ def mark_returned(absence_id):
         ).first()
         if not has_guard:
             flash("Sin permiso.", "danger")
-            return redirect(url_for("dashboard.index"))
+            return redirect(url_for("dashboard.index", fecha=absence.date.isoformat()))
 
     absence.status = "returned"
     if absence.guard:
@@ -613,7 +613,7 @@ def mark_returned(absence_id):
         return redirect(url_for("display.index"))
     if back == "absences":
         return redirect(url_for("absences.index"))
-    return redirect(url_for("dashboard.index") + f"#slot-{absence.slot_id}")
+    return redirect(url_for("dashboard.index", fecha=absence.date.isoformat()) + f"#slot-{absence.slot_id}")
 
 
 @absences_bp.route("/<int:absence_id>/deshacer-reincorporacion", methods=["POST"])
@@ -623,7 +623,7 @@ def unmark_returned(absence_id):
 
     if not current_user.is_management:
         flash("Sin permiso.", "danger")
-        return redirect(url_for("dashboard.index"))
+        return redirect(url_for("dashboard.index", fecha=absence.date.isoformat()))
 
     absence.status = "pending"
     if absence.guard and absence.guard.status == "returned":

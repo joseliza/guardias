@@ -43,6 +43,21 @@
 {% endif %}
 </div>{# /dash-header #}
 
+{% if blink_guard_alert %}
+<style>
+@keyframes guardBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.12; }
+}
+.blink-guard-alert small.text-success {
+  animation: guardBlink 0.85s ease-in-out infinite;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+</style>
+{% endif %}
+
 {% set has_side_panel = true %}
 <div class="row g-0 mt-0" id="dash-content" style="overflow:hidden;">
   <!-- Tramos horarios -->
@@ -125,7 +140,7 @@
           <tbody>
             {% for absence in item.absences %}
             {% set guard = item.guards | selectattr('absence_id','eq', absence.id) | first %}
-            <tr>
+            <tr{% if can_manage and guard and guard.status in ('pending', 'covered') and absence.status != 'returned' %} class="drop-guard-row" data-guard-id="{{ guard.id }}"{% endif %}>
               <td>{{ absence.teacher.full_name }}</td>
               <td>
                 <span class="badge bg-light text-dark border">{{ absence_groups[absence.id] }}</span>
@@ -143,17 +158,24 @@
               </td>
               <td>
                 {% if guard %}
-                  {% set records = guard.records.all() %}
+                  {% set records = guard.records.all() | sort(attribute='id') %}
                   {% if guard.status == 'covered' and records %}
-                  <div style="min-width:120px">
+                  <div class="guard-records-list" data-guard-id="{{ guard.id }}"
+                       {% if is_today and blink_guard_alert %}data-slot-start-mins="{{ s.start.split(':')[0]|int * 60 + s.start.split(':')[1]|int }}"{% endif %}
+                       style="min-width:140px">
                   <span class="badge bg-success d-block text-center mb-1">Cubierta</span>
                   {% set slot_parts = s.start.split(':') %}
                   {% set ns = namespace(cur = slot_parts[0]|int * 60 + slot_parts[1]|int) %}
-                  {% for rec in records | sort(attribute='id') %}
+                  {% for rec in records %}
                   {% set rec_start = ns.cur %}
                   {% set rec_end = ns.cur + rec.effective_minutes %}
                   {% set ns.cur = rec_end %}
-                  <div class="d-flex align-items-center gap-1">
+                  <div class="d-flex align-items-center gap-1 guard-record-item" data-record-id="{{ rec.id }}">
+                    {% if can_manage and records | length > 1 %}
+                    <span class="text-muted" style="cursor:grab;line-height:1;" title="Arrastrar para reordenar">
+                      <i class="bi bi-grip-vertical"></i>
+                    </span>
+                    {% endif %}
                     <small class="text-success fw-semibold">
                       <i class="bi bi-person-check"></i> {{ rec.teacher.full_name }}
                       <span class="badge bg-success-subtle text-success-emphasis ms-1" style="font-size:.7rem;">
@@ -258,14 +280,21 @@
                 </span>
                 {% elif current_user.is_management and item.all_guards_info %}
                 <button type="button"
-                        class="badge bg-success border-0 quick-assign-btn"
-                        style="cursor:pointer"
-                        title="Clic para asignar guardia"
+                        class="badge bg-success border-0 quick-assign-btn draggable-teacher"
+                        style="cursor:grab"
+                        title="Arrastrar o clic para asignar guardia"
                         data-teacher-id="{{ t.id }}"
                         data-teacher-name="{{ t.full_name }}"
                         data-guards='{{ item.all_guards_info | tojson }}'>
                   <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
                 </button>
+                {% elif can_manage %}
+                <span class="badge bg-success draggable-teacher"
+                      style="cursor:grab"
+                      title="Arrastrar para asignar guardia"
+                      data-teacher-id="{{ t.id }}">
+                  <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
+                </span>
                 {% else %}
                 <span class="badge bg-success" title="Libre — disponible para cubrir">
                   <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
@@ -288,14 +317,21 @@
                 </span>
                 {% elif current_user.is_management and item.all_guards_info %}
                 <button type="button"
-                        class="badge border-0 quick-assign-btn"
-                        style="cursor:pointer;background-color:#0d9488!important;color:#fff"
-                        title="Clic para asignar guardia"
+                        class="badge border-0 quick-assign-btn draggable-teacher"
+                        style="cursor:grab;background-color:#0d9488!important;color:#fff"
+                        title="Arrastrar o clic para asignar guardia"
                         data-teacher-id="{{ t.id }}"
                         data-teacher-name="{{ t.full_name }}"
                         data-guards='{{ item.all_guards_info | tojson }}'>
                   <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
                 </button>
+                {% elif can_manage %}
+                <span class="badge text-white draggable-teacher"
+                      style="cursor:grab;background-color:#0d9488!important"
+                      title="Arrastrar para asignar guardia"
+                      data-teacher-id="{{ t.id }}">
+                  <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
+                </span>
                 {% else %}
                 <span class="badge text-white" style="background-color:#0d9488!important"
                       title="Disponible por actividad extraescolar">
@@ -560,6 +596,148 @@ document.querySelectorAll('.quick-assign-btn').forEach(btn => {
     qaModal.show();
   });
 });
+// ── Drag & Drop asignación ───────────────────────────────────────────────────
+(function() {
+  const ajaxUrl = "{{ url_for('guards.quick_assign_ajax') }}";
+
+  document.querySelectorAll('.draggable-teacher').forEach(el => {
+    el.setAttribute('draggable', 'true');
+    el.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', el.dataset.teacherId);
+      e.dataTransfer.effectAllowed = 'move';
+      el.style.opacity = '0.5';
+    });
+    el.addEventListener('dragend', () => { el.style.opacity = ''; });
+  });
+
+  document.querySelectorAll('.drop-guard-row').forEach(row => {
+    row.addEventListener('dragover', e => {
+      if (!e.dataTransfer.types.includes('text/plain')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      row.style.outline = '2px dashed #ffc107';
+      row.style.background = '#fff9e6';
+    });
+    row.addEventListener('dragleave', e => {
+      if (!row.contains(e.relatedTarget)) {
+        row.style.outline = '';
+        row.style.background = '';
+      }
+    });
+    row.addEventListener('drop', e => {
+      if (!e.dataTransfer.types.includes('text/plain')) return;
+      e.preventDefault();
+      row.style.outline = '';
+      row.style.background = '';
+      const teacherId = e.dataTransfer.getData('text/plain');
+      const guardId   = row.dataset.guardId;
+      if (!teacherId || !guardId) return;
+
+      fetch(ajaxUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'teacher_id=' + encodeURIComponent(teacherId) + '&guard_id=' + encodeURIComponent(guardId),
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok) { alert(data.error || 'Error al asignar.'); return; }
+        if (data.warning) {
+          const toast = document.createElement('div');
+          toast.className = 'alert alert-warning position-fixed bottom-0 end-0 m-3 shadow';
+          toast.style.cssText = 'z-index:9999;max-width:360px;';
+          toast.textContent = data.warning;
+          document.body.appendChild(toast);
+          setTimeout(() => {
+            window.location.href = window.location.pathname + window.location.search + '#slot-' + data.slot_id;
+            window.location.reload();
+          }, 1400);
+        } else {
+          window.location.href = window.location.pathname + window.location.search + '#slot-' + data.slot_id;
+          window.location.reload();
+        }
+      })
+      .catch(() => alert('Error de red al asignar.'));
+    });
+  });
+})();
+
+// ── Reordenar profesores dentro de una guardia ───────────────────────────────
+(function() {
+  let draggingRec = null;
+
+  function attachRecordSort(container) {
+    const items = () => [...container.querySelectorAll('.guard-record-item')];
+    if (items().length < 2) return;
+
+    function clearIndicators() {
+      items().forEach(el => { el.style.borderTop = ''; el.style.borderBottom = ''; });
+    }
+
+    items().forEach(item => {
+      item.setAttribute('draggable', 'true');
+
+      item.addEventListener('dragstart', e => {
+        draggingRec = item;
+        e.dataTransfer.setData('application/guard-record', item.dataset.recordId);
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => { item.style.opacity = '0.4'; }, 0);
+      });
+
+      item.addEventListener('dragend', () => {
+        item.style.opacity = '';
+        clearIndicators();
+        draggingRec = null;
+      });
+
+      item.addEventListener('dragover', e => {
+        if (!e.dataTransfer.types.includes('application/guard-record')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        clearIndicators();
+        const mid = item.getBoundingClientRect().top + item.offsetHeight / 2;
+        if (e.clientY < mid) item.style.borderTop = '2px solid #ffc107';
+        else item.style.borderBottom = '2px solid #ffc107';
+      });
+
+      item.addEventListener('dragleave', e => {
+        if (!item.contains(e.relatedTarget)) {
+          item.style.borderTop = '';
+          item.style.borderBottom = '';
+        }
+      });
+
+      item.addEventListener('drop', e => {
+        if (!e.dataTransfer.types.includes('application/guard-record')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        clearIndicators();
+        if (!draggingRec || draggingRec === item) return;
+
+        const mid = item.getBoundingClientRect().top + item.offsetHeight / 2;
+        if (e.clientY < mid) container.insertBefore(draggingRec, item);
+        else container.insertBefore(draggingRec, item.nextSibling);
+
+        const guardId = container.dataset.guardId;
+        const recordIds = items().map(el => el.dataset.recordId).join(',');
+
+        fetch(`/guardias/${guardId}/reordenar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'record_ids=' + encodeURIComponent(recordIds),
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (!data.ok) { alert(data.error || 'Error al reordenar.'); location.reload(); return; }
+          history.replaceState(null, '', '#slot-' + data.slot_id);
+          location.reload();
+        })
+        .catch(() => { alert('Error de red al reordenar.'); location.reload(); });
+      });
+    });
+  }
+
+  document.querySelectorAll('.guard-records-list').forEach(attachRecordSort);
+})();
 {% endif %}
 
 // ── Vista por tramo ──────────────────────────────────────────────────────────
@@ -643,6 +821,47 @@ activateTab(hashSlot || (firstTab && firstTab.dataset.slotTab));
   handle.addEventListener('touchstart', e => { startDrag(e.touches[0].clientY); e.preventDefault(); }, { passive: false });
   document.addEventListener('touchmove', e => { if (dragging) { moveDrag(e.touches[0].clientY); e.preventDefault(); } }, { passive: false });
   document.addEventListener('touchend', endDrag);
+})();
+{% endif %}
+
+{% if is_today and blink_guard_alert %}
+// ── Parpadeo de aviso al inicio de guardia ───────────────────────────────────
+(function() {
+  const todayIso = '{{ target_date.isoformat() }}';
+
+  function checkBlinks() {
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+
+    document.querySelectorAll('.guard-records-list[data-slot-start-mins]').forEach(list => {
+      const slotStart = parseInt(list.dataset.slotStartMins);
+      const inWindow  = nowMins >= slotStart;
+
+      list.querySelectorAll('.guard-record-item').forEach(item => {
+        const key       = 'guard_blink_' + item.dataset.recordId + '_' + todayIso;
+        const dismissed = !!localStorage.getItem(key);
+
+        if (inWindow && !dismissed) {
+          if (!item.classList.contains('blink-guard-alert')) {
+            item.classList.add('blink-guard-alert');
+            const nameEl = item.querySelector('small.text-success');
+            if (nameEl) {
+              nameEl.title = 'Clic para detener el aviso';
+              nameEl.addEventListener('click', function() {
+                item.classList.remove('blink-guard-alert');
+                localStorage.setItem(key, '1');
+              }, { once: true });
+            }
+          }
+        } else if (!inWindow || dismissed) {
+          item.classList.remove('blink-guard-alert');
+        }
+      });
+    });
+  }
+
+  checkBlinks();
+  setInterval(checkBlinks, 30000);
 })();
 {% endif %}
 </script>

@@ -54,6 +54,20 @@
               </label>
             </div>
           </div>
+          <div class="mb-4">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="blink_guard_alert"
+                     id="blink_guard_alert"
+                     {% if general_config.get('blink_guard_alert') %}checked{% endif %}>
+              <label class="form-check-label" for="blink_guard_alert">
+                <strong>Parpadeo de aviso al inicio de guardia</strong>
+                <small class="d-block text-muted mt-1">
+                  En el panel de hoy, el nombre del profesor asignado parpadea cuando llega
+                  la hora de inicio del tramo. Un clic sobre él lo detiene.
+                </small>
+              </label>
+            </div>
+          </div>
           <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
         </form>
       </div>

@@ -594,7 +594,7 @@ def teacher_send_welcome(tid):
 # ── Configuración ─────────────────────────────────────────────────────────────
 
 MAIL_KEYS = ["MAIL_SERVER", "MAIL_PORT", "MAIL_USE_TLS", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_DEFAULT_SENDER", "MAIL_WELCOME_TEMPLATE", "MAIL_JUSTIFICATION_TEMPLATE"]
-GENERAL_DEFAULTS = {"show_future_absences": False, "auto_justify_extracurricular": False}
+GENERAL_DEFAULTS = {"show_future_absences": False, "auto_justify_extracurricular": False, "blink_guard_alert": False}
 
 
 def _mail_config_path():
@@ -690,6 +690,7 @@ def config_general():
     current["GENERAL"] = {
         "show_future_absences":        bool(request.form.get("show_future_absences")),
         "auto_justify_extracurricular": bool(request.form.get("auto_justify_extracurricular")),
+        "blink_guard_alert":            bool(request.form.get("blink_guard_alert")),
     }
     _write_mail_config(current)
     flash("Configuración general guardada.", "success")
