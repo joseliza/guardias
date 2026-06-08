@@ -9,4 +9,5 @@ instance/
 .DS_Store
 materias.pdf
 .claude/
+memory/
 uploads/
