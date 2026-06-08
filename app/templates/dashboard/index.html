@@ -10,6 +10,8 @@
       Panel{% if is_today %} de hoy{% endif %} — {{ target_date | fecha_es }}
       {% if is_today and not is_display_user %}
       <span id="live-clock" class="ms-2 fw-bold text-primary" style="font-size:1.6rem;vertical-align:baseline;letter-spacing:.04em;line-height:1;"></span>
+      {% elif is_today %}
+      {# Hoy, en modo pantalla: sin badge — el título ya indica "de hoy" #}
       {% elif not is_editable %}
       <span class="badge bg-secondary ms-2" style="font-size:.65rem;vertical-align:middle;">Pasado</span>
       {% else %}
@@ -56,6 +58,28 @@
   border-radius: 3px;
   padding: 0 2px;
 }
+[data-slot-tab].past-time-slot {
+  background-color: rgba(0, 0, 0, .045);
+  color: #adb5bd;
+}
+.slot-card.past-time-slot {
+  background-color: rgba(0, 0, 0, .045);
+}
+.slot-card.past-time-slot .table {
+  --bs-table-bg: rgba(0, 0, 0, .045);
+}
+[data-slot-tab].current-time-slot {
+  background-color: rgba(13, 110, 253, .14);
+  box-shadow: inset 0 -3px 0 0 #0d6efd;
+  border-radius: .375rem .375rem 0 0;
+}
+@keyframes currentSlotTabBlink {
+  0%, 100% { background-color: rgba(13, 110, 253, .14); box-shadow: inset 0 -3px 0 0 #0d6efd; }
+  50%      { background-color: rgba(13, 110, 253, .55); box-shadow: inset 0 -4px 0 0 #0d6efd; }
+}
+[data-slot-tab].current-time-slot.blink {
+  animation: currentSlotTabBlink 0.9s ease-in-out infinite;
+}
 </style>
 {% endif %}
 
@@ -69,7 +93,8 @@
       <ul class="nav nav-tabs flex-nowrap" style="overflow-x:auto;overflow-y:hidden">
         {% for item in slots_data %}
         <li class="nav-item flex-shrink-0">
-          <button class="nav-link {% if item.slot.is_break %}text-muted{% endif %}" data-slot-tab="{{ item.slot.id }}">
+          <button class="nav-link {% if item.slot.is_break %}text-muted{% endif %}{% if not is_editable %} past-time-slot{% endif %}" data-slot-tab="{{ item.slot.id }}"
+                  data-slot-start="{{ item.slot.start }}" data-slot-end="{{ item.slot.end }}">
             {% if item.slot.is_break %}<i class="bi bi-cup-hot"></i>{% endif %}
             {{ item.slot.label }}
             {% if item.real_pending %}<span class="badge bg-danger ms-1">{{ item.real_pending|length }}</span>
@@ -85,7 +110,7 @@
     {% set s = item.slot %}
 
     {% if s.is_break %}
-    <div id="slot-{{ s.id }}" class="slot-card card mb-2 border-0 bg-light" data-slot-id="{{ s.id }}">
+    <div id="slot-{{ s.id }}" class="slot-card card mb-2 border-0 bg-light{% if not is_editable %} past-time-slot{% endif %}" data-slot-id="{{ s.id }}">
       <div class="card-body py-2 text-muted text-center small">
         <i class="bi bi-cup-hot"></i> Recreo · {{ s.start }}–{{ s.end }} (30 min)
       </div>
@@ -96,7 +121,7 @@
     {% set is_my_guard = item.is_my_guard %}
     {% set can_manage = (current_user.is_management or is_my_guard or is_display_user) and is_editable %}
 
-    <div id="slot-{{ s.id }}" class="slot-card card mb-2 {% if has_pending %}border-danger{% elif is_my_guard %}border-primary{% endif %}" data-slot-id="{{ s.id }}">
+    <div id="slot-{{ s.id }}" class="slot-card card mb-2 {% if has_pending %}border-danger{% elif is_my_guard %}border-primary{% endif %}{% if not is_editable %} past-time-slot{% endif %}" data-slot-id="{{ s.id }}">
       <div class="card-header py-2 d-flex justify-content-between align-items-center
         {% if has_pending %}bg-danger text-white{% elif is_my_guard %}bg-primary text-white{% else %}bg-light{% endif %}"
         style="position:sticky;top:0;z-index:11;">
@@ -132,7 +157,7 @@
             <tr style="position:sticky;top:0;z-index:10;background:#f8f9fa;">
               <th>Profesor/a ausente</th>
               <th>Grupo</th>
-              <th>Motivo</th>
+              <th>Comentarios</th>
               <th>Tareas</th>
               <th>Guardia</th>
               {% if can_manage %}<th>Acción</th>{% endif %}
@@ -161,9 +186,7 @@
                 {% if guard %}
                   {% set records = guard.records.all() | sort(attribute='id') %}
                   {% if guard.status == 'covered' and records %}
-                  <div class="guard-records-list" data-guard-id="{{ guard.id }}"
-                       {% if is_today and blink_guard_alert %}data-slot-start-mins="{{ s.start.split(':')[0]|int * 60 + s.start.split(':')[1]|int }}"{% endif %}
-                       style="min-width:140px">
+                  <div class="guard-records-list" data-guard-id="{{ guard.id }}" style="min-width:140px">
                   <span class="badge bg-success d-block text-center mb-1">Cubierta</span>
                   {% set slot_parts = s.start.split(':') %}
                   {% set ns = namespace(cur = slot_parts[0]|int * 60 + slot_parts[1]|int) %}
@@ -171,7 +194,8 @@
                   {% set rec_start = ns.cur %}
                   {% set rec_end = ns.cur + rec.effective_minutes %}
                   {% set ns.cur = rec_end %}
-                  <div class="d-flex align-items-center gap-1 guard-record-item" data-record-id="{{ rec.id }}">
+                  <div class="d-flex align-items-center gap-1 guard-record-item" data-record-id="{{ rec.id }}"
+                       {% if is_today and blink_guard_alert %}data-rec-start="{{ rec_start }}" data-rec-end="{{ rec_end }}"{% endif %}>
                     {% if can_manage and records | length > 1 %}
                     <span class="text-muted" style="cursor:grab;line-height:1;" title="Arrastrar para reordenar">
                       <i class="bi bi-grip-vertical"></i>
@@ -281,7 +305,7 @@
               {% for t in item.guard_teachers %}
                 {% if t.id in item.assigned_teacher_ids %}
                 <span class="badge bg-warning text-dark" title="Ocupado — cubriendo una ausencia">
-                  <i class="bi bi-person-fill-exclamation"></i> {{ t.full_name }} ({{ t.points }} pts)
+                  <i class="bi bi-person-fill-exclamation"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% elif (current_user.is_management or is_display_user) and item.all_guards_info %}
                 <button type="button"
@@ -291,18 +315,18 @@
                         data-teacher-id="{{ t.id }}"
                         data-teacher-name="{{ t.full_name }}"
                         data-guards='{{ item.all_guards_info | tojson }}'>
-                  <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
+                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </button>
                 {% elif can_manage %}
                 <span class="badge bg-success draggable-teacher"
                       style="cursor:grab"
                       title="Arrastrar para asignar guardia"
                       data-teacher-id="{{ t.id }}">
-                  <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
+                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% else %}
                 <span class="badge bg-success" title="Libre — disponible para cubrir">
-                  <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
+                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% endif %}
               {% else %}
@@ -318,7 +342,7 @@
                 {% if t.id in item.assigned_teacher_ids %}
                 <span class="badge text-white" style="background-color:#0d6efd!important"
                       title="Ocupado — cubriendo una ausencia">
-                  <i class="bi bi-person-fill-exclamation"></i> {{ t.full_name }} ({{ t.points }} pts)
+                  <i class="bi bi-person-fill-exclamation"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% elif (current_user.is_management or is_display_user) and item.all_guards_info %}
                 <button type="button"
@@ -328,19 +352,19 @@
                         data-teacher-id="{{ t.id }}"
                         data-teacher-name="{{ t.full_name }}"
                         data-guards='{{ item.all_guards_info | tojson }}'>
-                  <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
+                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </button>
                 {% elif can_manage %}
                 <span class="badge text-white draggable-teacher"
                       style="cursor:grab;background-color:#0d9488!important"
                       title="Arrastrar para asignar guardia"
                       data-teacher-id="{{ t.id }}">
-                  <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
+                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% else %}
                 <span class="badge text-white" style="background-color:#0d9488!important"
                       title="Disponible por actividad extraescolar">
-                  <i class="bi bi-person-check"></i> {{ t.full_name }} ({{ t.points }} pts)
+                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% endif %}
               {% endfor %}
@@ -355,7 +379,7 @@
               <span class="badge bg-purple text-white"
                     style="background-color:#6f42c1!important"
                     title="Cubriendo sin guardia oficial en este tramo">
-                <i class="bi bi-person-plus-fill"></i> {{ t.full_name }} ({{ t.points }} pts)
+                <i class="bi bi-person-plus-fill"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
               </span>
               {% endfor %}
             </div>
@@ -787,10 +811,72 @@ document.querySelectorAll('[data-slot-tab]').forEach(btn => {
   btn.addEventListener('click', () => activateTab(btn.dataset.slotTab));
 });
 
-// Activar tramo del ancla (#slot-X) o el primero disponible
+// ── Tramo actual por hora ────────────────────────────────────────────────────
+{% if is_today %}
+function hhmmToMins(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+function getCurrentSlotId() {
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  for (const tab of document.querySelectorAll('[data-slot-tab]')) {
+    if (nowMins >= hhmmToMins(tab.dataset.slotStart) && nowMins < hhmmToMins(tab.dataset.slotEnd)) {
+      return tab.dataset.slotTab;
+    }
+  }
+  return null; // fuera del horario lectivo
+}
+// Tramo a mostrar por defecto: el actual; si no hay (antes de empezar o en recreo
+// sin tramo propio), el próximo que empiece hoy; si la jornada ya ha terminado, null
+// (y se recurrirá al primer tramo del día).
+function getRelevantSlotId() {
+  const currentId = getCurrentSlotId();
+  if (currentId !== null) return currentId;
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  let next = null, nextStart = Infinity;
+  for (const tab of document.querySelectorAll('[data-slot-tab]')) {
+    const start = hhmmToMins(tab.dataset.slotStart);
+    if (start > nowMins && start < nextStart) { next = tab.dataset.slotTab; nextStart = start; }
+  }
+  return next;
+}
+function markCurrentSlot() {
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const currentId = getCurrentSlotId();
+  document.querySelectorAll('[data-slot-tab]').forEach(tab => {
+    const isCurrent = currentId !== null && tab.dataset.slotTab === currentId;
+    tab.classList.toggle('current-time-slot', isCurrent);
+    // Parpadea sin parar mientras el usuario esté viendo otra solapa distinta de la actual
+    tab.classList.toggle('blink', isCurrent && !tab.classList.contains('active'));
+    // Sombrea en gris los tramos del día que ya han terminado (solapa y tarjeta central)
+    const isPast = hhmmToMins(tab.dataset.slotEnd) <= nowMins;
+    tab.classList.toggle('past-time-slot', isPast);
+    const card = document.querySelector(`.slot-card[data-slot-id="${tab.dataset.slotTab}"]`);
+    if (card) card.classList.toggle('past-time-slot', isPast);
+  });
+}
+markCurrentSlot();
+setInterval(markCurrentSlot, 60000);
+document.querySelectorAll('[data-slot-tab]').forEach(btn => {
+  btn.addEventListener('click', markCurrentSlot);
+});
+{% endif %}
+
+// Activar tramo del ancla (#slot-X), el relevante por hora (si es hoy) o el primero disponible
 const hashSlot = location.hash.startsWith('#slot-') ? location.hash.replace('#slot-', '') : null;
 const firstTab = document.querySelector('[data-slot-tab]');
-activateTab(hashSlot || (firstTab && firstTab.dataset.slotTab));
+{% if is_today %}
+const relevantSlotId = getRelevantSlotId();
+{% else %}
+const relevantSlotId = null;
+{% endif %}
+activateTab(hashSlot || relevantSlotId || (firstTab && firstTab.dataset.slotTab));
+{% if is_today %}
+markCurrentSlot(); // re-evalúa el blink ya con la solapa inicial activada
+{% endif %}
 
 // ── Resize chat / tareas ─────────────────────────────────────────────────────
 {% if current_user.is_management or is_display_user %}
@@ -850,30 +936,28 @@ activateTab(hashSlot || (firstTab && firstTab.dataset.slotTab));
     const now = new Date();
     const nowMins = now.getHours() * 60 + now.getMinutes();
 
-    document.querySelectorAll('.guard-records-list[data-slot-start-mins]').forEach(list => {
-      const slotStart = parseInt(list.dataset.slotStartMins);
-      const inWindow  = nowMins >= slotStart;
+    document.querySelectorAll('.guard-record-item[data-rec-start]').forEach(item => {
+      const recStart  = parseInt(item.dataset.recStart);
+      const recEnd    = parseInt(item.dataset.recEnd);
+      const inWindow  = nowMins >= recStart && nowMins < recEnd;
+      const key       = 'guard_blink_' + item.dataset.recordId + '_' + todayIso;
+      const dismissed = !!localStorage.getItem(key);
 
-      list.querySelectorAll('.guard-record-item').forEach(item => {
-        const key       = 'guard_blink_' + item.dataset.recordId + '_' + todayIso;
-        const dismissed = !!localStorage.getItem(key);
-
-        if (inWindow && !dismissed) {
-          if (!item.classList.contains('blink-guard-alert')) {
-            item.classList.add('blink-guard-alert');
-            const nameEl = item.querySelector('small.text-success');
-            if (nameEl) {
-              nameEl.title = 'Clic para detener el aviso';
-              nameEl.addEventListener('click', function() {
-                item.classList.remove('blink-guard-alert');
-                localStorage.setItem(key, '1');
-              }, { once: true });
-            }
+      if (inWindow && !dismissed) {
+        if (!item.classList.contains('blink-guard-alert')) {
+          item.classList.add('blink-guard-alert');
+          const nameEl = item.querySelector('small.text-success');
+          if (nameEl) {
+            nameEl.title = 'Clic para detener el aviso';
+            nameEl.addEventListener('click', function() {
+              item.classList.remove('blink-guard-alert');
+              localStorage.setItem(key, '1');
+            }, { once: true });
           }
-        } else if (!inWindow || dismissed) {
-          item.classList.remove('blink-guard-alert');
         }
-      });
+      } else {
+        item.classList.remove('blink-guard-alert');
+      }
     });
   }
 

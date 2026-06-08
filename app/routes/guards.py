@@ -16,6 +16,7 @@ from app.models.group import Group
 from app.models.schedule import TeacherSchedule
 from app.utils.points import award_guard_points
 from app.utils.guards import get_available_teachers_for_slot, auto_assign_pending_guards
+from app.utils import points_system_enabled
 
 guards_bp = Blueprint("guards", __name__, url_prefix="/guardias")
 
@@ -29,7 +30,8 @@ def _slot_duration(slot):
 
 def _recalculate_guard_records(guard, slot):
     """Redistribuye los minutos del tramo a partes iguales entre todos los records.
-    Si no divide exactamente, los primeros profesores reciben un minuto extra."""
+    Si no divide exactamente, los primeros profesores reciben un minuto extra.
+    Si el sistema de puntuación está desactivado, no recalcula ni toca puntos."""
     records = guard.records.order_by(GuardRecord.id).all()
     if not records:
         return
@@ -38,18 +40,21 @@ def _recalculate_guard_records(guard, slot):
     base = total_min // n
     extra = total_min % n
 
-    group = db.session.get(Group, guard.group_id)
-    multiplier = group.difficulty_multiplier if group else 1.0
-    pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
+    points_on = points_system_enabled()
+    if points_on:
+        group = db.session.get(Group, guard.group_id)
+        multiplier = group.difficulty_multiplier if group else 1.0
+        pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
 
     for i, rec in enumerate(records):
         new_minutes = base + (1 if i < extra else 0)
-        teacher = db.session.get(User, rec.teacher_id)
-        new_points = round((new_minutes / 60) * multiplier * pph, 2) if teacher and teacher.scores_points else 0.0
-        if teacher:
-            teacher.points = round(teacher.points - rec.points_awarded + new_points, 2)
         rec.effective_minutes = new_minutes
-        rec.points_awarded = new_points
+        if points_on:
+            teacher = db.session.get(User, rec.teacher_id)
+            new_points = round((new_minutes / 60) * multiplier * pph, 2) if teacher and teacher.scores_points else 0.0
+            if teacher:
+                teacher.points = round(teacher.points - rec.points_awarded + new_points, 2)
+            rec.points_awarded = new_points
 
 
 def _can_manage_slot(slot_id):
@@ -140,7 +145,8 @@ def self_register(guard_id):
         group = Group.query.get(guard.group_id)
         multiplier = group.difficulty_multiplier if group else 1.0
         pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
-        points = round((effective_minutes / 60) * multiplier * pph, 2) if current_user.scores_points else 0
+        points = round((effective_minutes / 60) * multiplier * pph, 2) \
+            if (points_system_enabled() and current_user.scores_points) else 0
 
         record = GuardRecord(
             guard_id=guard.id,
@@ -214,16 +220,7 @@ def quick_assign_ajax():
     if not guard:
         return jsonify(ok=False, error="Guardia no encontrada.")
 
-    can_assign = current_user.is_management
-    if not can_assign:
-        has_guard = TeacherSchedule.query.filter_by(
-            teacher_id=current_user.id,
-            day_of_week=guard.date.weekday(),
-            slot_id=guard.slot_id,
-            is_guard_slot=True,
-        ).first()
-        can_assign = bool(has_guard)
-    if not can_assign:
+    if not _can_manage_slot(guard.slot_id):
         return jsonify(ok=False, error="Sin permiso.")
 
     warning = None
@@ -261,16 +258,7 @@ def quick_assign_ajax():
 def reorder_records(guard_id):
     guard = Guard.query.get_or_404(guard_id)
 
-    can_assign = current_user.is_management
-    if not can_assign:
-        has_guard = TeacherSchedule.query.filter_by(
-            teacher_id=current_user.id,
-            day_of_week=guard.date.weekday(),
-            slot_id=guard.slot_id,
-            is_guard_slot=True,
-        ).first()
-        can_assign = bool(has_guard)
-    if not can_assign:
+    if not _can_manage_slot(guard.slot_id):
         return jsonify(ok=False, error="Sin permiso.")
 
     record_ids_str = request.form.get("record_ids", "")
@@ -288,10 +276,12 @@ def reorder_records(guard_id):
         return jsonify(ok=False, error="Registro no encontrado.")
 
     # Revertir puntos actuales antes del swap para no desajustar contadores
+    points_on = points_system_enabled()
     for rec in records_by_id:
-        teacher = db.session.get(User, rec.teacher_id)
-        if teacher:
-            teacher.points = round(teacher.points - rec.points_awarded, 2)
+        if points_on:
+            teacher = db.session.get(User, rec.teacher_id)
+            if teacher:
+                teacher.points = round(teacher.points - rec.points_awarded, 2)
         rec.points_awarded = 0.0
 
     # Asignar teacher_ids en el nuevo orden sobre los registros ordenados por id
@@ -335,9 +325,10 @@ def remove_record(record_id):
         flash("Sin permiso.", "danger")
         return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()))
 
-    teacher = db.session.get(User, record.teacher_id)
-    if teacher:
-        teacher.points = round(teacher.points - record.points_awarded, 2)
+    if points_system_enabled():
+        teacher = db.session.get(User, record.teacher_id)
+        if teacher:
+            teacher.points = round(teacher.points - record.points_awarded, 2)
 
     db.session.delete(record)
     db.session.flush()
@@ -466,6 +457,10 @@ def _build_events(teacher_id, slot_map):
 @guards_bp.route("/mis-puntos")
 @login_required
 def my_points():
+    if not current_user.is_management and not points_system_enabled():
+        flash("El sistema de puntuación está desactivado actualmente.", "info")
+        return redirect(url_for("dashboard.index"))
+
     slots_cfg = current_app.config["TIME_SLOTS"]
     slot_map = {s["id"]: s for s in slots_cfg}
 
@@ -552,6 +547,10 @@ def my_points_csv():
 @guards_bp.route("/informe")
 @login_required
 def report():
+    if not current_user.is_management and not points_system_enabled():
+        flash("El sistema de puntuación está desactivado actualmente.", "info")
+        return redirect(url_for("dashboard.index"))
+
     from sqlalchemy import func
     records = (
         db.session.query(User.id, User.name, User.surname,

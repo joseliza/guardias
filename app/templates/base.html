@@ -106,8 +106,18 @@
               </a>
             </li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="{{ url_for('guards.report') }}">Informe de guardias</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('guards.my_points') }}">Historial de puntos</a></li>
+            <li>
+              <a class="dropdown-item d-flex justify-content-between align-items-center" href="{{ url_for('guards.report') }}">
+                Informe de guardias
+                {% if not points_enabled %}<span class="badge bg-secondary">Puntuación off</span>{% endif %}
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item d-flex justify-content-between align-items-center" href="{{ url_for('guards.my_points') }}">
+                Historial de puntos
+                {% if not points_enabled %}<span class="badge bg-secondary">Puntuación off</span>{% endif %}
+              </a>
+            </li>
             <li><a class="dropdown-item" href="{{ url_for('chat.report') }}">Informe de incidencias</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{{ url_for('admin.config') }}"><i class="bi bi-sliders"></i> Configuración</a></li>
@@ -157,12 +167,12 @@
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
             <i class="bi bi-person-circle"></i> {{ current_user.full_name }}
-            {% if not current_user.is_management %}
+            {% if not current_user.is_management and points_enabled %}
             <span class="badge bg-warning text-dark ms-1">{{ current_user.points }} pts</span>
             {% endif %}
           </a>
           <ul class="dropdown-menu dropdown-menu-end">
-            {% if current_user.role not in ('management', 'display', 'extracurricular') %}
+            {% if current_user.role not in ('management', 'display', 'extracurricular') and points_enabled %}
             <li><a class="dropdown-item" href="{{ url_for('guards.my_points') }}"><i class="bi bi-star-half"></i> Mis puntos</a></li>
             <li><hr class="dropdown-divider"></li>
             {% endif %}

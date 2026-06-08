@@ -18,7 +18,7 @@
     <table class="table table-hover mb-0" id="tabla-profesores">
       <thead class="table-light">
         <tr>
-          <th>Apellidos, Nombre</th><th>Email</th><th>Rol</th><th>Puntos</th><th>Activo</th>
+          <th>Apellidos, Nombre</th><th>Email</th><th>Rol</th>{% if points_enabled %}<th>Puntos</th>{% endif %}<th>Activo</th>
           <th></th>
           <th>
             <form method="POST" action="{{ url_for('admin.teacher_toggle_emails_all') }}">
@@ -39,7 +39,7 @@
           <td>{{ t.full_name }}</td>
           <td>{{ t.email }}</td>
           <td><span class="badge bg-secondary">{{ t.role }}</span></td>
-          <td>{{ '—' if t.role == 'management' else t.points }}</td>
+          {% if points_enabled %}<td>{{ '—' if t.role == 'management' else t.points }}</td>{% endif %}
           <td><span class="badge bg-{{ 'success' if t.active else 'danger' }}">{{ 'Sí' if t.active else 'No' }}</span></td>
           <td>
             <div class="d-flex gap-1">

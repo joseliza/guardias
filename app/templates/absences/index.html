@@ -2,6 +2,12 @@
 {% block title %}Ausencias{% endblock %}
 {% block main_class %}container-fluid pb-4{% endblock %}
 {% block content %}
+{% if not is_editable %}
+<style>
+.past-time-slot { background-color: rgba(0, 0, 0, .045); }
+.past-time-slot .table { --bs-table-bg: rgba(0, 0, 0, .045); }
+</style>
+{% endif %}
 <div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
 <div class="row mb-0 align-items-center">
   <div class="col">
@@ -34,7 +40,7 @@
 {% for item in slots_in_day %}
 {% set s = item.slot %}
 {% set has_pending = item.absences | selectattr('status','eq','pending') | list %}
-<div class="card mb-2 border-0 shadow-sm">
+<div class="card mb-2 border-0 shadow-sm{% if not is_editable %} past-time-slot{% endif %}">
   <div class="card-header py-2 d-flex justify-content-between align-items-center
        {{ 'bg-warning-subtle' if has_pending else 'bg-light' }}">
     <span class="fw-semibold">
@@ -50,7 +56,7 @@
       <thead class="table-light">
         <tr>
           <th>Profesor/a</th>
-          <th>Motivo</th>
+          <th>Comentarios</th>
           <th>Estado</th>
           <th></th>
         </tr>

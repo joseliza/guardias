@@ -76,6 +76,16 @@ def create_app():
         return {"pending_justification": 0}
 
     @app.context_processor
+    def inject_points_cfg():
+        try:
+            if current_user.is_authenticated:
+                from app.utils import points_system_enabled
+                return {"points_enabled": points_system_enabled()}
+        except Exception:
+            pass
+        return {"points_enabled": True}
+
+    @app.context_processor
     def inject_presence_cfg():
         try:
             if current_user.is_authenticated:

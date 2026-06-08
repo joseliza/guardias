@@ -24,7 +24,7 @@
       <i class="bi bi-person"></i>
       <strong>{{ selected.surname }}, {{ selected.name }}</strong>
       <small class="text-muted">{{ selected.email }}</small>
-      <span class="badge bg-secondary ms-1">{{ selected.points }} pts</span>
+      {% if points_enabled %}<span class="badge bg-secondary ms-1">{{ selected.points }} pts</span>{% endif %}
       <a href="{{ url_for('admin.schedules') }}" class="btn btn-sm btn-outline-secondary ms-auto"><i class="bi bi-x-lg"></i></a>
     </div>
 

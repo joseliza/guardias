@@ -50,6 +50,13 @@
   </div>
 </div>
 
+{% if not points_enabled %}
+<div class="alert alert-warning py-2 px-3 small">
+  <i class="bi bi-exclamation-triangle"></i>
+  El sistema de puntuación está <strong>desactivado</strong> actualmente. Estos datos no se actualizan ni son visibles para el profesorado.
+</div>
+{% endif %}
+
 {# ── Estado vacío ────────────────────────────────────────────────────────── #}
 {% if teachers is not none and not selected_teacher %}
 <div class="alert alert-info">Selecciona un profesor para ver su historial.</div>

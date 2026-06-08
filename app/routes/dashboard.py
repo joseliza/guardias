@@ -13,7 +13,7 @@ from app.models.absence import Absence
 from app.models.schedule import TeacherSchedule
 from app.models.user import User
 from app.models.chat import ChatMessage, ChatClear
-from app.utils.guards import get_available_teachers_for_slot, get_support_teachers
+from app.utils.guards import get_available_teachers_for_slot, get_support_teachers, fairness_sort_key
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -134,11 +134,9 @@ def index():
 
         primary_ids  = {t.id for t in primary_teachers}
         ex_guard_ids = {t.id for t in ex_guard_teachers}
-        extra_teachers = sorted(
-            [User.query.get(tid) for tid in assigned_teacher_ids - primary_ids - ex_guard_ids
-             if User.query.get(tid)],
-            key=lambda t: t.points,
-        )
+        extra_candidates = [User.query.get(tid) for tid in assigned_teacher_ids - primary_ids - ex_guard_ids
+                            if User.query.get(tid)]
+        extra_teachers = sorted(extra_candidates, key=fairness_sort_key(extra_candidates))
 
         guard_info_by_slot[sid] = {
             "primary": primary_teachers,

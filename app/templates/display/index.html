@@ -36,6 +36,25 @@
 
     /* ── Slot tabs ── */
     #slot-tabs { background: #fff; border-bottom: 1px solid #dee2e6; padding: 0 .75rem; flex-shrink: 0; overflow-x: auto; white-space: nowrap; }
+    [data-slot-tab].past-time-slot {
+      background-color: rgba(0, 0, 0, .045);
+      color: #adb5bd;
+    }
+    #guards-panel .card.past-time-slot {
+      background-color: rgba(0, 0, 0, .045);
+    }
+    [data-slot-tab].current-time-slot {
+      background-color: rgba(13, 110, 253, .14);
+      box-shadow: inset 0 -3px 0 0 #0d6efd;
+      border-radius: .375rem .375rem 0 0;
+    }
+    @keyframes currentSlotTabBlink {
+      0%, 100% { background-color: rgba(13, 110, 253, .14); box-shadow: inset 0 -3px 0 0 #0d6efd; }
+      50%      { background-color: rgba(13, 110, 253, .55); box-shadow: inset 0 -4px 0 0 #0d6efd; }
+    }
+    [data-slot-tab].current-time-slot.blink {
+      animation: currentSlotTabBlink 0.9s ease-in-out infinite;
+    }
 
     /* ── Guard rows ── */
     .guard-row { padding: .5rem .75rem; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
@@ -92,7 +111,8 @@
       {% set covered = slot_guards | selectattr('status','ne','pending') | list %}
       <li class="nav-item">
         <a class="nav-link py-2 px-3 {% if slot.is_break %}text-muted{% endif %}"
-           href="#slot-{{ slot.id }}"
+           href="#slot-{{ slot.id }}" data-slot-tab="{{ slot.id }}"
+           data-slot-start="{{ slot.start }}" data-slot-end="{{ slot.end }}"
            onclick="event.preventDefault(); document.getElementById('slot-{{ slot.id }}').scrollIntoView({behavior:'smooth', block:'start'});">
           {% if slot.is_break %}<i class="bi bi-cup-hot"></i>{% endif %}
           {{ slot.label }}
@@ -212,19 +232,19 @@
                   <form method="POST" action="{{ url_for('display.assign', guard_id=guard.id) }}">
                     <div class="modal-body">
                       <div class="mb-3">
-                        <label class="form-label">Profesor disponible <small class="text-muted">(ordenado por puntos)</small></label>
+                        <label class="form-label">Profesor disponible {% if points_enabled %}<small class="text-muted">(ordenado por puntos)</small>{% endif %}</label>
                         <select name="teacher_id" class="form-select" required>
                           {% set avail = available_by_slot.get(slot.id, ([], [])) %}
                           {% set prim = avail[0] if avail is iterable and avail | length > 0 else [] %}
                           {% set sec  = avail[1] if avail is iterable and avail | length > 1 else [] %}
                           {% if prim %}
                           <optgroup label="— Guardia asignada —">
-                            {% for t in prim %}<option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>{% endfor %}
+                            {% for t in prim %}<option value="{{ t.id }}">{{ t.full_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
                           </optgroup>
                           {% endif %}
                           {% if sec %}
                           <optgroup label="— Libres en este tramo —">
-                            {% for t in sec %}<option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>{% endfor %}
+                            {% for t in sec %}<option value="{{ t.id }}">{{ t.full_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
                           </optgroup>
                           {% endif %}
                           {% if not prim and not sec %}
@@ -391,6 +411,73 @@
   }
   tick();
   setInterval(tick, 1000);
+})();
+
+// ── Tramo actual por hora ────────────────────────────────────────────────────
+(function() {
+  function hhmmToMins(hhmm) {
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + m;
+  }
+  function getCurrentSlotId() {
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    for (const tab of document.querySelectorAll('[data-slot-tab]')) {
+      if (nowMins >= hhmmToMins(tab.dataset.slotStart) && nowMins < hhmmToMins(tab.dataset.slotEnd)) {
+        return tab.dataset.slotTab;
+      }
+    }
+    return null; // fuera del horario lectivo (recreo, antes/después de la jornada)
+  }
+  // Tramo a mostrar por defecto: el actual; si no hay, el próximo que empiece hoy;
+  // si la jornada ya ha terminado, null (y se recurrirá al primer tramo del día).
+  function getRelevantSlotId() {
+    const currentId = getCurrentSlotId();
+    if (currentId !== null) return currentId;
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    let next = null, nextStart = Infinity;
+    for (const tab of document.querySelectorAll('[data-slot-tab]')) {
+      const start = hhmmToMins(tab.dataset.slotStart);
+      if (start > nowMins && start < nextStart) { next = tab.dataset.slotTab; nextStart = start; }
+    }
+    return next;
+  }
+  // Tramo "seleccionado": el que el usuario está consultando (clic en la solapa).
+  // Empieza en el relevante por hora, igual que el scroll inicial.
+  const firstTab = document.querySelector('[data-slot-tab]');
+  let selectedSlotId = getRelevantSlotId() || (firstTab && firstTab.dataset.slotTab) || null;
+  if (selectedSlotId !== null) {
+    const card = document.getElementById('slot-' + selectedSlotId);
+    if (card) card.scrollIntoView({ block: 'start' });
+  }
+
+  // Marca la solapa del tramo actual y la hace parpadear sin parar mientras el
+  // usuario esté consultando una solapa distinta de la actual.
+  function refreshCurrentSlotIndicator() {
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const currentId = getCurrentSlotId();
+    document.querySelectorAll('[data-slot-tab]').forEach(tab => {
+      const isCurrent = currentId !== null && tab.dataset.slotTab === currentId;
+      tab.classList.toggle('current-time-slot', isCurrent);
+      tab.classList.toggle('blink', isCurrent && tab.dataset.slotTab !== selectedSlotId);
+      // Sombrea en gris los tramos del día que ya han terminado (solapa y tarjeta central)
+      const isPast = hhmmToMins(tab.dataset.slotEnd) <= nowMins;
+      tab.classList.toggle('past-time-slot', isPast);
+      const card = document.getElementById('slot-' + tab.dataset.slotTab);
+      if (card) card.classList.toggle('past-time-slot', isPast);
+    });
+  }
+  refreshCurrentSlotIndicator();
+  setInterval(refreshCurrentSlotIndicator, 60000);
+
+  document.querySelectorAll('[data-slot-tab]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      selectedSlotId = tab.dataset.slotTab;
+      refreshCurrentSlotIndicator();
+    });
+  });
 })();
 
 const socket = io();

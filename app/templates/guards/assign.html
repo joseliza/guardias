@@ -27,21 +27,21 @@
           {% if primary %}
           <optgroup label="— Profesores de guardia asignada —">
             {% for t in primary %}
-            <option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>
+            <option value="{{ t.id }}">{{ t.full_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>
             {% endfor %}
           </optgroup>
           {% endif %}
           {% if ex_guard %}
           <optgroup label="— Profesores de guardia por actividad extraescolar —">
             {% for t in ex_guard %}
-            <option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>
+            <option value="{{ t.id }}">{{ t.full_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>
             {% endfor %}
           </optgroup>
           {% endif %}
           {% if secondary %}
           <optgroup label="— Libres en este tramo (sin clase) —">
             {% for t in secondary %}
-            <option value="{{ t.id }}">{{ t.full_name }} — {{ t.points }} pts</option>
+            <option value="{{ t.id }}">{{ t.full_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>
             {% endfor %}
           </optgroup>
           {% endif %}

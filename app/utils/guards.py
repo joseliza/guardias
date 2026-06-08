@@ -9,15 +9,37 @@ from datetime import date
 from app.models.user import User
 from app.models.schedule import TeacherSchedule
 from app.models.absence import Absence
+from app.utils import points_system_enabled
+
+
+def fairness_sort_key(teachers):
+    """Clave de ordenación para repartir guardias de forma equitativa: por puntos
+    acumulados si el sistema de puntuación está activo (asc.), o por nº de guardias
+    cubiertas históricamente si está desactivado (asc.) — evita depender de un
+    valor de puntos congelado y mantiene un reparto justo."""
+    if points_system_enabled():
+        return lambda t: t.points
+    from app.extensions import db
+    from app.models.guard import GuardRecord
+    from sqlalchemy import func
+    teacher_ids = [t.id for t in teachers]
+    counts = dict(
+        db.session.query(GuardRecord.teacher_id, func.count(GuardRecord.id))
+        .filter(GuardRecord.teacher_id.in_(teacher_ids))
+        .group_by(GuardRecord.teacher_id)
+        .all()
+    ) if teacher_ids else {}
+    return lambda t: counts.get(t.id, 0)
 
 
 def get_available_teachers_for_slot(target_date: date, slot_id: int):
     """Devuelve (primary, ex_guard, secondary):
-    - primary:   profesores con tramo de guardia oficial, no ausentes, ordenados por puntos asc.
+    - primary:   profesores con tramo de guardia oficial, no ausentes, ordenados de forma
+                 equitativa (ver fairness_sort_key).
     - ex_guard:  profesores cuyo grupo sale completo en actividad extraescolar ese tramo,
-                 no ausentes, no en primary, ordenados por puntos asc.
+                 no ausentes, no en primary, ordenados igual que primary.
     - secondary: profesores sin ninguna entrada en ese tramo (libres totales), no ausentes,
-                 ordenados por puntos asc.
+                 ordenados igual que primary.
     """
     from app.models.activity import ExtraActivity
 
@@ -70,17 +92,18 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
     primary_ids   = guard_slot_ids - absent_ids
     secondary_ids = {t.id for t in all_teachers} - scheduled_ids - absent_ids - guard_slot_ids
 
+    sort_key = fairness_sort_key(all_teachers)
     primary = sorted(
         [t for t in all_teachers if t.id in primary_ids],
-        key=lambda t: t.points
+        key=sort_key
     )
     ex_guard = sorted(
         [t for t in all_teachers if t.id in ex_guard_ids],
-        key=lambda t: t.points
+        key=sort_key
     )
     secondary = sorted(
         [t for t in all_teachers if t.id in secondary_ids],
-        key=lambda t: t.points
+        key=sort_key
     )
     return primary, ex_guard, secondary
 
@@ -168,7 +191,8 @@ def auto_assign_pending_guards(target_date: date, slot_id: int) -> dict:
         multiplier = group.difficulty_multiplier if group else 1.0
         from flask import current_app
         pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
-        points = round(multiplier * pph, 2) if teacher.scores_points else 0
+        points = round(multiplier * pph, 2) \
+            if (points_system_enabled() and teacher.scores_points) else 0
 
         db.session.add(GuardRecord(
             guard_id=guard.id,

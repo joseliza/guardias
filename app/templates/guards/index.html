@@ -17,7 +17,7 @@
 <div class="card">
   <div class="card-body p-0">
     <table class="table table-hover mb-0">
-      <thead class="table-light"><tr><th>Tramo</th><th>Grupo</th><th>Estado</th><th>Cubierta por</th><th>Min. efectivos</th><th>Puntos</th><th></th></tr></thead>
+      <thead class="table-light"><tr><th>Tramo</th><th>Grupo</th><th>Estado</th><th>Cubierta por</th><th>Min. efectivos</th>{% if points_enabled %}<th>Puntos</th>{% endif %}<th></th></tr></thead>
       <tbody>
         {% for g in guards %}
         {% set slot = slots | selectattr('id','eq', g.slot_id) | first %}
@@ -34,9 +34,11 @@
           <td>
             {% for r in g.records %}{{ r.effective_minutes }}{% if not loop.last %}, {% endif %}{% endfor %}
           </td>
+          {% if points_enabled %}
           <td>
             {% for r in g.records %}{{ r.points_awarded }}{% if not loop.last %}, {% endif %}{% endfor %}
           </td>
+          {% endif %}
           <td>
             {% if g.status == 'pending' and current_user.is_management %}
             <a href="{{ url_for('guards.assign', guard_id=g.id) }}" class="btn btn-sm btn-outline-danger">Asignar</a>
