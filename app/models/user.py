@@ -27,6 +27,9 @@ class User(UserMixin, db.Model):
     receive_emails = db.Column(db.Boolean, default=True, nullable=False)
     # Profesor al que sustituye (se copia su horario y se pone inactivo al original)
     substitutes_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    # Integración Google Drive: refresh_token OAuth y último file_id utilizado
+    google_drive_token = db.Column(db.Text, nullable=True)
+    google_drive_file_id = db.Column(db.String(200), nullable=True)
     substitutes = db.relationship(
         "User",
         primaryjoin="foreign(User.substitutes_id) == User.id",

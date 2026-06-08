@@ -1,0 +1,507 @@
+{% extends "base.html" %}
+{% block title %}Carga de datos{% endblock %}
+{% block main_class %}container-fluid pb-4{% endblock %}
+{% block content %}
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+  <div class="d-flex justify-content-between align-items-center">
+    <h4 class="mb-0"><i class="bi bi-database-up"></i> Carga de datos</h4>
+    <a href="{{ url_for('admin.schedules') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i> Atrás
+    </a>
+  </div>
+</div>
+
+<!-- Step progress -->
+<div class="d-flex align-items-center mt-3 mb-4">
+  <div class="step-nd active" id="sn1">1</div>
+  <div class="step-ln" id="sl1"></div>
+  <div class="step-nd" id="sn2">2</div>
+  <div class="step-ln" id="sl2"></div>
+  <div class="step-nd" id="sn3">3</div>
+  <div class="step-ln" id="sl3"></div>
+  <div class="step-nd" id="sn4">4</div>
+  <span class="ms-3 fw-semibold text-primary small" id="step-ttl">Cargar fichero</span>
+</div>
+
+<!-- ── PANEL 1: Upload ──────────────────────────────────────────────────────── -->
+<div id="p1">
+  <div class="card">
+    <div class="card-body">
+      <div id="dz" class="rounded-3 p-5 text-center bg-light"
+           style="border:2px dashed #ced4da;cursor:pointer;transition:border-color .15s"
+           onclick="document.getElementById('fi').click()"
+           ondragover="event.preventDefault();this.style.borderColor='#0d6efd'"
+           ondragleave="this.style.borderColor='#ced4da'"
+           ondrop="onDrop(event)">
+        <i class="bi bi-cloud-upload fs-1 text-muted d-block mb-2"></i>
+        <p class="mb-1 fw-semibold">Arrastra un fichero CSV aquí</p>
+        <p class="text-muted small mb-3">o haz clic para seleccionar</p>
+        <span class="btn btn-outline-primary btn-sm pe-none">
+          <i class="bi bi-folder2-open"></i> Seleccionar fichero
+        </span>
+        <input type="file" id="fi" class="d-none" accept=".csv,.txt" onchange="onFile(event)">
+      </div>
+      <div id="f-ok" class="alert alert-success d-flex align-items-center gap-3 mt-3 py-2 mb-0 d-none">
+        <i class="bi bi-check-circle-fill fs-5"></i>
+        <div class="flex-grow-1 small">
+          <strong id="f-name"></strong> —
+          <span id="f-rows"></span> filas ·
+          <span id="f-cols"></span> columnas
+        </div>
+        <button class="btn btn-success btn-sm" onclick="goTo(2)">
+          Configurar columnas <i class="bi bi-arrow-right"></i>
+        </button>
+      </div>
+      <div id="f-err" class="alert alert-danger mt-3 py-2 mb-0 d-none">
+        <i class="bi bi-exclamation-triangle"></i> <span id="f-err-msg"></span>
+      </div>
+    </div>
+  </div>
+  <!-- ── Separador ── -->
+  <div class="d-flex align-items-center gap-2 my-3 text-muted small">
+    <hr class="flex-grow-1 m-0"><span>o</span><hr class="flex-grow-1 m-0">
+  </div>
+
+  <!-- ── Google Drive ── -->
+  <div class="card {% if drive_connected %}border-success{% else %}border-secondary{% endif %}">
+    <div class="card-header py-2 d-flex align-items-center gap-2
+                {% if drive_connected %}bg-success bg-opacity-10{% endif %}">
+      <i class="bi bi-google text-danger"></i>
+      <strong class="small">Cargar desde Google Drive</strong>
+      {% if drive_connected %}
+        <span class="badge bg-success ms-1"><i class="bi bi-check-lg"></i> Conectado</span>
+        <a href="{{ url_for('admin.drive_disconnect') }}"
+           class="btn btn-outline-secondary btn-sm ms-auto py-0 px-2 small">Desconectar</a>
+      {% endif %}
+    </div>
+    <div class="card-body py-2">
+      {% if drive_connected %}
+        <div class="d-flex gap-2 align-items-center">
+          <input type="text" id="drive-file-id" class="form-control form-control-sm font-monospace"
+                 placeholder="ID del fichero (de la URL de Drive)"
+                 value="{{ drive_file_id }}">
+          <button class="btn btn-success btn-sm text-nowrap" onclick="loadFromDrive()" id="drive-load-btn">
+            <i class="bi bi-cloud-download"></i> Ver hojas
+          </button>
+        </div>
+        <div class="form-text">El ID aparece en la URL: …/d/<strong>1BxiM…</strong>/edit</div>
+        <!-- Selector de hoja (aparece si hay varias) -->
+        <div id="drive-sheet-wrap" class="d-none mt-2">
+          <label class="form-label small fw-semibold mb-1">Selecciona la hoja a importar:</label>
+          <div class="d-flex gap-2 align-items-center">
+            <select id="drive-sheet-sel" class="form-select form-select-sm"></select>
+            <button id="drive-sheet-btn" class="btn btn-success btn-sm text-nowrap"
+                    onclick="fetchSheetData()">
+              <i class="bi bi-arrow-right-circle"></i> Cargar hoja
+            </button>
+          </div>
+        </div>
+      {% else %}
+        <p class="text-muted small mb-2">Autoriza el acceso de lectura a tu Drive para cargar el fichero directamente.</p>
+        <a href="{{ url_for('admin.drive_connect') }}" class="btn btn-outline-danger btn-sm">
+          <i class="bi bi-google"></i> Conectar con Google Drive
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mt-3">
+    <a href="{{ url_for('admin.schedule_csv_template') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-download"></i> Plantilla CSV de horarios
+    </a>
+  </div>
+</div>
+
+<!-- ── PANEL 2: Column mapping ──────────────────────────────────────────────── -->
+<div id="p2" class="d-none">
+  <div class="card">
+    <div class="card-header py-2">
+      <strong><i class="bi bi-sliders"></i> Indica qué representa cada columna</strong>
+      <span class="text-muted small ms-2">Las columnas marcadas "Ignorar" no se importarán</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width:180px">Columna CSV</th>
+            <th>Ejemplos de valores</th>
+            <th style="width:250px">Tipo de dato</th>
+          </tr>
+        </thead>
+        <tbody id="mp-body"></tbody>
+      </table>
+    </div>
+    <div class="card-footer d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" onclick="goTo(1)">
+        <i class="bi bi-arrow-left"></i> Atrás
+      </button>
+      <button class="btn btn-primary btn-sm" onclick="readMappingAndGoTo3()">
+        Ver datos <i class="bi bi-arrow-right"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PANEL 3: Preview + row selection ─────────────────────────────────────── -->
+<div id="p3" class="d-none">
+  <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+    <button class="btn btn-sm btn-outline-secondary" onclick="toggleAll(true)">
+      <i class="bi bi-check2-all"></i> Todo
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="toggleAll(false)">
+      <i class="bi bi-dash-square"></i> Ninguno
+    </button>
+    <span class="text-muted small" id="sel-lbl">0 filas seleccionadas</span>
+    <div class="ms-auto d-flex gap-2">
+      <button class="btn btn-sm btn-outline-secondary" onclick="goTo(2)">
+        <i class="bi bi-arrow-left"></i> Atrás
+      </button>
+      <button class="btn btn-sm btn-primary" id="imp-btn" onclick="doImport()" disabled>
+        <i class="bi bi-database-up"></i> Importar selección
+      </button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="table-responsive" style="max-height:60vh;overflow-y:auto">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light sticky-top">
+          <tr id="pv-head">
+            <th style="width:36px">
+              <input type="checkbox" id="chk-all" onchange="toggleAll(this.checked)" title="Seleccionar todo">
+            </th>
+          </tr>
+        </thead>
+        <tbody id="pv-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── PANEL 4: Results ──────────────────────────────────────────────────────── -->
+<div id="p4" class="d-none">
+  <div id="res-box"></div>
+  <button class="btn btn-outline-primary mt-3" onclick="resetWizard()">
+    <i class="bi bi-arrow-counterclockwise"></i> Nueva importación
+  </button>
+</div>
+
+<style>
+.step-nd{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+         font-weight:700;font-size:.85rem;background:#e9ecef;color:#6c757d;flex-shrink:0}
+.step-nd.active{background:#0d6efd;color:#fff}
+.step-nd.done{background:#198754;color:#fff}
+.step-ln{flex:1;height:2px;background:#e9ecef;min-width:24px}
+.step-ln.done{background:#198754}
+</style>
+
+<script>
+const FTYPES = [
+  ['ignorar',        '— Ignorar esta columna —'],
+  ['email',          'Email / Correo electrónico'],
+  ['nombre',         'Nombre'],
+  ['apellidos',      'Apellidos'],
+  ['nombre_completo','Nombre completo'],
+  ['abrev_prof',     'Abreviatura de profesor'],
+  ['abrev_asig',     'Abreviatura de asignatura'],
+  ['asignatura',     'Nombre de asignatura'],
+  ['grupo',          'Grupo / Clase'],
+  ['dia',            'Día semana (0=Lun … 4=Vie)'],
+  ['tramo',          'Tramo horario (1–7)'],
+  ['es_guardia',     'Es tramo de guardia (true/false)'],
+  ['rol',            'Rol (teacher / management…)'],
+];
+const FMAP   = Object.fromEntries(FTYPES);
+const STTLS  = {1:'Cargar fichero', 2:'Configurar columnas', 3:'Revisar datos', 4:'Resultado'};
+
+let csvH = [], csvR = [];
+let colMap = {};
+let pvCols = [];
+let sel = new Set();
+
+// ── Escape HTML ───────────────────────────────────────────────────────────────
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// ── Step navigation ───────────────────────────────────────────────────────────
+function goTo(n) {
+  [1,2,3,4].forEach(i => {
+    document.getElementById('p'+i).classList.toggle('d-none', i !== n);
+    const nd = document.getElementById('sn'+i);
+    nd.classList.remove('active','done');
+    if      (i < n) nd.classList.add('done');
+    else if (i === n) nd.classList.add('active');
+    if (i < 4) document.getElementById('sl'+i).classList.toggle('done', i < n);
+  });
+  document.getElementById('step-ttl').textContent = STTLS[n];
+  if (n === 2) buildMapUI();
+  if (n === 3) buildPreview();
+}
+
+function resetWizard() {
+  csvH = []; csvR = []; colMap = {}; pvCols = []; sel = new Set();
+  document.getElementById('fi').value = '';
+  document.getElementById('f-ok').classList.add('d-none');
+  document.getElementById('f-err').classList.add('d-none');
+  goTo(1);
+}
+
+// ── CSV parser (handles , and ; separators, quoted fields) ───────────────────
+function detectSep(line) {
+  return (line.match(/;/g)||[]).length > (line.match(/,/g)||[]).length ? ';' : ',';
+}
+function splitLine(line, sep) {
+  const r = []; let c = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) {
+      if (ch === '"' && line[i+1] === '"') { c += '"'; i++; }
+      else if (ch === '"') q = false;
+      else c += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === sep) { r.push(c.trim()); c = ''; }
+    else c += ch;
+  }
+  r.push(c.trim());
+  return r;
+}
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return null;
+  const sep = detectSep(lines[0]);
+  const headers = splitLine(lines[0], sep);
+  const rows = lines.slice(1).map(l => {
+    const v = splitLine(l, sep), o = {};
+    headers.forEach((h, i) => { o[h] = (v[i] ?? '').trim(); });
+    return o;
+  });
+  return { headers, rows };
+}
+
+// ── Auto-detect column field type from header name ────────────────────────────
+function guessType(col) {
+  const c = col.toLowerCase().replace(/[_\s\-\.]/g, '');
+  if (c.includes('email') || c.includes('correo'))           return 'email';
+  if ((c.includes('nombre') && c.includes('comp')) || c === 'nombredocente') return 'nombre_completo';
+  if (c.includes('apellido'))                                return 'apellidos';
+  if (c.includes('nombre') || c === 'name')                  return 'nombre';
+  if (c.includes('abrevprof') || c === 'profabrev')          return 'abrev_prof';
+  if (c.includes('abrev'))                                   return 'abrev_prof';
+  if (c.includes('asignatura') || c.includes('materia'))     return 'asignatura';
+  if (c.includes('grupo') || c.includes('clase'))            return 'grupo';
+  if (c.includes('dia') || c === 'day')                      return 'dia';
+  if (c.includes('tramo') || c.includes('slot'))             return 'tramo';
+  if (c.includes('guardia') || c.includes('guard'))          return 'es_guardia';
+  if (c.includes('rol') || c.includes('role'))               return 'rol';
+  return 'ignorar';
+}
+
+// ── File handling ─────────────────────────────────────────────────────────────
+function onFile(e) { processFile(e.target.files[0]); }
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('dz').style.borderColor = '#ced4da';
+  const f = e.dataTransfer.files[0];
+  if (f) processFile(f);
+}
+function processFile(file) {
+  const r = new FileReader();
+  r.onload = e => {
+    const parsed = parseCSV(e.target.result);
+    if (!parsed || !parsed.rows.length) {
+      document.getElementById('f-err-msg').textContent = 'No se pudo leer el fichero o está vacío.';
+      document.getElementById('f-err').classList.remove('d-none');
+      document.getElementById('f-ok').classList.add('d-none');
+      return;
+    }
+    csvH = parsed.headers;
+    csvR = parsed.rows;
+    csvH.forEach(h => { colMap[h] = guessType(h); });
+    document.getElementById('f-name').textContent = file.name;
+    document.getElementById('f-rows').textContent = csvR.length;
+    document.getElementById('f-cols').textContent = csvH.length;
+    document.getElementById('f-ok').classList.remove('d-none');
+    document.getElementById('f-err').classList.add('d-none');
+  };
+  r.readAsText(file, 'UTF-8');
+}
+
+// ── Step 2: column mapping UI ─────────────────────────────────────────────────
+function buildMapUI() {
+  document.getElementById('mp-body').innerHTML = csvH.map(h => {
+    const samples = [...new Set(csvR.slice(0, 8).map(r => r[h]).filter(v => v))].slice(0, 3).join(', ');
+    const opts = FTYPES.map(([v, l]) =>
+      `<option value="${v}"${colMap[h] === v ? ' selected' : ''}>${esc(l)}</option>`
+    ).join('');
+    return `<tr>
+      <td><code class="small">${esc(h)}</code></td>
+      <td class="text-muted small">${esc(samples || '—')}</td>
+      <td><select class="form-select form-select-sm" data-h="${esc(h)}">${opts}</select></td>
+    </tr>`;
+  }).join('');
+}
+
+function readMappingAndGoTo3() {
+  document.querySelectorAll('#mp-body select[data-h]').forEach(s => { colMap[s.dataset.h] = s.value; });
+  goTo(3);
+}
+
+// ── Step 3: preview table ─────────────────────────────────────────────────────
+function buildPreview() {
+  pvCols = csvH
+    .filter(h => colMap[h] && colMap[h] !== 'ignorar')
+    .map(h => ({ h, t: colMap[h], l: FMAP[colMap[h]] || colMap[h] }));
+
+  document.getElementById('pv-head').innerHTML =
+    '<th style="width:36px"><input type="checkbox" id="chk-all" onchange="toggleAll(this.checked)" title="Todos"></th>' +
+    pvCols.map(c =>
+      `<th class="small">${esc(c.l)}<br><span class="text-muted fw-normal" style="font-size:.7rem">${esc(c.h)}</span></th>`
+    ).join('');
+
+  document.getElementById('pv-body').innerHTML = csvR.map((row, i) =>
+    `<tr>
+      <td><input type="checkbox" class="rc" data-i="${i}" onchange="updSel(${i},this.checked)" checked></td>
+      ${pvCols.map(c => `<td class="small">${esc(row[c.h] ?? '')}</td>`).join('')}
+    </tr>`
+  ).join('');
+
+  sel = new Set(csvR.map((_, i) => i));
+  refreshSel();
+  document.getElementById('chk-all').checked = true;
+  updImpBtn();
+}
+
+function toggleAll(on) {
+  sel = on ? new Set(csvR.map((_, i) => i)) : new Set();
+  document.querySelectorAll('.rc').forEach(c => c.checked = on);
+  const ca = document.getElementById('chk-all'); if (ca) ca.checked = on;
+  refreshSel(); updImpBtn();
+}
+function updSel(i, on) {
+  if (on) sel.add(i); else sel.delete(i);
+  const ca = document.getElementById('chk-all'); if (ca) ca.checked = sel.size === csvR.length;
+  refreshSel(); updImpBtn();
+}
+function refreshSel() {
+  document.getElementById('sel-lbl').textContent = `${sel.size} de ${csvR.length} filas seleccionadas`;
+}
+function updImpBtn() {
+  document.getElementById('imp-btn').disabled = sel.size === 0;
+}
+
+// ── Load from Google Drive ────────────────────────────────────────────────────
+function driveErr(msg) {
+  document.getElementById('f-err-msg').textContent = msg;
+  document.getElementById('f-err').classList.remove('d-none');
+}
+
+async function loadFromDrive() {
+  const fileId = document.getElementById('drive-file-id').value.trim();
+  if (!fileId) { alert('Introduce el ID del fichero de Drive.'); return; }
+  const btn = document.getElementById('drive-load-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+  document.getElementById('drive-sheet-wrap').classList.add('d-none');
+  document.getElementById('f-err').classList.add('d-none');
+  try {
+    const resp = await fetch('{{ url_for("admin.drive_sheets") }}?file_id=' + encodeURIComponent(fileId));
+    const data = await resp.json();
+    if (data.error) { driveErr(data.error); return; }
+    if (data.sheets.length === 1) {
+      // Una sola hoja → cargar directamente
+      await fetchSheetData(fileId, data.sheets[0].title);
+    } else {
+      // Varias hojas → mostrar selector
+      const sel = document.getElementById('drive-sheet-sel');
+      sel.innerHTML = data.sheets.map(s =>
+        `<option value="${esc(s.title)}">${esc(s.title)}</option>`
+      ).join('');
+      document.getElementById('drive-sheet-wrap').classList.remove('d-none');
+    }
+  } catch (err) {
+    driveErr('Error de red: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-cloud-download"></i> Ver hojas';
+  }
+}
+
+async function fetchSheetData(fileId, sheetTitle) {
+  fileId = fileId || document.getElementById('drive-file-id').value.trim();
+  sheetTitle = sheetTitle || document.getElementById('drive-sheet-sel').value;
+  const btn = document.getElementById('drive-sheet-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+  try {
+    const url = '{{ url_for("admin.drive_fetch") }}?file_id=' + encodeURIComponent(fileId)
+                + '&sheet=' + encodeURIComponent(sheetTitle);
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data.error) { driveErr(data.error); return; }
+    const parsed = parseCSV(data.csv);
+    if (!parsed || !parsed.rows.length) {
+      driveErr('La hoja "' + sheetTitle + '" no tiene datos.');
+      return;
+    }
+    csvH = parsed.headers;
+    csvR = parsed.rows;
+    csvH.forEach(h => { colMap[h] = guessType(h); });
+    document.getElementById('f-name').textContent = sheetTitle;
+    document.getElementById('f-rows').textContent = csvR.length;
+    document.getElementById('f-cols').textContent = csvH.length;
+    document.getElementById('f-ok').classList.remove('d-none');
+    document.getElementById('f-err').classList.add('d-none');
+    document.getElementById('drive-sheet-wrap').classList.add('d-none');
+    goTo(2);
+  } catch (err) {
+    driveErr('Error de red: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-right-circle"></i> Cargar hoja'; }
+  }
+}
+
+// ── Import ────────────────────────────────────────────────────────────────────
+async function doImport() {
+  const btn = document.getElementById('imp-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Importando…';
+  const rows = [...sel].map(i => csvR[i]);
+  try {
+    const resp = await fetch('{{ url_for("admin.data_load") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mapping: colMap, rows })
+    });
+    const data = await resp.json();
+    goTo(4);
+    renderResult(data);
+  } catch (err) {
+    alert('Error de red: ' + err.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-database-up"></i> Importar selección';
+  }
+}
+
+function renderResult(data) {
+  const box = document.getElementById('res-box');
+  if (data.error) {
+    box.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle"></i> ${esc(data.error)}</div>`;
+    return;
+  }
+  const cr = data.created || {}, sk = data.skipped || 0, er = data.errors || [];
+  let h = '<div class="card border-success"><div class="card-body">';
+  h += `<h5 class="text-success mb-3"><i class="bi bi-check-circle-fill"></i> Importación completada</h5>`;
+  if (Object.keys(cr).length) {
+    h += '<ul class="mb-2">';
+    for (const [k, v] of Object.entries(cr)) h += `<li><strong>${v}</strong> ${esc(k)} creados</li>`;
+    h += '</ul>';
+  }
+  if (sk) h += `<p class="text-muted small mb-1"><i class="bi bi-skip-forward"></i> ${sk} filas omitidas (ya existían o sin datos válidos)</p>`;
+  if (er.length) {
+    h += `<details class="mt-2"><summary class="small text-warning" style="cursor:pointer">${er.length} aviso(s)</summary><ul class="small text-muted mt-1">`;
+    er.slice(0, 30).forEach(e => { h += `<li>${esc(e)}</li>`; });
+    if (er.length > 30) h += `<li>… y ${er.length - 30} más</li>`;
+    h += '</ul></details>';
+  }
+  h += '</div></div>';
+  box.innerHTML = h;
+}
+</script>
+{% endblock %}

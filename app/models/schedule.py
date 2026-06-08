@@ -21,6 +21,7 @@ class TeacherSchedule(db.Model):
     # true → el profesor está de guardia en ese tramo (libre / sin clase)
     is_guard_slot = db.Column(db.Boolean, default=False, nullable=False)
     room_id = db.Column(db.Integer, db.ForeignKey("rooms.id"), nullable=True)
+    subject_id = db.Column(db.Integer, db.ForeignKey("subjects.id"), nullable=True)
     notes = db.Column(db.String(120), nullable=True)
 
     room = db.relationship("Room", foreign_keys=[room_id])

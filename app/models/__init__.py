@@ -10,6 +10,7 @@ from .guard import Guard, GuardRecord
 from .activity import ExtraActivity, ExtraActivityGroup, ExtraActivityTeacher
 from .availability import AvailabilityPeriod, AvailabilityPeriodGroup
 from .chat import ChatMessage
+from .subject import Subject
 
 __all__ = [
     "db",
@@ -27,4 +28,5 @@ __all__ = [
     "AvailabilityPeriod",
     "AvailabilityPeriodGroup",
     "ChatMessage",
+    "Subject",
 ]

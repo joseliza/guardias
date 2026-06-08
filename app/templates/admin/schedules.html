@@ -10,7 +10,7 @@
   <div class="d-flex gap-2">
     <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
     {% if can_edit %}
-    <a href="{{ url_for('admin.import_schedule_csv') }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-arrow-up"></i> Importar CSV</a>
+    <a href="{{ url_for('admin.data_load') }}" class="btn btn-outline-secondary"><i class="bi bi-database-up"></i> Carga de datos</a>
     {% endif %}
   </div>
 </div>

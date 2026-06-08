@@ -7,9 +7,9 @@ import csv
 import io
 import os
 import re
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify
 from flask_login import login_required, current_user
-from app.extensions import db
+from app.extensions import db, oauth
 from app.models.user import User
 from app.models.group import Group
 from app.models.room import Room
@@ -183,54 +183,6 @@ def teacher_toggle_emails(tid):
     teacher.receive_emails = not teacher.receive_emails
     db.session.commit()
     return redirect(url_for("admin.teachers"))
-
-
-@admin_bp.route("/profesores/plantilla-csv")
-@login_required
-def teachers_csv_template():
-    if not _require_management():
-        return redirect(url_for("dashboard.index"))
-    from flask import Response
-    content = "email,nombre,apellidos,rol,contraseña\nana.garcia@iesciudadjardin.es,Ana,García,teacher,\npedro.lopez@iesciudadjardin.es,Pedro,López,management,\n"
-    return Response(
-        "﻿" + content,
-        mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=plantilla_profesores.csv"},
-    )
-
-
-@admin_bp.route("/profesores/importar-csv", methods=["GET", "POST"])
-@login_required
-def import_teachers_csv():
-    if not _require_management():
-        return redirect(url_for("dashboard.index"))
-    if request.method == "POST":
-        file = request.files.get("csv_file")
-        if not file:
-            flash("Selecciona un fichero CSV.", "warning")
-            return redirect(request.url)
-        stream = io.StringIO(file.stream.read().decode("utf-8-sig"))
-        reader = csv.DictReader(stream)
-        created, skipped = 0, 0
-        for row in reader:
-            email = row.get("email", "").strip().lower()
-            if not email or User.query.filter_by(email=email).first():
-                skipped += 1
-                continue
-            user = User(
-                email=email,
-                name=row.get("nombre", "").strip(),
-                surname=row.get("apellidos", "").strip(),
-                role=row.get("rol", "teacher").strip() or "teacher",
-                receive_emails=True,
-            )
-            user.set_password(row.get("contraseña", "cambiar123"))
-            db.session.add(user)
-            created += 1
-        db.session.commit()
-        flash(f"Importados: {created} profesores. Omitidos: {skipped}.", "success")
-        return redirect(url_for("admin.teachers"))
-    return render_template("admin/import_csv.html", target="profesores")
 
 
 # ── Grupos ───────────────────────────────────────────────────────────────────
@@ -551,6 +503,294 @@ def schedule_set_cell():
     return redirect(url_for("admin.schedules", teacher_id=teacher_id))
 
 
+@admin_bp.route("/google-drive/conectar")
+@login_required
+def drive_connect():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    redirect_uri = url_for("admin.drive_callback", _external=True, _scheme="https")
+    return oauth.google.authorize_redirect(
+        redirect_uri,
+        scope="https://www.googleapis.com/auth/drive.readonly",
+        access_type="offline",
+        prompt="consent",
+    )
+
+
+@admin_bp.route("/google-drive/callback")
+@login_required
+def drive_callback():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    try:
+        token = oauth.google.authorize_access_token()
+    except Exception as e:
+        flash(f"Error al conectar con Google Drive: {e}", "danger")
+        return redirect(url_for("admin.data_load"))
+    refresh_token = token.get("refresh_token")
+    if not refresh_token:
+        flash("Google no devolvió un token permanente. Asegúrate de revocar permisos anteriores en myaccount.google.com/permissions y vuelve a intentarlo.", "warning")
+        return redirect(url_for("admin.data_load"))
+    current_user.google_drive_token = refresh_token
+    db.session.commit()
+    flash("Google Drive conectado correctamente.", "success")
+    return redirect(url_for("admin.data_load"))
+
+
+@admin_bp.route("/google-drive/desconectar")
+@login_required
+def drive_disconnect():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    current_user.google_drive_token = None
+    db.session.commit()
+    flash("Google Drive desconectado.", "info")
+    return redirect(url_for("admin.data_load"))
+
+
+@admin_bp.route("/carga-datos/drive/hojas")
+@login_required
+def drive_sheets():
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    if not current_user.google_drive_token:
+        return jsonify({"error": "Google Drive no está conectado."}), 400
+    file_id = request.args.get("file_id", "").strip()
+    if not file_id:
+        return jsonify({"error": "Falta el ID del fichero."}), 400
+    try:
+        from app.utils.google_drive import list_spreadsheet_sheets
+        sheets = list_spreadsheet_sheets(file_id, current_user.google_drive_token)
+        current_user.google_drive_file_id = file_id
+        db.session.commit()
+        return jsonify({"sheets": sheets})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin_bp.route("/carga-datos/drive/cargar")
+@login_required
+def drive_fetch():
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    if not current_user.google_drive_token:
+        return jsonify({"error": "Google Drive no está conectado."}), 400
+    file_id = request.args.get("file_id", "").strip()
+    sheet_title = request.args.get("sheet", "").strip()
+    if not file_id:
+        return jsonify({"error": "Falta el ID del fichero."}), 400
+    try:
+        from app.utils.google_drive import fetch_drive_file_as_csv, fetch_sheet_as_csv
+        if sheet_title:
+            csv_text = fetch_sheet_as_csv(file_id, sheet_title, current_user.google_drive_token)
+        else:
+            csv_text = fetch_drive_file_as_csv(file_id, current_user.google_drive_token)
+        return jsonify({"csv": csv_text})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin_bp.route("/importar-horarios")
+@login_required
+def schedule_wizard():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    return render_template(
+        "admin/schedule_wizard.html",
+        drive_connected=bool(current_user.google_drive_token),
+        drive_file_id=current_user.google_drive_file_id or "",
+    )
+
+
+@admin_bp.route("/importar-horarios/usuarios")
+@login_required
+def schedule_users():
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    users = [
+        {"id": u.id, "full_name": u.full_name}
+        for u in User.query.filter(User.active == True).order_by(User.surname, User.name).all()
+        if u.role in ("teacher", "management", "extracurricular")
+    ]
+    return jsonify({"users": users})
+
+
+@admin_bp.route("/importar-horarios/resolver", methods=["POST"])
+@login_required
+def schedule_resolve():
+    """Recibe lista de nombres del Drive y devuelve el usuario del sistema más parecido."""
+    import unicodedata
+
+    def _norm(s):
+        s = unicodedata.normalize("NFD", (s or "").lower())
+        s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+        return set(s.split())
+
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+
+    names = (request.get_json(force=True, silent=True) or {}).get("names", [])
+    teachers = [
+        u for u in User.query.filter(User.active == True).all()
+        if u.role in ("teacher", "management", "extracurricular")
+    ]
+    results = {}
+    for name in names:
+        target = _norm(name)
+        best, best_score = None, 0.0
+        for u in teachers:
+            words = _norm(u.full_name)
+            union = len(target | words)
+            score = len(target & words) / union if union else 0.0
+            if score > best_score:
+                best_score = score
+                best = u
+        if best and best_score >= 0.4:
+            results[name] = {"user_id": best.id, "user_name": best.full_name, "conf": round(best_score, 2)}
+        else:
+            results[name] = {"user_id": None, "user_name": None, "conf": 0.0}
+    return jsonify(results)
+
+
+@admin_bp.route("/importar-horarios/importar", methods=["POST"])
+@login_required
+def schedule_import():
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+
+    from app.models.subject import Subject
+    from app.models.room import Room
+    from app.utils.school_year import get_current_school_year
+
+    payload = request.get_json(force=True, silent=True) or {}
+    rows_data = payload.get("rows", [])
+    cmap = payload.get("mapping", {})
+    day_offset = int(payload.get("day_offset", 1))
+    prof_by_abrev = payload.get("prof_by_abrev", {})
+    asig_dict = payload.get("asig_dict", {})
+    aula_dict = payload.get("aula_dict", {})
+
+    if not rows_data:
+        return jsonify({"error": "No hay filas."}), 400
+
+    # ── Crear profesores desde CSV de emails (opcional) ───────────────────────
+    teachers_created = 0
+    email_data = payload.get("email_data")
+    if email_data:
+        email_col = email_data.get("email_col", "")
+        nombre_col = email_data.get("nombre_col", "")
+        apellidos_col = email_data.get("apellidos_col", "")
+        for erow in email_data.get("rows", []):
+            email = (erow.get(email_col) or "").strip().lower()
+            if not email or "@" not in email:
+                continue
+            if User.query.filter_by(email=email).first():
+                continue
+            nombre = (erow.get(nombre_col) or "").strip()
+            apellidos = (erow.get(apellidos_col) or "").strip()
+            u = User(email=email, name=nombre, surname=apellidos, role="teacher", receive_emails=True)
+            u.set_password("cambiar123")
+            db.session.add(u)
+            teachers_created += 1
+        if teachers_created:
+            db.session.flush()
+
+    def field(row, ftype):
+        for col, ft in cmap.items():
+            if ft == ftype and col in row:
+                return (row[col] or "").strip()
+        return ""
+
+    year_id = get_current_school_year().id
+    created = skipped = subjects_created = groups_created = rooms_created = 0
+    errors = []
+
+    for row in rows_data:
+        abrev_prof = field(row, "abrev_prof")
+        teacher_id = prof_by_abrev.get(abrev_prof)
+        if not teacher_id:
+            errors.append(f"Profesor sin asignar: {abrev_prof}")
+            skipped += 1
+            continue
+
+        try:
+            dia = int(field(row, "dia") or 0) - day_offset
+            tramo = int(field(row, "tramo") or 0)
+        except ValueError:
+            skipped += 1
+            continue
+
+        if not (0 <= dia <= 4) or tramo < 1:
+            skipped += 1
+            continue
+
+        abrev_asig = field(row, "abrev_asig")
+        asig_name = (asig_dict.get(abrev_asig) or abrev_asig).strip() or None
+        subject = None
+        if asig_name:
+            subject = Subject.query.filter_by(name=asig_name).first()
+            if not subject:
+                subject = Subject(name=asig_name, abbreviation=abrev_asig or None)
+                db.session.add(subject)
+                db.session.flush()
+                subjects_created += 1
+
+        grupo_name = field(row, "grupo")
+        group = None
+        if grupo_name:
+            group = Group.query.filter_by(name=grupo_name).first()
+            if not group:
+                group = Group(name=grupo_name)
+                db.session.add(group)
+                db.session.flush()
+                groups_created += 1
+
+        abrev_aula = field(row, "abrev_aula")
+        aula_name = (aula_dict.get(abrev_aula) or abrev_aula).strip() or None
+        room = None
+        if aula_name:
+            room = Room.query.filter_by(name=aula_name).first()
+            if not room:
+                room = Room(name=aula_name)
+                db.session.add(room)
+                db.session.flush()
+                rooms_created += 1
+
+        existing = TeacherSchedule.query.filter_by(
+            teacher_id=teacher_id, day_of_week=dia,
+            slot_id=tramo, school_year_id=year_id,
+        ).first()
+        if existing:
+            skipped += 1
+            continue
+
+        db.session.add(TeacherSchedule(
+            teacher_id=teacher_id,
+            group_id=group.id if group else None,
+            subject_id=subject.id if subject else None,
+            room_id=room.id if room else None,
+            day_of_week=dia,
+            slot_id=tramo,
+            is_guard_slot=False,
+            school_year_id=year_id,
+        ))
+        created += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({
+        "created": created, "skipped": skipped, "errors": errors,
+        "teachers_created": teachers_created,
+        "subjects_created": subjects_created,
+        "groups_created": groups_created,
+        "rooms_created": rooms_created,
+    })
+
+
 @admin_bp.route("/horarios/plantilla-csv")
 @login_required
 def schedule_csv_template():
@@ -565,32 +805,95 @@ def schedule_csv_template():
     )
 
 
-@admin_bp.route("/horarios/importar-csv", methods=["GET", "POST"])
+@admin_bp.route("/carga-datos", methods=["GET", "POST"])
 @login_required
-def import_schedule_csv():
+def data_load():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
-    if request.method == "POST":
-        from app.utils.school_year import get_current_school_year
-        year_id = get_current_school_year().id
-        file = request.files.get("csv_file")
-        if not file:
-            flash("Selecciona un fichero CSV.", "warning")
-            return redirect(request.url)
-        stream = io.StringIO(file.stream.read().decode("utf-8-sig"))
-        reader = csv.DictReader(stream)
-        created, skipped = 0, 0
-        for row in reader:
-            teacher = User.query.filter_by(email=row.get("email_profesor", "").strip().lower()).first()
-            if not teacher:
+    if request.method == "GET":
+        return render_template(
+            "admin/data_load.html",
+            drive_connected=bool(current_user.google_drive_token),
+            drive_file_id=current_user.google_drive_file_id or "",
+        )
+
+    # POST: recibe JSON {mapping, rows} y devuelve JSON con resultado
+    payload = request.get_json(force=True, silent=True) or {}
+    mapping = payload.get("mapping", {})
+    rows = payload.get("rows", [])
+
+    if not rows:
+        return jsonify({"error": "No hay filas para importar."}), 400
+
+    active = {v for v in mapping.values() if v != "ignorar"}
+
+    def field(row, ftype):
+        for col, ft in mapping.items():
+            if ft == ftype and col in row:
+                return (row[col] or "").strip()
+        return None
+
+    created, skipped, errors = {}, 0, []
+
+    # ── Profesores (cuando hay columna 'email') ───────────────────────────────
+    if "email" in active:
+        n = 0
+        for row in rows:
+            email = field(row, "email")
+            if not email:
                 skipped += 1
                 continue
-            day = int(row.get("dia", 0))
-            slot = int(row.get("tramo", 1))
-            is_guard = row.get("es_guardia", "false").lower() in ("true", "1", "si", "sí")
-            group_name = row.get("grupo", "").strip()
-            group = Group.query.filter_by(name=group_name).first() if group_name else None
+            email = email.lower()
+            if User.query.filter_by(email=email).first():
+                skipped += 1
+                continue
+            nombre = field(row, "nombre") or ""
+            apellidos = field(row, "apellidos") or ""
+            if not nombre and not apellidos:
+                nc = field(row, "nombre_completo") or ""
+                parts = nc.split(" ", 1)
+                nombre = parts[0]
+                apellidos = parts[1] if len(parts) > 1 else ""
+            rol = field(row, "rol") or "teacher"
+            if rol not in ("teacher", "management", "display", "extracurricular"):
+                rol = "teacher"
+            u = User(email=email, name=nombre, surname=apellidos, role=rol, receive_emails=True)
+            u.set_password("cambiar123")
+            db.session.add(u)
+            n += 1
+        if n:
+            created["profesores"] = n
 
+    # ── Horarios (cuando hay columnas 'dia' y 'tramo') ────────────────────────
+    elif "dia" in active and "tramo" in active:
+        from app.utils.school_year import get_current_school_year
+        year_id = get_current_school_year().id
+        n = 0
+        for row in rows:
+            email = field(row, "email")
+            if not email:
+                skipped += 1
+                continue
+            teacher = User.query.filter_by(email=email.lower()).first()
+            if not teacher:
+                skipped += 1
+                errors.append(f"Profesor no encontrado: {email}")
+                continue
+            try:
+                day = int(field(row, "dia") or 0)
+                slot = int(field(row, "tramo") or 1)
+            except ValueError:
+                skipped += 1
+                continue
+            is_guard = (field(row, "es_guardia") or "false").lower() in ("true", "1", "si", "sí")
+            group_name = field(row, "grupo") or ""
+            group = None
+            if group_name:
+                group = Group.query.filter_by(name=group_name).first()
+                if not group:
+                    group = Group(name=group_name)
+                    db.session.add(group)
+                    db.session.flush()
             existing = TeacherSchedule.query.filter_by(
                 teacher_id=teacher.id, day_of_week=day, slot_id=slot,
                 school_year_id=year_id,
@@ -598,20 +901,28 @@ def import_schedule_csv():
             if existing:
                 skipped += 1
                 continue
-            entry = TeacherSchedule(
+            db.session.add(TeacherSchedule(
                 teacher_id=teacher.id,
                 group_id=group.id if group else None,
                 day_of_week=day,
                 slot_id=slot,
                 is_guard_slot=is_guard,
                 school_year_id=year_id,
-            )
-            db.session.add(entry)
-            created += 1
+            ))
+            n += 1
+        if n:
+            created["horarios"] = n
+
+    else:
+        return jsonify({"error": "No se reconoce el tipo de datos. Mapea al menos 'Email' para importar profesores, o 'Email + Día + Tramo' para importar horarios."}), 400
+
+    try:
         db.session.commit()
-        flash(f"Importados: {created} tramos. Omitidos: {skipped}.", "success")
-        return redirect(url_for("admin.teachers"))
-    return render_template("admin/import_csv.html", target="horarios")
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"created": created, "skipped": skipped, "errors": errors})
 
 
 @admin_bp.route("/horarios/disponibilidad/nueva", methods=["POST"])
