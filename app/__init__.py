@@ -86,6 +86,16 @@ def create_app():
         return {"points_enabled": True}
 
     @app.context_processor
+    def inject_school_year():
+        try:
+            if current_user.is_authenticated:
+                from app.utils.school_year import get_current_school_year
+                return {"current_school_year": get_current_school_year()}
+        except Exception:
+            pass
+        return {"current_school_year": None}
+
+    @app.context_processor
     def inject_presence_cfg():
         try:
             if current_user.is_authenticated:

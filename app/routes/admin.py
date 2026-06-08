@@ -63,7 +63,7 @@ def teacher_create():
             current_app.logger.error("Error enviando bienvenida a %s: %s", user.email, e)
         flash("Profesor creado.", "success")
         return redirect(url_for("admin.teachers"))
-    return render_template("admin/teacher_form.html", teacher=None)
+    return render_template("admin/teacher_form.html", teacher=None, all_teachers=[])
 
 
 @admin_bp.route("/profesores/<int:tid>/editar", methods=["GET", "POST"])
@@ -82,10 +82,40 @@ def teacher_edit(tid):
         teacher.receive_emails = request.form.get("receive_emails") == "on"
         if request.form.get("password"):
             teacher.set_password(request.form["password"])
+        # Gestión de sustitución
+        from app.utils.school_year import get_current_school_year as _get_year
+        _year_id = _get_year().id
+        new_sub_id_raw = request.form.get("substitutes_id", "").strip()
+        new_sub_id = int(new_sub_id_raw) if new_sub_id_raw else None
+        old_sub_id = teacher.substitutes_id
+        if new_sub_id != old_sub_id:
+            if old_sub_id:
+                old_original = User.query.get(old_sub_id)
+                if old_original:
+                    old_original.active = True
+                TeacherSchedule.query.filter_by(teacher_id=teacher.id, school_year_id=_year_id).delete(synchronize_session=False)
+            if new_sub_id and new_sub_id != teacher.id:
+                new_original = User.query.get(new_sub_id)
+                if new_original:
+                    TeacherSchedule.query.filter_by(teacher_id=teacher.id, school_year_id=_year_id).delete(synchronize_session=False)
+                    for entry in new_original.schedule_entries.filter_by(school_year_id=_year_id).all():
+                        db.session.add(TeacherSchedule(
+                            teacher_id=teacher.id,
+                            group_id=entry.group_id,
+                            day_of_week=entry.day_of_week,
+                            slot_id=entry.slot_id,
+                            is_guard_slot=entry.is_guard_slot,
+                            room_id=entry.room_id,
+                            notes=entry.notes,
+                            school_year_id=_year_id,
+                        ))
+                    new_original.active = False
+        teacher.substitutes_id = new_sub_id
         db.session.commit()
         flash("Profesor actualizado.", "success")
         return redirect(url_for("admin.teachers"))
-    return render_template("admin/teacher_form.html", teacher=teacher)
+    all_teachers = User.query.filter(User.id != tid).order_by(User.surname).all()
+    return render_template("admin/teacher_form.html", teacher=teacher, all_teachers=all_teachers)
 
 
 # ── Importación CSV profesores ────────────────────────────────────────────────
@@ -116,6 +146,16 @@ def teacher_delete(tid):
     Absence.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
     Absence.query.filter_by(reported_by_id=tid).update({"reported_by_id": None}, synchronize_session=False)
     TeacherSchedule.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
+    # Si este profesor era sustituto, reactivar al original
+    if teacher.substitutes_id:
+        original = User.query.get(teacher.substitutes_id)
+        if original:
+            original.active = True
+    # Si alguien sustituía a este profesor, limpiar esa relación
+    substitute_teacher = User.query.filter_by(substitutes_id=tid).first()
+    if substitute_teacher:
+        substitute_teacher.substitutes_id = None
+        TeacherSchedule.query.filter_by(teacher_id=substitute_teacher.id).delete(synchronize_session=False)
     db.session.delete(teacher)
     db.session.commit()
     flash(f"Profesor {name} eliminado permanentemente.", "success")
@@ -341,6 +381,10 @@ def schedules():
         return redirect(url_for("dashboard.index"))
     from flask import current_app
     from sqlalchemy import func
+    from app.utils.school_year import get_current_school_year
+
+    current_year = get_current_school_year()
+    year_id = current_year.id
 
     teachers = (User.query
                 .filter_by(active=True)
@@ -348,11 +392,12 @@ def schedules():
                 .order_by(User.surname, User.name)
                 .all())
 
-    # Resumen de guardias/clases por profesor en una sola consulta
+    # Resumen de guardias/clases por profesor en el curso actual
     summary_rows = (db.session.query(
         TeacherSchedule.teacher_id,
         TeacherSchedule.is_guard_slot,
         func.count(TeacherSchedule.id),
+    ).filter_by(school_year_id=year_id
     ).group_by(TeacherSchedule.teacher_id, TeacherSchedule.is_guard_slot).all())
     summaries = {}
     for tid, is_guard, count in summary_rows:
@@ -370,7 +415,7 @@ def schedules():
     schedule_grid = None
     availability_periods = []
     if selected:
-        entries = TeacherSchedule.query.filter_by(teacher_id=selected.id).all()
+        entries = TeacherSchedule.query.filter_by(teacher_id=selected.id, school_year_id=year_id).all()
         entry_map = {(e.day_of_week, e.slot_id): e for e in entries}
         schedule_grid = []
         for s in slots_cfg:
@@ -400,6 +445,7 @@ def schedules():
                            rooms=rooms,
                            availability_periods=availability_periods,
                            today=_date.today(),
+                           current_year=current_year,
                            can_edit=current_user.is_management)
 
 
@@ -408,13 +454,16 @@ def schedules():
 def schedule_clone_cell():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
+    from app.utils.school_year import get_current_school_year
+    year_id = get_current_school_year().id
 
     teacher_id  = int(request.form["teacher_id"])
     src_day     = int(request.form["src_day"])
     src_slot_id = int(request.form["src_slot_id"])
 
     source = TeacherSchedule.query.filter_by(
-        teacher_id=teacher_id, day_of_week=src_day, slot_id=src_slot_id
+        teacher_id=teacher_id, day_of_week=src_day, slot_id=src_slot_id,
+        school_year_id=year_id,
     ).first()
     if not source:
         flash("El tramo origen ya no existe.", "warning")
@@ -428,7 +477,8 @@ def schedule_clone_cell():
         except ValueError:
             continue
         existing = TeacherSchedule.query.filter_by(
-            teacher_id=teacher_id, day_of_week=d, slot_id=s
+            teacher_id=teacher_id, day_of_week=d, slot_id=s,
+            school_year_id=year_id,
         ).first()
         if existing:
             existing.is_guard_slot = source.is_guard_slot
@@ -438,6 +488,7 @@ def schedule_clone_cell():
         else:
             db.session.add(TeacherSchedule(
                 teacher_id=teacher_id, day_of_week=d, slot_id=s,
+                school_year_id=year_id,
                 is_guard_slot=source.is_guard_slot,
                 group_id=source.group_id,
                 room_id=source.room_id,
@@ -456,6 +507,8 @@ def schedule_clone_cell():
 def schedule_set_cell():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
+    from app.utils.school_year import get_current_school_year
+    year_id = get_current_school_year().id
 
     teacher_id = int(request.form["teacher_id"])
     day        = int(request.form["day"])
@@ -463,7 +516,8 @@ def schedule_set_cell():
     action     = request.form["action"]  # "clear" | "guard" | "group"
 
     existing = TeacherSchedule.query.filter_by(
-        teacher_id=teacher_id, day_of_week=day, slot_id=slot_id
+        teacher_id=teacher_id, day_of_week=day, slot_id=slot_id,
+        school_year_id=year_id,
     ).first()
     if existing:
         db.session.delete(existing)
@@ -473,7 +527,7 @@ def schedule_set_cell():
     notes   = request.form.get("notes", "").strip() or None
     if action == "guard":
         db.session.add(TeacherSchedule(
-            teacher_id=teacher_id, day_of_week=day,
+            teacher_id=teacher_id, day_of_week=day, school_year_id=year_id,
             slot_id=slot_id, is_guard_slot=True, group_id=None,
             room_id=room_id, notes=notes,
         ))
@@ -481,14 +535,14 @@ def schedule_set_cell():
         group_id = request.form.get("group_id", type=int)
         if group_id:
             db.session.add(TeacherSchedule(
-                teacher_id=teacher_id, day_of_week=day,
+                teacher_id=teacher_id, day_of_week=day, school_year_id=year_id,
                 slot_id=slot_id, is_guard_slot=False, group_id=group_id,
                 room_id=room_id, notes=notes,
             ))
     elif action == "other":
         if notes:
             db.session.add(TeacherSchedule(
-                teacher_id=teacher_id, day_of_week=day,
+                teacher_id=teacher_id, day_of_week=day, school_year_id=year_id,
                 slot_id=slot_id, is_guard_slot=False, group_id=None,
                 room_id=room_id, notes=notes,
             ))
@@ -517,6 +571,8 @@ def import_schedule_csv():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     if request.method == "POST":
+        from app.utils.school_year import get_current_school_year
+        year_id = get_current_school_year().id
         file = request.files.get("csv_file")
         if not file:
             flash("Selecciona un fichero CSV.", "warning")
@@ -536,7 +592,8 @@ def import_schedule_csv():
             group = Group.query.filter_by(name=group_name).first() if group_name else None
 
             existing = TeacherSchedule.query.filter_by(
-                teacher_id=teacher.id, day_of_week=day, slot_id=slot
+                teacher_id=teacher.id, day_of_week=day, slot_id=slot,
+                school_year_id=year_id,
             ).first()
             if existing:
                 skipped += 1
@@ -547,6 +604,7 @@ def import_schedule_csv():
                 day_of_week=day,
                 slot_id=slot,
                 is_guard_slot=is_guard,
+                school_year_id=year_id,
             )
             db.session.add(entry)
             created += 1
@@ -1366,3 +1424,86 @@ def points_reset_teacher(tid):
     db.session.commit()
     flash(f"Puntos de {teacher.full_name} reseteados a 0.", "success")
     return redirect(url_for("admin.config") + "#section-points")
+
+
+# ── Cursos escolares ──────────────────────────────────────────────────────────
+
+@admin_bp.route("/cursos")
+@login_required
+def school_years():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.school_year import SchoolYear
+    from app.utils.school_year import get_current_school_year, year_name_for, year_dates
+    from datetime import date as _date
+
+    years = SchoolYear.query.order_by(SchoolYear.start_date.desc()).all()
+    current = get_current_school_year()
+
+    # Precalcular nombre del siguiente curso
+    start_year = int(current.name.split('/')[0]) + 1
+    next_name = f"{start_year}/{start_year + 1}"
+    next_start, next_end = year_dates(next_name)
+
+    return render_template(
+        "admin/school_years.html",
+        years=years,
+        current_year=current,
+        next_name=next_name,
+        next_start=next_start,
+        next_end=next_end,
+        today=_date.today(),
+    )
+
+
+@admin_bp.route("/cursos/nuevo", methods=["POST"])
+@login_required
+def school_year_create():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.school_year import SchoolYear
+    from app.utils.school_year import year_dates
+
+    name = request.form.get("name", "").strip()
+    if not name or '/' not in name:
+        flash("Nombre de curso inválido.", "danger")
+        return redirect(url_for("admin.school_years"))
+
+    if SchoolYear.query.filter_by(name=name).first():
+        flash(f"El curso {name} ya existe.", "warning")
+        return redirect(url_for("admin.school_years"))
+
+    start, end = year_dates(name)
+
+    # Desactivar curso actual y crear el nuevo
+    SchoolYear.query.update({"is_current": False})
+    new_year = SchoolYear(name=name, start_date=start, end_date=end, is_current=True)
+    db.session.add(new_year)
+    db.session.flush()  # obtener new_year.id antes de recalcular
+
+    # Recalcular puntos para el nuevo curso (estará en 0 al no tener datos aún)
+    from app.utils.points import recalculate_points_for_year
+    recalculate_points_for_year(new_year)
+
+    db.session.commit()
+    flash(f"Curso {name} iniciado. Puntos recalculados para este curso (0 al empezar).", "success")
+    return redirect(url_for("admin.school_years"))
+
+
+@admin_bp.route("/cursos/<int:year_id>/activar", methods=["POST"])
+@login_required
+def school_year_activate(year_id):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.school_year import SchoolYear
+
+    year = SchoolYear.query.get_or_404(year_id)
+    SchoolYear.query.update({"is_current": False})
+    year.is_current = True
+
+    from app.utils.points import recalculate_points_for_year
+    recalculate_points_for_year(year)
+
+    db.session.commit()
+    flash(f"Curso {year.name} activado. Puntos recalculados para este curso.", "success")
+    return redirect(url_for("admin.school_years"))

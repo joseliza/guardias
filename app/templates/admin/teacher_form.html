@@ -53,6 +53,24 @@
           <label class="form-label">Contraseña <small class="text-muted">(opcional si usa Google Workspace{{ ' · dejar vacío para no cambiar' if teacher else '' }})</small></label>
           <input type="password" name="password" class="form-control">
         </div>
+        {% if teacher %}
+        <div class="col-12">
+          <label class="form-label">Sustituye a <small class="text-muted">(opcional — copia el horario del sustituido y lo pone inactivo)</small></label>
+          <select name="substitutes_id" class="form-select" id="substitutes_id">
+            <option value="">Sin sustitución</option>
+            {% for t in all_teachers %}
+            <option value="{{ t.id }}" {% if teacher.substitutes_id == t.id %}selected{% endif %}>
+              {{ t.full_name }}{% if not t.active %} (inactivo){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          {% if teacher.substitutes %}
+          <div class="form-text text-warning">
+            <i class="bi bi-info-circle"></i> Actualmente sustituye a <strong>{{ teacher.substitutes.full_name }}</strong>. Al quitar la sustitución se reactivará el original y se borrará este horario copiado.
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
       </div>
       <div class="mt-4 d-flex gap-2 flex-wrap">
         <button type="submit" class="btn btn-primary">Guardar</button>
@@ -120,6 +138,11 @@
 {% endblock %}
 {% block scripts %}
 <script>
+  history.pushState(null, null, location.href);
+  window.addEventListener('popstate', function() {
+    window.location.href = "{{ url_for('admin.teachers') }}";
+  });
+
   const roleSelect = document.querySelector('select[name="role"]');
   const trackWrapper = document.getElementById('track-points-wrapper');
   function toggleTrackPoints() {
@@ -127,5 +150,23 @@
   }
   roleSelect.addEventListener('change', toggleTrackPoints);
   toggleTrackPoints();
+
+  const subSelect = document.getElementById('substitutes_id');
+  if (subSelect) {
+    const originalSubId = '{{ teacher.substitutes_id or "" }}';
+    subSelect.closest('form').addEventListener('submit', function(e) {
+      const newSubId = subSelect.value;
+      if (newSubId && newSubId !== originalSubId) {
+        const name = subSelect.options[subSelect.selectedIndex].text.trim();
+        if (!confirm('Se pondrá inactivo a "' + name + '" y se copiará su horario a este profesor. ¿Continuar?')) {
+          e.preventDefault();
+        }
+      } else if (!newSubId && originalSubId) {
+        if (!confirm('Se quitará la sustitución: el profesor original se reactivará y se borrará el horario copiado. ¿Continuar?')) {
+          e.preventDefault();
+        }
+      }
+    });
+  }
 </script>
 {% endblock %}

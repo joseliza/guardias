@@ -93,7 +93,7 @@ document.getElementById('all-day-toggle').addEventListener('change', function() 
 
 // ── Datos ─────────────────────────────────────────────────────────────────────
 const groupData   = [{% for g in groups %}{ id: {{ g.id }}, name: {{ g.name|tojson }} },{% endfor %}];
-const teacherData = [{% for t in teachers %}{ id: {{ t.id }}, name: {{ t.full_name|tojson }} },{% endfor %}];
+const teacherData = [{% for t in teachers %}{ id: {{ t.id }}, name: {{ t.display_name|tojson }} },{% endfor %}];
 const selGroups   = new Set();
 const selTeachers = new Set();
 

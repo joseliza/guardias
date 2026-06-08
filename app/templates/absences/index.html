@@ -64,7 +64,7 @@
       <tbody>
         {% for a in item.absences %}
         <tr>
-          <td>{{ a.teacher.full_name }}</td>
+          <td>{{ a.teacher.display_name }}</td>
           <td class="text-muted">{{ a.reason or '—' }}</td>
           <td>
             {% if a.status == 'returned' %}
@@ -147,7 +147,7 @@
             <div>
               <span class="fw-semibold">{{ s.get('label', 'Tramo ' ~ a.slot_id) }}</span>
               <small class="text-muted ms-1">{{ s.get('start','') }}–{{ s.get('end','') }}</small>
-              <br><small class="text-muted">{{ a.date.strftime('%d/%m/%Y') }} · {{ a.teacher.full_name }}</small>
+              <br><small class="text-muted">{{ a.date.strftime('%d/%m/%Y') }} · {{ a.teacher.display_name }}</small>
             </div>
             {% if p.has_tasks %}
             <a href="{{ url_for('absences.tasks', absence_id=a.id) }}" class="btn btn-sm btn-outline-success ms-3">

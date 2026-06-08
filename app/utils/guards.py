@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.schedule import TeacherSchedule
 from app.models.absence import Absence
 from app.utils import points_system_enabled
+from app.utils.school_year import get_current_school_year
 
 
 def fairness_sort_key(teachers):
@@ -52,6 +53,7 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
     from app.models.availability import AvailabilityPeriod
 
     day_idx = target_date.weekday()
+    year_id = get_current_school_year().id
 
     absent_ids = {
         row[0] for row in Absence.query
@@ -67,7 +69,7 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
     # IDs con entrada en ese tramo (clase o guardia)
     scheduled_ids = {
         row[0] for row in TeacherSchedule.query
-        .filter_by(day_of_week=day_idx, slot_id=slot_id)
+        .filter_by(day_of_week=day_idx, slot_id=slot_id, school_year_id=year_id)
         .with_entities(TeacherSchedule.teacher_id)
         .all()
     }
@@ -75,7 +77,7 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
     # IDs con tramo de guardia oficial asignado
     guard_slot_ids = {
         row[0] for row in TeacherSchedule.query
-        .filter_by(day_of_week=day_idx, slot_id=slot_id, is_guard_slot=True)
+        .filter_by(day_of_week=day_idx, slot_id=slot_id, is_guard_slot=True, school_year_id=year_id)
         .with_entities(TeacherSchedule.teacher_id)
         .all()
     }
@@ -93,6 +95,7 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
                 slot_id=slot_id,
                 group_id=ag.group_id,
                 is_guard_slot=False,
+                school_year_id=year_id,
             ).all():
                 if entry.teacher_id not in absent_ids and entry.teacher_id not in guard_slot_ids:
                     ex_guard_ids.add(entry.teacher_id)
@@ -113,6 +116,7 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
             TeacherSchedule.slot_id == slot_id,
             TeacherSchedule.is_guard_slot.is_(False),
             TeacherSchedule.group_id.isnot(None),
+            TeacherSchedule.school_year_id == year_id,
         ).first()
         if not has_class:
             continue
@@ -145,9 +149,11 @@ def get_support_teachers(group_id, slot_id: int, target_date: date, absent_teach
     if not group_id:
         return []
     day_idx = target_date.weekday()
+    year_id = get_current_school_year().id
     others = TeacherSchedule.query.filter_by(
         group_id=group_id, day_of_week=day_idx,
         slot_id=slot_id, is_guard_slot=False,
+        school_year_id=year_id,
     ).filter(TeacherSchedule.teacher_id != absent_teacher_id).all()
     if not others:
         return []

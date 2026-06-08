@@ -26,15 +26,18 @@ class Guard(db.Model):
 
     @property
     def room(self):
-        """Aula del tramo: la del horario del profesor ausente."""
+        """Aula del tramo: la del horario del profesor ausente en el curso actual."""
         if not self.absence:
             return None
         from app.models.schedule import TeacherSchedule
+        from app.utils.school_year import get_current_school_year
+        year_id = get_current_school_year().id
         entry = TeacherSchedule.query.filter_by(
             teacher_id=self.absence.teacher_id,
             day_of_week=self.date.weekday(),
             slot_id=self.slot_id,
             is_guard_slot=False,
+            school_year_id=year_id,
         ).first()
         return entry.room if entry else None
 

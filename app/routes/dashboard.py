@@ -14,6 +14,7 @@ from app.models.schedule import TeacherSchedule
 from app.models.user import User
 from app.models.chat import ChatMessage, ChatClear
 from app.utils.guards import get_available_teachers_for_slot, get_support_teachers, fairness_sort_key
+from app.utils.school_year import get_current_school_year
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -51,6 +52,7 @@ def index():
 
     day_idx = target_date.weekday()
     slots_cfg = current_app.config["TIME_SLOTS"]
+    year_id = get_current_school_year().id
 
     from app.models.activity import ExtraActivity
 
@@ -83,6 +85,7 @@ def index():
             day_of_week=day_idx,
             slot_id=a.slot_id,
             is_guard_slot=False,
+            school_year_id=year_id,
         ).first()
         group = entry.group if entry else None
         absence_groups[a.id] = group.name if group else "—"
@@ -98,6 +101,7 @@ def index():
                 teacher_id=current_user.id,
                 day_of_week=day_idx,
                 is_guard_slot=True,
+                school_year_id=year_id,
             ).all()
         }
 
@@ -109,7 +113,8 @@ def index():
 
         guard_entry_ids = {
             e.teacher_id for e in TeacherSchedule.query.filter_by(
-                day_of_week=day_idx, slot_id=sid, is_guard_slot=True
+                day_of_week=day_idx, slot_id=sid, is_guard_slot=True,
+                school_year_id=year_id,
             ).all()
         }
         absent_ids = {a.teacher_id for a in absences_by_slot.get(sid, [])}

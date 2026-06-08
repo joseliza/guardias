@@ -167,7 +167,7 @@
             {% for absence in item.absences %}
             {% set guard = item.guards | selectattr('absence_id','eq', absence.id) | first %}
             <tr{% if can_manage and guard and guard.status in ('pending', 'covered') and absence.status != 'returned' %} class="drop-guard-row" data-guard-id="{{ guard.id }}"{% endif %}>
-              <td>{{ absence.teacher.full_name }}</td>
+              <td>{{ absence.teacher.display_name }}</td>
               <td>
                 <span class="badge bg-light text-dark border">{{ absence_groups[absence.id] }}</span>
                 {% if absence_rooms[absence.id] %}
@@ -202,14 +202,14 @@
                     </span>
                     {% endif %}
                     <small class="text-success fw-semibold">
-                      <i class="bi bi-person-check"></i> {{ rec.teacher.full_name }}
+                      <i class="bi bi-person-check"></i> {{ rec.teacher.display_name }}
                       <span class="badge bg-success-subtle text-success-emphasis ms-1" style="font-size:.7rem;">
                         {{ rec_start | mins_to_hhmm }}–{{ rec_end | mins_to_hhmm }} · {{ rec.effective_minutes }} min
                       </span>
                     </small>
                     {% if can_manage %}
                     <form method="POST" action="{{ url_for('guards.remove_record', record_id=rec.id) }}"
-                          onsubmit="return confirm('¿Quitar a {{ rec.teacher.full_name }} de esta guardia?')">
+                          onsubmit="return confirm('¿Quitar a {{ rec.teacher.display_name }} de esta guardia?')">
                       <button type="submit" class="btn btn-link btn-sm text-danger p-0 ms-1" title="Quitar asignación">
                         <i class="bi bi-x-circle"></i>
                       </button>
@@ -233,7 +233,7 @@
                   </span>
                   {% for t in support %}
                   <div><small class="text-warning-emphasis fw-semibold">
-                    <i class="bi bi-person-check"></i> {{ t.full_name }}
+                    <i class="bi bi-person-check"></i> {{ t.display_name }}
                   </small></div>
                   {% endfor %}
                   {% else %}
@@ -260,14 +260,14 @@
                   {% endif %}
                   {% if absence.status != 'returned' %}
                   <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=absence.id) }}"
-                        onsubmit="return confirm('¿Confirmas que {{ absence.teacher.full_name }} se ha reincorporado?')">
+                        onsubmit="return confirm('¿Confirmas que {{ absence.teacher.display_name }} se ha reincorporado?')">
                     <input type="hidden" name="back_fecha" value="{{ target_date.isoformat() }}">
                     <input type="hidden" name="back_slot" value="{{ s.id }}">
                     <button class="btn btn-sm btn-outline-success w-100"><i class="bi bi-box-arrow-in-right"></i> Reincorp.</button>
                   </form>
                   {% elif s.id in unmarkable_slot_ids %}
                   <form method="POST" action="{{ url_for('absences.unmark_returned', absence_id=absence.id) }}"
-                        onsubmit="return confirm('¿Deshacer la reincorporación de {{ absence.teacher.full_name }}?')">
+                        onsubmit="return confirm('¿Deshacer la reincorporación de {{ absence.teacher.display_name }}?')">
                     <input type="hidden" name="back_fecha" value="{{ target_date.isoformat() }}">
                     <input type="hidden" name="back_slot" value="{{ s.id }}">
                     <button class="btn btn-sm btn-outline-warning w-100"><i class="bi bi-arrow-counterclockwise"></i> Deshacer reincorp.</button>
@@ -294,7 +294,7 @@
           <div class="alert alert-info py-1 px-2 mb-2 small">
             <i class="bi bi-person-lines-fill"></i>
             <strong>Atención:</strong>
-            {{ item.multi_assigned | map(attribute='full_name') | join(', ') }}
+            {{ item.multi_assigned | map(attribute='display_name') | join(', ') }}
             {{ 'cubre' if item.multi_assigned|length == 1 else 'cubren' }} más de una guardia en este tramo.
           </div>
           {% endif %}
@@ -305,7 +305,7 @@
               {% for t in item.guard_teachers %}
                 {% if t.id in item.assigned_teacher_ids %}
                 <span class="badge bg-warning text-dark" title="Ocupado — cubriendo una ausencia">
-                  <i class="bi bi-person-fill-exclamation"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-fill-exclamation"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% elif (current_user.is_management or is_display_user) and item.all_guards_info %}
                 <button type="button"
@@ -313,20 +313,20 @@
                         style="cursor:grab"
                         title="Arrastrar o clic para asignar guardia"
                         data-teacher-id="{{ t.id }}"
-                        data-teacher-name="{{ t.full_name }}"
+                        data-teacher-name="{{ t.display_name }}"
                         data-guards='{{ item.all_guards_info | tojson }}'>
-                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </button>
                 {% elif can_manage %}
                 <span class="badge bg-success draggable-teacher"
                       style="cursor:grab"
                       title="Arrastrar para asignar guardia"
                       data-teacher-id="{{ t.id }}">
-                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% else %}
                 <span class="badge bg-success" title="Libre — disponible para cubrir">
-                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% endif %}
               {% else %}
@@ -342,7 +342,7 @@
                 {% if t.id in item.assigned_teacher_ids %}
                 <span class="badge text-white" style="background-color:#0d6efd!important"
                       title="Ocupado — cubriendo una ausencia">
-                  <i class="bi bi-person-fill-exclamation"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-fill-exclamation"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% elif (current_user.is_management or is_display_user) and item.all_guards_info %}
                 <button type="button"
@@ -350,21 +350,21 @@
                         style="cursor:grab;background-color:#0d9488!important;color:#fff"
                         title="Arrastrar o clic para asignar guardia"
                         data-teacher-id="{{ t.id }}"
-                        data-teacher-name="{{ t.full_name }}"
+                        data-teacher-name="{{ t.display_name }}"
                         data-guards='{{ item.all_guards_info | tojson }}'>
-                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </button>
                 {% elif can_manage %}
                 <span class="badge text-white draggable-teacher"
                       style="cursor:grab;background-color:#0d9488!important"
                       title="Arrastrar para asignar guardia"
                       data-teacher-id="{{ t.id }}">
-                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% else %}
                 <span class="badge text-white" style="background-color:#0d9488!important"
                       title="Disponible por actividad extraescolar">
-                  <i class="bi bi-person-check"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% endif %}
               {% endfor %}
@@ -379,7 +379,7 @@
               <span class="badge bg-purple text-white"
                     style="background-color:#6f42c1!important"
                     title="Cubriendo sin guardia oficial en este tramo">
-                <i class="bi bi-person-plus-fill"></i> {{ t.full_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                <i class="bi bi-person-plus-fill"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
               </span>
               {% endfor %}
             </div>
@@ -415,7 +415,7 @@
             <div id="chat-box" class="p-3" style="height:300px;overflow-y:auto;background:#f8f9fa;">
               {% for msg in chat_messages %}
               <div class="mb-2">
-                <strong>{{ msg.author.full_name }}</strong>
+                <strong>{{ msg.author.display_name }}</strong>
                 <small class="text-muted ms-2">{{ msg.created_at.strftime('%H:%M') }}</small>
                 <div>{{ msg.message }}</div>
               </div>

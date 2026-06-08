@@ -17,6 +17,7 @@ from app.models.schedule import TeacherSchedule
 from app.models.activity import ExtraActivity, ExtraActivityTeacher
 from app.utils.points import apply_absence_penalty
 from app.utils.guards import auto_assign_pending_guards
+from app.utils.school_year import get_current_school_year
 
 absences_bp = Blueprint("absences", __name__, url_prefix="/ausencias")
 
@@ -115,6 +116,7 @@ def create():
             return redirect(url_for("absences.create"))
 
         day_idx = absence_date.weekday()
+        year_id = get_current_school_year().id
         configured_penalty = current_app.config.get("ABSENCE_PENALTY", -1.0)
         slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
         skipped_free = []
@@ -152,6 +154,7 @@ def create():
                     teacher_id=teacher_id,
                     day_of_week=day_idx,
                     slot_id=slot_id,
+                    school_year_id=year_id,
                 ).first()
                 if not has_break_slot:
                     skipped_free.append(slot_cfg.get("label", f"Tramo {slot_id}"))
@@ -176,12 +179,14 @@ def create():
                 day_of_week=day_idx,
                 slot_id=slot_id,
                 is_guard_slot=False,
+                school_year_id=year_id,
             ).first()
             has_guard_slot = TeacherSchedule.query.filter_by(
                 teacher_id=teacher_id,
                 day_of_week=day_idx,
                 slot_id=slot_id,
                 is_guard_slot=True,
+                school_year_id=year_id,
             ).first()
 
             if not schedule_entry and not has_guard_slot:
@@ -257,10 +262,12 @@ def create():
 def schedule_json(tid, day_idx):
     """Devuelve los tramos que tiene el profesor en ese día de la semana."""
     slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
+    year_id = get_current_school_year().id
     entries = TeacherSchedule.query.filter_by(
         teacher_id=tid,
         day_of_week=day_idx,
         is_guard_slot=False,
+        school_year_id=year_id,
     ).all()
     result = []
     for e in entries:
@@ -306,11 +313,13 @@ def tasks(absence_id):
     absence = Absence.query.get_or_404(absence_id)
     can_access = (absence.teacher_id == current_user.id or current_user.is_management)
     if not can_access:
+        _yid = get_current_school_year().id
         has_guard = TeacherSchedule.query.filter_by(
             teacher_id=current_user.id,
             day_of_week=absence.date.weekday(),
             slot_id=absence.slot_id,
             is_guard_slot=True,
+            school_year_id=_yid,
         ).first()
         can_access = bool(has_guard)
     if not can_access:
@@ -318,12 +327,13 @@ def tasks(absence_id):
         return redirect(url_for("absences.index"))
 
     groups = Group.query.filter_by(active=True).order_by(Group.name).all()
-
+    _yid = get_current_school_year().id
     schedule_entry = TeacherSchedule.query.filter_by(
         teacher_id=absence.teacher_id,
         day_of_week=absence.date.weekday(),
         slot_id=absence.slot_id,
         is_guard_slot=False,
+        school_year_id=_yid,
     ).first()
     default_group_id = schedule_entry.group_id if schedule_entry else None
 
@@ -429,6 +439,7 @@ def tasks_pdf(absence_id):
         day_of_week=absence.date.weekday(),
         slot_id=absence.slot_id,
         is_guard_slot=False,
+        school_year_id=get_current_school_year().id,
     ).first()
     group = schedule_entry.group if schedule_entry else None
 
@@ -467,6 +478,7 @@ def slot_pdf(date_str, slot_id):
             day_of_week=target_date.weekday(),
             slot_id=slot_id,
             is_guard_slot=False,
+            school_year_id=get_current_school_year().id,
         ).first()
         group = entry.group if entry else None
         entries.append({
@@ -509,6 +521,7 @@ def tasks_download(absence_id):
         day_of_week=absence.date.weekday(),
         slot_id=absence.slot_id,
         is_guard_slot=False,
+        school_year_id=get_current_school_year().id,
     ).first()
     group = schedule_entry.group if schedule_entry else None
     group_name = group.name if group else "-"
@@ -608,6 +621,7 @@ def slot_download(date_str, slot_id):
             day_of_week=target_date.weekday(),
             slot_id=slot_id,
             is_guard_slot=False,
+            school_year_id=get_current_school_year().id,
         ).first()
         group = entry.group if entry else None
 
@@ -683,6 +697,7 @@ def mark_returned(absence_id):
             day_of_week=_date.today().weekday(),
             slot_id=absence.slot_id,
             is_guard_slot=True,
+            school_year_id=get_current_school_year().id,
         ).first()
         if not has_guard:
             flash("Sin permiso.", "danger")
@@ -743,6 +758,7 @@ def unmark_returned(absence_id):
             day_of_week=today.weekday(),
             slot_id=absence.slot_id,
             is_guard_slot=True,
+            school_year_id=get_current_school_year().id,
         ).first()
         if not has_guard:
             flash("Sin permiso.", "danger")

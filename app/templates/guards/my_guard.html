@@ -73,7 +73,7 @@
       {# Profesores asignados con botón de eliminar #}
       {% for record in guard.records %}
       <div class="d-flex align-items-center gap-2 mb-1">
-        <span><i class="bi bi-person-check text-success"></i> {{ record.teacher.full_name }}
+        <span><i class="bi bi-person-check text-success"></i> {{ record.teacher.display_name }}
           <small class="text-muted">({{ record.effective_minutes }} min)</small>
         </span>
         <form method="POST" action="{{ url_for('guards.remove_record', record_id=record.id) }}" class="d-inline">

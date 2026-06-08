@@ -149,7 +149,7 @@ document.getElementById('absence-date').addEventListener('change', loadSchedule)
 {% if current_user.is_management or current_user.role == 'display' %}
 // Autocomplete de profesores
 const teacherData = [
-  {% for t in teachers %}{ id: {{ t.id }}, name: {{ t.full_name | tojson }} },
+  {% for t in teachers %}{ id: {{ t.id }}, name: {{ t.display_name | tojson }} },
   {% endfor %}
 ];
 const tInput = document.getElementById('teacher-search');

@@ -25,6 +25,14 @@ class User(UserMixin, db.Model):
     track_points = db.Column(db.Boolean, default=False, nullable=False)
     # Si False, el usuario no recibe correos del sistema (resúmenes, notificaciones)
     receive_emails = db.Column(db.Boolean, default=True, nullable=False)
+    # Profesor al que sustituye (se copia su horario y se pone inactivo al original)
+    substitutes_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    substitutes = db.relationship(
+        "User",
+        primaryjoin="foreign(User.substitutes_id) == User.id",
+        uselist=False,
+        lazy="select",
+    )
 
     schedule_entries = db.relationship("TeacherSchedule", backref="teacher", lazy="dynamic")
     absences = db.relationship("Absence", foreign_keys="Absence.teacher_id", backref="teacher", lazy="dynamic")
@@ -39,6 +47,12 @@ class User(UserMixin, db.Model):
     @property
     def full_name(self):
         return f"{self.surname}, {self.name}"
+
+    @property
+    def display_name(self):
+        if self.substitutes_id and self.substitutes:
+            return f"{self.full_name} (sustituye a {self.substitutes.full_name})"
+        return self.full_name
 
     @property
     def is_management(self):

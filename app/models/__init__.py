@@ -1,5 +1,6 @@
 from app.extensions import db
 
+from .school_year import SchoolYear
 from .user import User
 from .group import Group
 from .schedule import TeacherSchedule
@@ -12,6 +13,7 @@ from .chat import ChatMessage
 
 __all__ = [
     "db",
+    "SchoolYear",
     "User",
     "Group",
     "TeacherSchedule",

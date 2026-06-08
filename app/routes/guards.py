@@ -62,11 +62,13 @@ def _can_manage_slot(slot_id):
     equipo directivo, pantalla, o profesor con guardia asignada en ese tramo hoy."""
     if current_user.role in ("management", "display"):
         return True
+    from app.utils.school_year import get_current_school_year
     return TeacherSchedule.query.filter_by(
         teacher_id=current_user.id,
         day_of_week=date.today().weekday(),
         slot_id=slot_id,
         is_guard_slot=True,
+        school_year_id=get_current_school_year().id,
     ).first() is not None
 
 
@@ -384,10 +386,12 @@ def my_guard():
                             ids.add(ag.group_id)
             return ids
 
+        from app.utils.school_year import get_current_school_year
         entries = TeacherSchedule.query.filter_by(
             teacher_id=current_user.id,
             day_of_week=day_idx,
             is_guard_slot=True,
+            school_year_id=get_current_school_year().id,
         ).all()
 
         for entry in sorted(entries, key=lambda e: e.slot_id):

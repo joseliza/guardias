@@ -1,6 +1,6 @@
 """
-Modelo TeacherSchedule. Horario semanal fijo de cada profesor.
-Una fila por (profesor, día, tramo): si is_guard_slot=True el tramo es de guardia;
+Modelo TeacherSchedule. Horario semanal fijo de cada profesor por curso escolar.
+Una fila por (profesor, día, tramo, curso): si is_guard_slot=True el tramo es de guardia;
 si False tiene clase con el grupo indicado; sin fila significa hora libre.
 """
 from app.extensions import db
@@ -12,6 +12,7 @@ class TeacherSchedule(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     teacher_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    school_year_id = db.Column(db.Integer, db.ForeignKey("school_years.id"), nullable=False)
     group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
     # 0=Lunes … 4=Viernes
     day_of_week = db.Column(db.Integer, nullable=False)
@@ -23,7 +24,8 @@ class TeacherSchedule(db.Model):
     notes = db.Column(db.String(120), nullable=True)
 
     room = db.relationship("Room", foreign_keys=[room_id])
+    school_year = db.relationship("SchoolYear", foreign_keys=[school_year_id])
 
     __table_args__ = (
-        db.UniqueConstraint("teacher_id", "day_of_week", "slot_id", name="uq_schedule"),
+        db.UniqueConstraint("teacher_id", "day_of_week", "slot_id", "school_year_id", name="uq_schedule"),
     )

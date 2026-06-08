@@ -27,7 +27,7 @@
             {% endfor %}
           </td>
           <td class="small">{% for ag in a.groups %}<span class="badge bg-primary">{{ ag.group.name }}</span>{% if not ag.whole_group %} <small class="text-muted">(parcial)</small>{% endif %} {% endfor %}</td>
-          <td class="small">{% for at in a.accompanying_teachers %}{{ at.teacher.full_name }}{% if at.email_sent %} <i class="bi bi-envelope-check text-success"></i>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+          <td class="small">{% for at in a.accompanying_teachers %}{{ at.teacher.display_name }}{% if at.email_sent %} <i class="bi bi-envelope-check text-success"></i>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
           <td class="text-end">
             <div class="d-flex gap-1 justify-content-end">
               <a href="{{ url_for('activities.edit', aid=a.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>

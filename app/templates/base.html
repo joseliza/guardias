@@ -55,6 +55,9 @@
   <div class="container-fluid">
     <a class="navbar-brand fw-bold" href="{{ url_for('dashboard.index') }}">
       <i class="bi bi-shield-check"></i> {{ config.INSTITUTE_NAME }}
+      {% if current_school_year %}
+      <span class="badge bg-light text-primary ms-1" style="font-size:.7rem;font-weight:600">{{ current_school_year.name }}</span>
+      {% endif %}
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
       <span class="navbar-toggler-icon"></span>
@@ -121,6 +124,7 @@
             <li><a class="dropdown-item" href="{{ url_for('chat.report') }}">Informe de incidencias</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{{ url_for('admin.config') }}"><i class="bi bi-sliders"></i> Configuración</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('admin.school_years') }}"><i class="bi bi-calendar2-range"></i> Cursos escolares</a></li>
             <li><hr class="dropdown-divider"></li>
             {% if not impersonating %}
             <li>

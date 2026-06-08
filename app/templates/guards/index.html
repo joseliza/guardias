@@ -27,7 +27,7 @@
           <td><span class="badge bg-{{ 'success' if g.status=='covered' else 'danger' if g.status=='pending' else 'secondary' }}">{{ g.status }}</span></td>
           <td>
             {% for r in g.records %}
-            {{ r.teacher.full_name }}{% if not loop.last %}, {% endif %}
+            {{ r.teacher.display_name }}{% if not loop.last %}, {% endif %}
             {% else %}—
             {% endfor %}
           </td>

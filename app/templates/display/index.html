@@ -182,10 +182,10 @@
 
               {% for r in guard.records %}
               <span class="d-inline-flex align-items-center gap-1 text-primary" style="font-size:.88rem;">
-                <i class="bi bi-person"></i> {{ r.teacher.full_name }} ({{ r.effective_minutes }} min)
+                <i class="bi bi-person"></i> {{ r.teacher.display_name }} ({{ r.effective_minutes }} min)
                 {% if guard.status != 'returned' %}
                 <form method="POST" action="{{ url_for('display.remove_record', record_id=r.id) }}" class="d-inline"
-                      onsubmit="return confirm('¿Eliminar asignación de {{ r.teacher.full_name }}?')">
+                      onsubmit="return confirm('¿Eliminar asignación de {{ r.teacher.display_name }}?')">
                   <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size:.7rem;" title="Eliminar">
                     <i class="bi bi-x"></i>
                   </button>
@@ -239,12 +239,12 @@
                           {% set sec  = avail[1] if avail is iterable and avail | length > 1 else [] %}
                           {% if prim %}
                           <optgroup label="— Guardia asignada —">
-                            {% for t in prim %}<option value="{{ t.id }}">{{ t.full_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
+                            {% for t in prim %}<option value="{{ t.id }}">{{ t.display_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
                           </optgroup>
                           {% endif %}
                           {% if sec %}
                           <optgroup label="— Libres en este tramo —">
-                            {% for t in sec %}<option value="{{ t.id }}">{{ t.full_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
+                            {% for t in sec %}<option value="{{ t.id }}">{{ t.display_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
                           </optgroup>
                           {% endif %}
                           {% if not prim and not sec %}
