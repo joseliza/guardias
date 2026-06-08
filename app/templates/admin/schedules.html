@@ -136,6 +136,124 @@
   </div>
 </div>
 
+{# Disponibilidad para guardia: periodos en que las horas de clase del profesor
+   pasan a estar disponibles para cubrir sustituciones, sin tocar el horario #}
+<div class="card mb-3">
+  <div class="card-header py-2 d-flex justify-content-between align-items-center bg-light">
+    <span class="fw-semibold"><i class="bi bi-calendar-range"></i> Disponibilidad para guardia</span>
+    {% if can_edit %}
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="openAvailabilityModal(null)">
+      <i class="bi bi-plus-lg"></i> Nuevo periodo
+    </button>
+    {% endif %}
+  </div>
+  <div class="card-body p-0">
+    {% if availability_periods %}
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Periodo</th>
+          <th>Estado</th>
+          <th>Grupos que puede cubrir</th>
+          {% if can_edit %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in availability_periods %}
+        <tr>
+          <td>{{ p.start_date | fecha_es('%d/%m/%Y') }} – {{ p.end_date | fecha_es('%d/%m/%Y') }}</td>
+          <td>
+            {% if p.end_date < today %}
+            <span class="badge bg-secondary">Finalizado</span>
+            {% elif p.start_date > today %}
+            <span class="badge bg-info text-dark">Futuro</span>
+            {% else %}
+            <span class="badge bg-success">Activo</span>
+            {% endif %}
+          </td>
+          <td>
+            {% set pgroups = p.groups.all() %}
+            {% if pgroups %}
+              {% for pg in pgroups %}<span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle me-1">{{ pg.group.name }}</span>{% endfor %}
+            {% else %}
+              <span class="text-muted small fst-italic">Cualquier grupo</span>
+            {% endif %}
+          </td>
+          {% if can_edit %}
+          <td class="text-end">
+            <div class="d-flex gap-1 justify-content-end">
+              <button type="button" class="btn btn-sm btn-outline-secondary" title="Editar"
+                      onclick="openAvailabilityModal(availabilityData[{{ p.id }}])">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <form method="POST" action="{{ url_for('admin.availability_delete', period_id=p.id) }}"
+                    onsubmit="return confirm('¿Eliminar este periodo de disponibilidad?')">
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></button>
+              </form>
+            </div>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted small px-3 py-2 mb-0">Sin periodos de disponibilidad para guardia registrados.</p>
+    {% endif %}
+  </div>
+</div>
+
+{# Modal: nuevo periodo de disponibilidad #}
+{% if can_edit %}
+<div class="modal fade" id="availabilityModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0" id="availability-modal-title"><i class="bi bi-calendar-plus"></i> Nuevo periodo de disponibilidad</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="availability-form" method="POST" action="{{ url_for('admin.availability_create') }}">
+          <input type="hidden" name="teacher_id" value="{{ selected.id }}">
+          <p class="small text-muted">
+            Durante este periodo, todas las horas de clase con grupo asignado de
+            <strong>{{ selected.full_name }}</strong> pasarán a estar disponibles para
+            cubrir guardias, sin modificar su horario.
+          </p>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label small fw-semibold mb-1">Desde</label>
+              <input type="date" name="start_date" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-semibold mb-1">Hasta</label>
+              <input type="date" name="end_date" class="form-control form-control-sm" required>
+            </div>
+          </div>
+          <div class="mb-1">
+            <label class="form-label small fw-semibold mb-1">Grupos que puede cubrir</label>
+            <small class="d-block text-muted mb-1">Déjalo vacío para permitir cualquier grupo.</small>
+            <div id="avail-selected-groups" class="d-flex flex-wrap gap-2 p-2 border rounded bg-light mb-2" style="min-height:44px">
+              <span class="text-muted small fst-italic align-self-center" id="avail-no-groups-msg">Cualquier grupo</span>
+            </div>
+            <div class="position-relative">
+              <input type="text" id="avail-group-search" class="form-control form-control-sm pe-4" autocomplete="off" placeholder="Buscar grupo...">
+              <button type="button" id="avail-group-search-clear"
+                      style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;padding:0;line-height:1;cursor:pointer;color:#6c757d;"
+                      tabindex="-1">&#x2715;</button>
+              <div id="avail-group-sugg" class="list-group position-absolute w-100 shadow-sm" style="z-index:1060;display:none;max-height:180px;overflow-y:auto"></div>
+            </div>
+          </div>
+          <div class="mt-3 d-grid">
+            <button type="submit" class="btn btn-primary btn-sm" id="availability-submit-btn"><i class="bi bi-check-lg"></i> Crear periodo</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# Modal de edición de tramo #}
 {% if can_edit %}
 <div class="modal fade" id="slotModal" tabindex="-1">
@@ -484,6 +602,89 @@ makeModalAutocomplete('slot-room-search', 'slot-room-sugg', roomData, (id, name)
   document.getElementById('slot-room-chip-name').textContent = name;
   document.getElementById('slot-room-chip').style.display = '';
 });
+
+// ── Disponibilidad para guardia: selector de grupos + alta/edición ────────────
+const availabilityModalEl = document.getElementById('availabilityModal');
+if (availabilityModalEl) {
+  const availabilityData = {
+    {% for p in availability_periods %}
+    {{ p.id }}: { id: {{ p.id }}, start: {{ p.start_date.isoformat()|tojson }}, end: {{ p.end_date.isoformat()|tojson }},
+                  groups: [{% for pg in p.groups %}{ id: {{ pg.group_id }}, name: {{ pg.group.name|tojson }} },{% endfor %}] },
+    {% endfor %}
+  };
+  const availCreateUrl = {{ url_for('admin.availability_create')|tojson }};
+  const availEditUrlTpl = {{ url_for('admin.availability_edit', period_id=0)|tojson }};
+
+  const availabilityModal = new bootstrap.Modal(availabilityModalEl);
+  const availForm   = document.getElementById('availability-form');
+  const availTitle  = document.getElementById('availability-modal-title');
+  const availSubmit = document.getElementById('availability-submit-btn');
+  const availSelGroups = new Set();
+  const availChips = document.getElementById('avail-selected-groups');
+  const availNoMsg = document.getElementById('avail-no-groups-msg');
+  const availSearch = document.getElementById('avail-group-search');
+  const availSearchClear = document.getElementById('avail-group-search-clear');
+  const availSugg = document.getElementById('avail-group-sugg');
+
+  function availAddGroup(id, name) {
+    if (availSelGroups.has(id)) return;
+    availSelGroups.add(id);
+    availNoMsg.style.display = 'none';
+    const chip = document.createElement('span');
+    chip.dataset.id = id;
+    chip.className = 'badge bg-primary-subtle text-primary-emphasis border border-primary d-inline-flex align-items-center gap-1 px-2 py-1';
+    chip.innerHTML = `<span>${name}</span>` +
+      `<input type="hidden" name="group_ids" value="${id}">` +
+      `<button type="button" class="btn-close ms-1" style="font-size:.6rem" data-remove="1"></button>`;
+    availChips.appendChild(chip);
+  }
+
+  availChips.addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-remove]');
+    if (!btn) return;
+    const chip = btn.closest('[data-id]');
+    availSelGroups.delete(parseInt(chip.dataset.id));
+    chip.remove();
+    if (!availSelGroups.size) availNoMsg.style.display = '';
+  });
+
+  availSearch.addEventListener('input', function() {
+    availSearchClear.style.display = this.value ? 'block' : 'none';
+  });
+  availSearchClear.addEventListener('click', function() {
+    availSearch.value = '';
+    availSearchClear.style.display = 'none';
+    availSugg.style.display = 'none';
+    availSearch.focus();
+  });
+
+  makeModalAutocomplete('avail-group-search', 'avail-group-sugg', groupData, (id, name) => {
+    availAddGroup(parseInt(id), name);
+  });
+
+  window.openAvailabilityModal = function(period) {
+    availForm.reset();
+    availSelGroups.clear();
+    availChips.querySelectorAll('[data-id]').forEach(el => el.remove());
+    availNoMsg.style.display = '';
+    availSearchClear.style.display = 'none';
+
+    if (period) {
+      availForm.action = availEditUrlTpl.replace('/0/editar', '/' + period.id + '/editar');
+      availForm.querySelector('[name="start_date"]').value = period.start;
+      availForm.querySelector('[name="end_date"]').value = period.end;
+      period.groups.forEach(g => availAddGroup(g.id, g.name));
+      availTitle.innerHTML = '<i class="bi bi-pencil-square"></i> Editar periodo de disponibilidad';
+      availSubmit.innerHTML = '<i class="bi bi-check-lg"></i> Guardar cambios';
+    } else {
+      availForm.action = availCreateUrl;
+      availTitle.innerHTML = '<i class="bi bi-calendar-plus"></i> Nuevo periodo de disponibilidad';
+      availSubmit.innerHTML = '<i class="bi bi-check-lg"></i> Crear periodo';
+    }
+
+    availabilityModal.show();
+  };
+}
 </script>
 {% endif %}
 {% endblock %}

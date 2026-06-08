@@ -114,7 +114,7 @@ def index():
         }
         absent_ids = {a.teacher_id for a in absences_by_slot.get(sid, [])}
 
-        primary_teachers, ex_guard_teachers, secondary_teachers = get_available_teachers_for_slot(target_date, sid)
+        primary_teachers, ex_guard_teachers, secondary_teachers, _avail_restrictions = get_available_teachers_for_slot(target_date, sid)
 
         guard_ids_slot = [g.id for g in guards_by_slot.get(sid, []) if g.status != "returned"]
         assigned_teacher_ids = set()

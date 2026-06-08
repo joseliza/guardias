@@ -368,6 +368,7 @@ def schedules():
     slots_cfg = current_app.config["TIME_SLOTS"]
     days = current_app.config["DAYS_OF_WEEK"]
     schedule_grid = None
+    availability_periods = []
     if selected:
         entries = TeacherSchedule.query.filter_by(teacher_id=selected.id).all()
         entry_map = {(e.day_of_week, e.slot_id): e for e in entries}
@@ -376,11 +377,18 @@ def schedules():
             row = {"slot": s, "days": [entry_map.get((d, s["id"])) for d in range(5)]}
             schedule_grid.append(row)
 
+        from app.models.availability import AvailabilityPeriod
+        availability_periods = (AvailabilityPeriod.query
+                                .filter_by(teacher_id=selected.id)
+                                .order_by(AvailabilityPeriod.start_date.desc())
+                                .all())
+
     from app.models.group import Group as GroupModel
     from app.models.room import Room as RoomModel
     groups = GroupModel.query.filter_by(active=True).order_by(GroupModel.name).all()
     rooms  = RoomModel.query.filter_by(active=True).order_by(RoomModel.name).all()
 
+    from datetime import date as _date
     return render_template("admin/schedules.html",
                            teachers=teachers,
                            summaries=summaries,
@@ -390,6 +398,8 @@ def schedules():
                            slots=slots_cfg,
                            groups=groups,
                            rooms=rooms,
+                           availability_periods=availability_periods,
+                           today=_date.today(),
                            can_edit=current_user.is_management)
 
 
@@ -544,6 +554,101 @@ def import_schedule_csv():
         flash(f"Importados: {created} tramos. Omitidos: {skipped}.", "success")
         return redirect(url_for("admin.teachers"))
     return render_template("admin/import_csv.html", target="horarios")
+
+
+@admin_bp.route("/horarios/disponibilidad/nueva", methods=["POST"])
+@login_required
+def availability_create():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+
+    from datetime import date as _date
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
+
+    teacher_id = int(request.form["teacher_id"])
+    teacher = User.query.get(teacher_id)
+    if not teacher:
+        flash("Profesor no encontrado.", "warning")
+        return redirect(url_for("admin.schedules"))
+
+    try:
+        start_date = _date.fromisoformat(request.form["start_date"])
+        end_date = _date.fromisoformat(request.form["end_date"])
+    except (KeyError, ValueError):
+        flash("Fechas no válidas.", "warning")
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+    if end_date < start_date:
+        flash("La fecha de fin no puede ser anterior a la de inicio.", "warning")
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+    period = AvailabilityPeriod(
+        teacher_id=teacher_id,
+        start_date=start_date,
+        end_date=end_date,
+        created_by_id=current_user.id,
+    )
+    db.session.add(period)
+    db.session.flush()
+
+    for gid in request.form.getlist("group_ids"):
+        db.session.add(AvailabilityPeriodGroup(period_id=period.id, group_id=int(gid)))
+
+    db.session.commit()
+    flash("Periodo de disponibilidad para guardia creado.", "success")
+    return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+
+@admin_bp.route("/horarios/disponibilidad/<int:period_id>/editar", methods=["POST"])
+@login_required
+def availability_edit(period_id):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+
+    from datetime import date as _date
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
+
+    period = AvailabilityPeriod.query.get_or_404(period_id)
+    teacher_id = period.teacher_id
+
+    try:
+        start_date = _date.fromisoformat(request.form["start_date"])
+        end_date = _date.fromisoformat(request.form["end_date"])
+    except (KeyError, ValueError):
+        flash("Fechas no válidas.", "warning")
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+    if end_date < start_date:
+        flash("La fecha de fin no puede ser anterior a la de inicio.", "warning")
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+    period.start_date = start_date
+    period.end_date = end_date
+
+    AvailabilityPeriodGroup.query.filter_by(period_id=period.id).delete()
+    for gid in request.form.getlist("group_ids"):
+        db.session.add(AvailabilityPeriodGroup(period_id=period.id, group_id=int(gid)))
+
+    db.session.commit()
+    flash("Periodo de disponibilidad actualizado.", "success")
+    return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+
+@admin_bp.route("/horarios/disponibilidad/<int:period_id>/eliminar", methods=["POST"])
+@login_required
+def availability_delete(period_id):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
+
+    period = AvailabilityPeriod.query.get_or_404(period_id)
+    teacher_id = period.teacher_id
+    AvailabilityPeriodGroup.query.filter_by(period_id=period.id).delete()
+    db.session.delete(period)
+    db.session.commit()
+    flash("Periodo de disponibilidad eliminado.", "success")
+    return redirect(url_for("admin.schedules", teacher_id=teacher_id))
 
 
 # ── Correo de bienvenida ──────────────────────────────────────────────────────

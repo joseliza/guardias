@@ -87,7 +87,7 @@ def assign(guard_id):
     slots = current_app.config["TIME_SLOTS"]
     slot = next((s for s in slots if s["id"] == guard.slot_id), None)
 
-    primary, ex_guard, secondary = get_available_teachers_for_slot(guard.date, guard.slot_id)
+    primary, ex_guard, secondary, _avail_restrictions = get_available_teachers_for_slot(guard.date, guard.slot_id)
 
     # Destino de vuelta: "my_guard" desde la página del profesor, "dashboard" por defecto
     back = request.args.get("back") or request.form.get("back", "dashboard")
@@ -394,7 +394,7 @@ def my_guard():
             slot_cfg = slot_map.get(entry.slot_id)
             guards_in_slot = Guard.query.filter_by(date=target_date, slot_id=entry.slot_id).all()
             absences_in_slot = Absence.query.filter_by(date=target_date, slot_id=entry.slot_id).all()
-            primary, ex_guard, secondary = get_available_teachers_for_slot(target_date, entry.slot_id)
+            primary, ex_guard, secondary, _avail_restrictions = get_available_teachers_for_slot(target_date, entry.slot_id)
             guard_slots.append({
                 "slot": slot_cfg,
                 "guards": guards_in_slot,

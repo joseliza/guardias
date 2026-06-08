@@ -1,7 +1,8 @@
 """
 Utilidades de asignación de guardias.
 get_available_teachers_for_slot: devuelve tres pools (guardia asignada, guardia EX,
-  libres sin clase) para un tramo dado, excluyendo ausentes.
+  libres sin clase) y un diccionario de restricciones de grupo, para un tramo dado,
+  excluyendo ausentes.
 auto_assign_pending_guards: asigna automáticamente profesores del pool primario
   y, si no son suficientes, del pool EX a cada guardia pendiente del tramo.
 """
@@ -33,15 +34,22 @@ def fairness_sort_key(teachers):
 
 
 def get_available_teachers_for_slot(target_date: date, slot_id: int):
-    """Devuelve (primary, ex_guard, secondary):
+    """Devuelve (primary, ex_guard, secondary, availability_restrictions):
     - primary:   profesores con tramo de guardia oficial, no ausentes, ordenados de forma
                  equitativa (ver fairness_sort_key).
     - ex_guard:  profesores cuyo grupo sale completo en actividad extraescolar ese tramo,
-                 no ausentes, no en primary, ordenados igual que primary.
+                 o que tienen un periodo de disponibilidad para guardia activo y clase
+                 asignada en este tramo; no ausentes, no en primary, ordenados igual que
+                 primary.
     - secondary: profesores sin ninguna entrada en ese tramo (libres totales), no ausentes,
                  ordenados igual que primary.
+    - availability_restrictions: {teacher_id: set(group_id) | None} — grupos que un
+                 profesor con periodo de disponibilidad puede cubrir; None si no hay
+                 restricción (puede cubrir cualquier grupo). Solo incluye profesores con
+                 periodo de disponibilidad activo.
     """
     from app.models.activity import ExtraActivity
+    from app.models.availability import AvailabilityPeriod
 
     day_idx = target_date.weekday()
 
@@ -89,6 +97,29 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
                 if entry.teacher_id not in absent_ids and entry.teacher_id not in guard_slot_ids:
                     ex_guard_ids.add(entry.teacher_id)
 
+    # Pool de disponibilidad: profesores con periodo activo y clase asignada en este tramo
+    availability_restrictions = {}
+    active_periods = AvailabilityPeriod.query.filter(
+        AvailabilityPeriod.start_date <= target_date,
+        AvailabilityPeriod.end_date >= target_date,
+    ).all()
+    for period in active_periods:
+        tid = period.teacher_id
+        if tid in absent_ids or tid in guard_slot_ids or tid in ex_guard_ids:
+            continue
+        has_class = TeacherSchedule.query.filter(
+            TeacherSchedule.teacher_id == tid,
+            TeacherSchedule.day_of_week == day_idx,
+            TeacherSchedule.slot_id == slot_id,
+            TeacherSchedule.is_guard_slot.is_(False),
+            TeacherSchedule.group_id.isnot(None),
+        ).first()
+        if not has_class:
+            continue
+        ex_guard_ids.add(tid)
+        allowed = {pg.group_id for pg in period.groups}
+        availability_restrictions[tid] = allowed or None
+
     primary_ids   = guard_slot_ids - absent_ids
     secondary_ids = {t.id for t in all_teachers} - scheduled_ids - absent_ids - guard_slot_ids
 
@@ -105,7 +136,7 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
         [t for t in all_teachers if t.id in secondary_ids],
         key=sort_key
     )
-    return primary, ex_guard, secondary
+    return primary, ex_guard, secondary, availability_restrictions
 
 
 def get_support_teachers(group_id, slot_id: int, target_date: date, absent_teacher_id: int):
@@ -166,7 +197,7 @@ def auto_assign_pending_guards(target_date: date, slot_id: int) -> dict:
         Group.query.get(g.group_id).difficulty_multiplier if g.group_id else 0
     ))
 
-    primary, ex_guard, _secondary = get_available_teachers_for_slot(target_date, slot_id)
+    primary, ex_guard, _secondary, availability_restrictions = get_available_teachers_for_slot(target_date, slot_id)
     pool = primary + ex_guard  # primero guardia oficial, luego guardia EX
 
     # Excluir profesores ya asignados manualmente en este tramo
@@ -182,7 +213,12 @@ def auto_assign_pending_guards(target_date: date, slot_id: int) -> dict:
     used_teacher_ids = set(already_assigned)
 
     for guard in pending:
-        teacher = next((t for t in pool if t.id not in used_teacher_ids), None)
+        teacher = next(
+            (t for t in pool if t.id not in used_teacher_ids
+             and (availability_restrictions.get(t.id) is None
+                  or guard.group_id in availability_restrictions[t.id])),
+            None
+        )
         if teacher is None:
             unassigned += 1
             continue
