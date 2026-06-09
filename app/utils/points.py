@@ -67,9 +67,9 @@ def recalculate_points_for_year(school_year):
         .all()
     )
 
-    # Reset a 0 y aplicar recálculo
-    User.query.update({"points": 0.0})
-    for teacher in User.query.all():
+    # Reset a 0 solo para activos; los sustituidos (inactivos) conservan sus puntos congelados
+    User.query.filter_by(active=True).update({"points": 0.0})
+    for teacher in User.query.filter_by(active=True).all():
         pts = float(guard_pts.get(teacher.id) or 0) + float(absence_pts.get(teacher.id) or 0)
         if pts != 0:
             teacher.points = round(pts, 2)

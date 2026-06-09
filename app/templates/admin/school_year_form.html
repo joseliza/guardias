@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Editar curso {{ year.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-calendar-range"></i> Editar curso</h4>
+  <a href="{{ url_for('admin.config') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Atrás
+  </a>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="POST" action="{{ url_for('admin.school_year_edit', year_id=year.id) }}">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Nombre del curso</label>
+          <input type="text" name="name" class="form-control" value="{{ year.name }}"
+                 pattern="\d{4}/\d{4}" placeholder="2025/2026" required style="width:160px">
+          <div class="form-text">Formato: AAAA/AAAA</div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Fecha de inicio</label>
+          <input type="date" name="start_date" class="form-control"
+                 value="{{ year.start_date.isoformat() }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Fecha de fin</label>
+          <input type="date" name="end_date" class="form-control"
+                 value="{{ year.end_date.isoformat() }}" required>
+        </div>
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-check-lg"></i> Guardar cambios
+        </button>
+        <a href="{{ url_for('admin.config') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if not year.is_current %}
+<div class="card border-danger">
+  <div class="card-header bg-danger text-white fw-semibold">
+    <i class="bi bi-exclamation-triangle-fill"></i> Zona de peligro
+  </div>
+  <div class="card-body">
+    <p class="mb-1">Borrar el curso <strong>{{ year.name }}</strong> eliminará permanentemente:</p>
+    <ul class="small mb-3">
+      <li>Grupos y materias del curso</li>
+      <li>Horarios de profesores (entradas del horario semanal)</li>
+      <li>Extraescolares y periodos de disponibilidad</li>
+      <li>Filas de horario importadas (datos crudos)</li>
+    </ul>
+    <p class="text-muted small mb-3">Las guardias y ausencias registradas <strong>no se borran</strong> (son globales).</p>
+    <form method="POST" action="{{ url_for('admin.school_year_delete', year_id=year.id) }}"
+          onsubmit="return confirm('¿Borrar el curso {{ year.name }} y TODOS sus datos? Esta acción no se puede deshacer.')">
+      <button type="submit" class="btn btn-danger">
+        <i class="bi bi-trash3-fill"></i> Borrar curso {{ year.name }}
+      </button>
+    </form>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-secondary small">
+  <i class="bi bi-lock"></i> El curso activo no puede borrarse. Activa otro curso primero.
+</div>
+{% endif %}
+{% endblock %}

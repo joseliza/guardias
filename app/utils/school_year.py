@@ -17,6 +17,18 @@ def year_dates(name: str):
     return date(start_year, 9, 1), date(start_year + 1, 6, 30)
 
 
+def get_year_groups(year_id):
+    """Devuelve los grupos activos del curso dado, ordenados por nombre."""
+    from app.models.group import Group
+    return Group.query.filter_by(school_year_id=year_id, active=True).order_by(Group.name).all()
+
+
+def get_year_subjects(year_id):
+    """Devuelve las materias del curso dado, ordenadas por nombre."""
+    from app.models.subject import Subject
+    return Subject.query.filter_by(school_year_id=year_id).order_by(Subject.name).all()
+
+
 def get_current_school_year():
     """Devuelve el SchoolYear marcado como actual. Si no existe ninguno, lo crea automáticamente."""
     try:

@@ -176,7 +176,8 @@ def print_slot(date_str, slot_id):
     slot = next((s for s in all_slots if s["id"] == slot_id), None)
 
     absences = Absence.query.filter_by(date=target_date, slot_id=slot_id).all()
-    groups = Group.query.filter_by(active=True).order_by(Group.name).all()
+    from app.utils.school_year import get_current_school_year, get_year_groups
+    groups = get_year_groups(get_current_school_year().id)
 
     # Para cada ausencia, recoger sus tareas
     tasks_by_group = {}

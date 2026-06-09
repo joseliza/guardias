@@ -514,14 +514,19 @@
                 {% endif %}
               </td>
               <td class="text-end">
-                {% if not y.is_current %}
-                <form method="POST" action="{{ url_for('admin.school_year_activate', year_id=y.id) }}"
-                      onsubmit="return confirm('¿Activar el curso {{ y.name }}? El curso activo actual quedará inactivo.')">
-                  <button type="submit" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-check2-circle"></i> Activar
-                  </button>
-                </form>
-                {% endif %}
+                <div class="d-flex gap-1 justify-content-end">
+                  <a href="{{ url_for('admin.school_year_edit', year_id=y.id) }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                  {% if not y.is_current %}
+                  <form method="POST" action="{{ url_for('admin.school_year_activate', year_id=y.id) }}"
+                        onsubmit="return confirm('¿Activar el curso {{ y.name }}? El curso activo actual quedará inactivo.')">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                      <i class="bi bi-check2-circle"></i> Activar
+                    </button>
+                  </form>
+                  {% endif %}
+                </div>
               </td>
             </tr>
             {% endfor %}
@@ -560,6 +565,20 @@
               </button>
             </div>
           </div>
+          <div class="row g-2 mb-2">
+            <div class="col-auto">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="copy_groups" id="copy_groups" checked>
+                <label class="form-check-label small" for="copy_groups">Copiar grupos del curso anterior</label>
+              </div>
+            </div>
+            <div class="col-auto">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="copy_subjects" id="copy_subjects" checked>
+                <label class="form-check-label small" for="copy_subjects">Copiar materias del curso anterior</label>
+              </div>
+            </div>
+          </div>
         </form>
 
       </div>
@@ -577,7 +596,7 @@
     <div id="section-import-schedules" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
       <div class="accordion-body">
         <p class="text-muted mb-3">Importa los horarios del profesorado desde un fichero CSV local o desde una hoja de Google Drive.</p>
-        <a href="{{ url_for('admin.schedule_wizard') }}" class="btn btn-primary">
+        <a href="{{ url_for('admin.data_load') }}" class="btn btn-primary">
           <i class="bi bi-calendar3"></i> Abrir wizard de importación
         </a>
       </div>

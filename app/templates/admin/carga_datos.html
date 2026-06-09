@@ -1,0 +1,1150 @@
+{% extends "base.html" %}
+{% block title %}Carga de datos{% endblock %}
+{% block main_class %}container-fluid pb-5{% endblock %}
+{% block content %}
+<style>
+  .panel-card { border-left: 4px solid #0d6efd; }
+  .panel-card.panel-drive { border-left-color: #198754; }
+  .panel-card.panel-horarios { border-left-color: #fd7e14; }
+  .panel-card.panel-crear { border-left-color: #6f42c1; }
+  .col-badge { display:inline-block; padding:2px 8px; border-radius:4px; background:#e9ecef; font-size:.8rem; cursor:pointer; margin:2px; }
+  .col-badge.mapped { background:#cfe2ff; }
+  .prereq-ok { color:#198754; }
+  .prereq-fail { color:#dc3545; }
+  .diff-new { background:#d1e7dd; }
+  .diff-changed { background:#fff3cd; }
+</style>
+
+{# ── Banner curso activo ────────────────────────────────────────────────────── #}
+<div class="alert alert-warning d-flex gap-2 align-items-start mb-3 mt-2">
+  <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+  <div>
+    <strong>Curso activo: {{ current_year.label if current_year else '—' }}</strong><br>
+    <small>Se recomienda realizar la carga de datos en un curso nuevo. Si se hace en el curso actual, asegúrate de que la información nueva no afecte a los registros ya existentes (ausencias, guardias, puntuaciones).</small>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-cloud-upload"></i> Carga de datos</h4>
+  <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   PANEL A — Datos desde Google Drive
+═══════════════════════════════════════════════════════════════════════════════ #}
+<div class="card panel-card panel-drive mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#panelB">
+    <span><i class="bi bi-google"></i> <strong>A — Datos desde Google Drive</strong></span>
+    <i class="bi bi-chevron-down"></i>
+  </div>
+  <div id="panelB" class="collapse show">
+    <div class="card-body">
+
+      {# Drive connection #}
+      <div class="d-flex align-items-center gap-3 mb-3">
+        {% if drive_connected %}
+        <span class="badge bg-success"><i class="bi bi-check-circle"></i> Drive conectado</span>
+        <a href="{{ url_for('admin.drive_disconnect') }}" class="btn btn-sm btn-outline-danger">Desconectar</a>
+        {% else %}
+        <span class="badge bg-secondary"><i class="bi bi-x-circle"></i> Drive no conectado</span>
+        <a href="{{ url_for('admin.drive_connect') }}" class="btn btn-sm btn-success"><i class="bi bi-google"></i> Conectar Drive</a>
+        {% endif %}
+      </div>
+
+      {% if drive_connected %}
+      <div class="mb-3 row g-2 align-items-end">
+        <div class="col-md-8">
+          <label class="form-label small">ID del fichero en Drive</label>
+          <input type="text" class="form-control form-control-sm" id="drive-file-id" placeholder="1AbCdEfGhIjK..." value="{{ drive_file_id }}">
+          <div class="form-text">Encuéntralo en la URL de la hoja: …/spreadsheets/d/<strong>[ID]</strong>/edit</div>
+        </div>
+        <div class="col-md-4">
+          <button class="btn btn-sm btn-outline-success" onclick="driveLoadSheets()"><i class="bi bi-list-ul"></i> Ver hojas</button>
+        </div>
+      </div>
+      <div id="drive-sheets-list" class="d-none mb-3">
+        <span class="text-muted small">Hojas disponibles: </span>
+        <span id="drive-sheets-badges"></span>
+      </div>
+
+      {# Tabs para los 3 tipos de datos de Drive #}
+      <ul class="nav nav-tabs mb-3" id="driveTabs">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#dt-prof">Profesores</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dt-mat">Materias</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dt-grp">Grupos</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dt-sub">Sustituciones</button></li>
+      </ul>
+      <div class="tab-content">
+
+        {# ── Tab: profesores ── #}
+        <div class="tab-pane fade show active" id="dt-prof">
+          <p class="text-muted small">Selecciona la hoja con el listado de profesores del curso (nombre en formato <code>Apellidos, Nombre</code> y abreviatura). El Drive es la fuente canónica: se <strong>crearán</strong> los profesores que no existan todavía y se actualizarán las abreviaturas de los ya existentes. Los nuevos quedan sin email — asígnaselo después en el Panel B.</p>
+          <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
+            <select class="form-select form-select-sm w-auto" id="dp-sheet"><option value="">— Seleccionar hoja —</option></select>
+            <label class="form-label small mb-0 text-nowrap">Ignorar filas:</label>
+            <input type="number" min="0" value="0" class="form-control form-control-sm" id="dp-skip" style="width:70px" title="Filas a saltar antes del título de columnas">
+            <button class="btn btn-sm btn-outline-primary" onclick="driveLoadCols('prof')"><i class="bi bi-table"></i> Cargar columnas</button>
+          </div>
+          <div id="dp-mapping" class="d-none row g-2 mb-2">
+            <div class="col-md-4">
+              <label class="form-label small">Abreviatura</label>
+              <select class="form-select form-select-sm" id="dp-col-abrev"></select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Nombre completo</label>
+              <select class="form-select form-select-sm" id="dp-col-nombre"></select>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <button class="btn btn-sm btn-outline-primary" onclick="drivePreview('prof')"><i class="bi bi-eye"></i> Previsualizar</button>
+            </div>
+          </div>
+          <div id="dp-preview" class="d-none mb-2">
+            <div class="d-flex gap-2 mb-1">
+              <button class="btn btn-sm btn-outline-secondary" onclick="driveSelectAll('prof',true)">Todo</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="driveSelectAll('prof',false)">Ninguno</button>
+            </div>
+            <div class="table-responsive" style="max-height:250px;overflow-y:auto;">
+              <table class="table table-sm table-hover mb-0">
+                <thead class="table-light sticky-top"><tr><th></th><th>Abrev.</th><th>Nombre</th><th>Encontrado en BD</th></tr></thead>
+                <tbody id="dp-tbody"></tbody>
+              </table>
+            </div>
+            <button class="btn btn-primary btn-sm mt-2" onclick="driveLoad('prof')"><i class="bi bi-save"></i> Cargar / actualizar profesores</button>
+          </div>
+          <div id="dp-result" class="d-none"></div>
+        </div>
+
+        {# ── Tab: materias ── #}
+        <div class="tab-pane fade" id="dt-mat">
+          <p class="text-muted small">Selecciona la hoja con la lista de materias (abreviatura y nombre completo).</p>
+          <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
+            <select class="form-select form-select-sm w-auto" id="dm-sheet"><option value="">— Seleccionar hoja —</option></select>
+            <label class="form-label small mb-0 text-nowrap">Ignorar filas:</label>
+            <input type="number" min="0" value="0" class="form-control form-control-sm" id="dm-skip" style="width:70px" title="Filas a saltar antes del título de columnas">
+            <button class="btn btn-sm btn-outline-primary" onclick="driveLoadCols('mat')"><i class="bi bi-table"></i> Cargar columnas</button>
+          </div>
+          <div id="dm-mapping" class="d-none row g-2 mb-2">
+            <div class="col-md-4">
+              <label class="form-label small">Abreviatura</label>
+              <select class="form-select form-select-sm" id="dm-col-abrev"></select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Nombre completo</label>
+              <select class="form-select form-select-sm" id="dm-col-nombre"></select>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <button class="btn btn-sm btn-outline-primary" onclick="drivePreview('mat')"><i class="bi bi-eye"></i> Previsualizar</button>
+            </div>
+          </div>
+          <div id="dm-preview" class="d-none mb-2">
+            <div class="d-flex gap-2 mb-1">
+              <button class="btn btn-sm btn-outline-secondary" onclick="driveSelectAll('mat',true)">Todo</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="driveSelectAll('mat',false)">Ninguno</button>
+            </div>
+            <div class="table-responsive" style="max-height:250px;overflow-y:auto;">
+              <table class="table table-sm table-hover mb-0">
+                <thead class="table-light sticky-top"><tr><th></th><th>Abrev.</th><th>Nombre</th></tr></thead>
+                <tbody id="dm-tbody"></tbody>
+              </table>
+            </div>
+            <button class="btn btn-primary btn-sm mt-2" onclick="driveLoad('mat')"><i class="bi bi-save"></i> Cargar materias</button>
+          </div>
+          <div id="dm-result" class="d-none"></div>
+        </div>
+
+        {# ── Tab: grupos ── #}
+        <div class="tab-pane fade" id="dt-grp">
+          <p class="text-muted small">Selecciona la hoja con la lista de grupos (abreviatura y nombre completo).</p>
+          <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
+            <select class="form-select form-select-sm w-auto" id="dg-sheet"><option value="">— Seleccionar hoja —</option></select>
+            <label class="form-label small mb-0 text-nowrap">Ignorar filas:</label>
+            <input type="number" min="0" value="0" class="form-control form-control-sm" id="dg-skip" style="width:70px" title="Filas a saltar antes del título de columnas">
+            <button class="btn btn-sm btn-outline-primary" onclick="driveLoadCols('grp')"><i class="bi bi-table"></i> Cargar columnas</button>
+          </div>
+          <div id="dg-mapping" class="d-none row g-2 mb-2">
+            <div class="col-md-4">
+              <label class="form-label small">Abreviatura</label>
+              <select class="form-select form-select-sm" id="dg-col-abrev"></select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Nombre completo</label>
+              <select class="form-select form-select-sm" id="dg-col-nombre"></select>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <button class="btn btn-sm btn-outline-primary" onclick="drivePreview('grp')"><i class="bi bi-eye"></i> Previsualizar</button>
+            </div>
+          </div>
+          <div id="dg-preview" class="d-none mb-2">
+            <div class="d-flex gap-2 mb-1">
+              <button class="btn btn-sm btn-outline-secondary" onclick="driveSelectAll('grp',true)">Todo</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="driveSelectAll('grp',false)">Ninguno</button>
+            </div>
+            <div class="table-responsive" style="max-height:250px;overflow-y:auto;">
+              <table class="table table-sm table-hover mb-0">
+                <thead class="table-light sticky-top"><tr><th></th><th>Abrev.</th><th>Nombre</th></tr></thead>
+                <tbody id="dg-tbody"></tbody>
+              </table>
+            </div>
+            <button class="btn btn-primary btn-sm mt-2" onclick="driveLoad('grp')"><i class="bi bi-save"></i> Cargar grupos</button>
+          </div>
+          <div id="dg-result" class="d-none"></div>
+        </div>
+
+        {# ── Tab: sustituciones ── #}
+        <div class="tab-pane fade" id="dt-sub">
+          <div id="ds-prereq-banner" class="alert alert-warning small mb-3 {% if prereqs and prereqs.drive_teachers_count %}d-none{% endif %}">
+            <i class="bi bi-exclamation-triangle"></i> Aún no hay profesores cargados para el curso activo. Carga primero <strong>Profesores</strong> (pestaña anterior) — si titular o sustituto no existen todavía, la sustitución no se podrá crear.
+          </div>
+          <p class="text-muted small">Selecciona la hoja con las sustituciones. Cada fila debe tener el <strong>titular</strong> (quien está de baja) y el <strong>sustituto</strong>, ambos en formato <code>Apellidos, Nombre</code>.</p>
+          <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
+            <select class="form-select form-select-sm w-auto" id="ds-sheet"><option value="">— Seleccionar hoja —</option></select>
+            <label class="form-label small mb-0 text-nowrap">Ignorar filas:</label>
+            <input type="number" min="0" value="0" class="form-control form-control-sm" id="ds-skip" style="width:70px">
+            <button class="btn btn-sm btn-outline-primary" onclick="driveLoadCols('sub')"><i class="bi bi-table"></i> Cargar columnas</button>
+          </div>
+          <div id="ds-mapping" class="d-none row g-2 mb-2">
+            <div class="col-md-4">
+              <label class="form-label small">Titular (de baja)</label>
+              <select class="form-select form-select-sm" id="ds-col-titular"></select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Sustituto</label>
+              <select class="form-select form-select-sm" id="ds-col-sustituto"></select>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <button class="btn btn-sm btn-outline-primary" onclick="drivePreview('sub')"><i class="bi bi-eye"></i> Previsualizar</button>
+            </div>
+          </div>
+          <div id="ds-preview" class="d-none mb-2">
+            <div class="d-flex gap-2 mb-1">
+              <button class="btn btn-sm btn-outline-secondary" onclick="driveSelectAll('sub',true)">Todo</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="driveSelectAll('sub',false)">Ninguno</button>
+            </div>
+            <div class="table-responsive" style="max-height:250px;overflow-y:auto;">
+              <table class="table table-sm table-hover mb-0">
+                <thead class="table-light sticky-top"><tr><th></th><th>Titular (de baja)</th><th>Sustituto</th></tr></thead>
+                <tbody id="ds-tbody"></tbody>
+              </table>
+            </div>
+            <div class="alert alert-info small mt-2 mb-1 py-2">
+              <i class="bi bi-info-circle"></i> El titular quedará <strong>inactivo</strong>. El sustituto se marcará como que <strong>sustituye a</strong> él. Si el titular ya tiene horario creado, se copiará automáticamente al sustituto.
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="driveLoad('sub')"><i class="bi bi-save"></i> Cargar sustituciones</button>
+          </div>
+          <div id="ds-result" class="d-none"></div>
+        </div>
+
+      </div>
+      {% else %}
+      <div class="alert alert-secondary">Conecta Google Drive para poder cargar datos desde hojas de cálculo.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   PANEL B — Emails desde CSV (Google Workspace)
+═══════════════════════════════════════════════════════════════════════════════ #}
+<div class="card panel-card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#panelA">
+    <span><i class="bi bi-envelope-at"></i> <strong>B — Emails desde CSV (Google Workspace)</strong></span>
+    <i class="bi bi-chevron-down"></i>
+  </div>
+  <div id="panelA" class="collapse show">
+    <div class="card-body">
+      <p class="text-muted small">Una vez cargados los profesores del curso desde el <strong>Panel A (Drive)</strong>, exporta los usuarios desde <em>Admin Console → Directorio → Usuarios → Descargar usuarios</em> y asígnales su email. <strong>No se crean usuarios nuevos aquí</strong> — solo se emparejan por nombre con los profesores ya existentes.</p>
+
+      <div id="ua-prereq-banner" class="alert alert-warning small mb-3 {% if prereqs and prereqs.drive_teachers_count %}d-none{% endif %}">
+        <i class="bi bi-exclamation-triangle"></i> Aún no hay profesores cargados para el curso activo. Carga primero el <strong>Panel A — Datos desde Google Drive → Profesores</strong>.
+      </div>
+
+      <div class="mb-2 d-flex gap-2 align-items-center">
+        <label class="form-label small mb-0 text-nowrap">Ignorar filas:</label>
+        <input type="number" min="0" value="0" class="form-control form-control-sm" id="ua-skip" style="width:70px" title="Filas a saltar desde el inicio">
+        <button class="btn btn-sm btn-outline-secondary" id="btn-ua-reload" onclick="uaReloadCols()" disabled>
+          <i class="bi bi-arrow-clockwise"></i> Recargar
+        </button>
+      </div>
+
+      <div id="ua-upload" class="border rounded p-4 text-center mb-3" style="border-style:dashed!important;cursor:pointer;" onclick="document.getElementById('ua-file').click()">
+        <div class="upload-placeholder">
+          <i class="bi bi-file-earmark-arrow-up fs-2 text-muted"></i>
+          <p class="mb-0 text-muted">Arrastra el CSV aquí o haz clic para seleccionar</p>
+        </div>
+        <input type="file" id="ua-file" accept=".csv" class="d-none">
+      </div>
+
+      <div id="ua-mapping" class="d-none mb-3">
+        <h6>Mapear columnas</h6>
+        <div id="ua-sample-row" class="d-none mb-2 p-2 bg-light rounded small text-muted font-monospace"></div>
+        <div class="row g-2" id="ua-map-fields">
+          <div class="col-md-4">
+            <label class="form-label small">Nombre</label>
+            <select class="form-select form-select-sm" id="ua-col-nombre"></select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Apellidos</label>
+            <select class="form-select form-select-sm" id="ua-col-apellidos"></select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Email</label>
+            <select class="form-select form-select-sm" id="ua-col-email"></select>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-outline-primary mt-2" onclick="uaPreview()"><i class="bi bi-eye"></i> Previsualizar coincidencias</button>
+      </div>
+
+      <div id="ua-preview" class="d-none mb-3">
+        <div class="d-flex gap-2 mb-2">
+          <button class="btn btn-sm btn-outline-secondary" onclick="uaSelectAll(true)">Seleccionar todo</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="uaSelectAll(false)">Ninguno</button>
+          <span class="ms-auto text-muted small" id="ua-count"></span>
+        </div>
+        <div class="table-responsive" style="max-height:300px;overflow-y:auto;">
+          <table class="table table-sm table-hover mb-0" id="ua-table">
+            <thead class="table-light sticky-top"><tr>
+              <th><input type="checkbox" checked onchange="uaSelectAll(this.checked)"></th>
+              <th>Nombre GW</th><th>Apellidos GW</th><th>Email</th><th>Profesor en BD</th><th>Estado</th>
+            </tr></thead>
+            <tbody id="ua-tbody"></tbody>
+          </table>
+        </div>
+        <button class="btn btn-primary mt-2" onclick="uaConfirm()"><i class="bi bi-envelope-check"></i> Confirmar asignación de emails</button>
+      </div>
+
+      <div id="ua-result" class="d-none"></div>
+    </div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   PANEL C — CSV de horarios (staging)
+═══════════════════════════════════════════════════════════════════════════════ #}
+<div class="card panel-card panel-horarios mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#panelC">
+    <span><i class="bi bi-table"></i> <strong>C — Horarios desde CSV</strong>
+      {% if raw_count %}<span class="badge bg-warning text-dark ms-2">{{ raw_count }} filas en staging</span>{% endif %}
+    </span>
+    <i class="bi bi-chevron-down"></i>
+  </div>
+  <div id="panelC" class="collapse show">
+    <div class="card-body">
+      <p class="text-muted small">CSV exportado desde el programa de horarios (Sauce, Pincel…). Formato: separador <code>;</code> con comillas dobles. Al cargar se reemplazarán las filas de staging anteriores del curso activo.</p>
+
+      <div class="mb-2 d-flex gap-3 align-items-center flex-wrap">
+        <label class="form-label small mb-0">Separador:</label>
+        <div class="btn-group btn-group-sm">
+          <input type="radio" class="btn-check" name="hcsep" id="sep-auto" value="auto" checked>
+          <label class="btn btn-outline-secondary" for="sep-auto">Auto</label>
+          <input type="radio" class="btn-check" name="hcsep" id="sep-semi" value=";">
+          <label class="btn btn-outline-secondary" for="sep-semi">;</label>
+          <input type="radio" class="btn-check" name="hcsep" id="sep-comma" value=",">
+          <label class="btn btn-outline-secondary" for="sep-comma">,</label>
+          <input type="radio" class="btn-check" name="hcsep" id="sep-tab" value="tab">
+          <label class="btn btn-outline-secondary" for="sep-tab">Tab</label>
+        </div>
+        <label class="form-label small mb-0 text-nowrap">Ignorar filas:</label>
+        <input type="number" min="0" value="0" class="form-control form-control-sm" id="hc-skip" style="width:70px" title="Filas a saltar desde el inicio">
+        <button class="btn btn-sm btn-outline-secondary" id="btn-hc-reload" onclick="hcReloadCols()" disabled>
+          <i class="bi bi-arrow-clockwise"></i> Recargar
+        </button>
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" id="hc-ignore-quotes">
+          <label class="form-check-label small" for="hc-ignore-quotes">Ignorar comillas dobles</label>
+        </div>
+      </div>
+
+      <div id="hc-upload" class="border rounded p-4 text-center mb-3" style="border-style:dashed!important;cursor:pointer;" onclick="document.getElementById('hc-file').click()">
+        <div class="upload-placeholder">
+          <i class="bi bi-file-earmark-arrow-up fs-2 text-muted"></i>
+          <p class="mb-0 text-muted">Arrastra el CSV de horarios aquí o haz clic para seleccionar</p>
+        </div>
+        <input type="file" id="hc-file" accept=".csv" class="d-none">
+      </div>
+
+      <div id="hc-mapping" class="d-none mb-3">
+        <h6>Mapear columnas <small class="text-muted">(la columna Orden se ignora)</small></h6>
+        <div id="hc-sample-row" class="d-none mb-2 p-2 bg-light rounded small text-muted font-monospace"></div>
+        <div class="row g-2" id="hc-map-fields">
+          {% for fid, flabel in [('grupo','Grupo'),('abrev_prof','Abrev. Profesor'),('abrev_asig','Abrev. Materia'),('aula','Aula'),('dia','Día (1-5)'),('tramo','Tramo (1-7)')] %}
+          <div class="col-md-4 col-lg-2">
+            <label class="form-label small">{{ flabel }}</label>
+            <select class="form-select form-select-sm" id="hc-col-{{ fid }}" data-fid="{{ fid }}"></select>
+          </div>
+          {% endfor %}
+        </div>
+        <button class="btn btn-sm btn-outline-primary mt-2" onclick="hcPreview()"><i class="bi bi-eye"></i> Previsualizar</button>
+      </div>
+
+      <div id="hc-preview" class="d-none mb-3">
+        <div class="d-flex gap-2 mb-2">
+          <button class="btn btn-sm btn-outline-secondary" onclick="hcSelectAll(true)">Seleccionar todo</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="hcSelectAll(false)">Ninguno</button>
+          <span class="ms-auto text-muted small" id="hc-count"></span>
+        </div>
+        <div class="table-responsive" style="max-height:300px;overflow-y:auto;">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light sticky-top"><tr>
+              <th><input type="checkbox" checked onchange="hcSelectAll(this.checked)"></th>
+              <th>Profesor</th><th>Grupo</th><th>Materia</th><th>Aula</th><th>Día</th><th>Tramo</th>
+            </tr></thead>
+            <tbody id="hc-tbody"></tbody>
+          </table>
+        </div>
+        <button class="btn btn-warning mt-2" onclick="hcLoad()"><i class="bi bi-inbox-fill"></i> Cargar en staging</button>
+      </div>
+
+      <div id="hc-result" class="d-none"></div>
+    </div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   PANEL D — Crear horarios
+═══════════════════════════════════════════════════════════════════════════════ #}
+<div class="card panel-card panel-crear mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#panelD">
+    <span><i class="bi bi-calendar-check"></i> <strong>D — Crear horarios</strong></span>
+    <i class="bi bi-chevron-down"></i>
+  </div>
+  <div id="panelD" class="collapse show">
+    <div class="card-body">
+
+      <div id="prereq-box">
+        {% set p = prereqs %}
+        {% if p %}
+          {% if p.raw_rows == 0 %}
+          <div class="alert alert-secondary"><i class="bi bi-inbox"></i> Aún no hay filas de horarios en staging (Panel C).</div>
+          {% else %}
+          <p class="mb-2 small text-muted">Filas en staging: <strong>{{ p.raw_rows }}</strong> — Curso: <strong>{{ current_year.label if current_year else '—' }}</strong></p>
+          <ul class="list-unstyled mb-3">
+            <li class="{{ 'prereq-ok' if not p.missing_teachers else 'prereq-fail' }}">
+              <i class="bi bi-{{ 'check-circle-fill' if not p.missing_teachers else 'x-circle-fill' }}"></i>
+              Profesores con abreviatura
+              {% if p.missing_teachers %}<br><small class="text-muted ms-4">Faltan: {{ p.missing_teachers | join(', ') }} — carga desde Panel A → Profesores</small>{% endif %}
+            </li>
+            <li class="{{ 'prereq-ok' if not p.missing_subjects else 'prereq-fail' }}">
+              <i class="bi bi-{{ 'check-circle-fill' if not p.missing_subjects else 'x-circle-fill' }}"></i>
+              Materias con abreviatura
+              {% if p.missing_subjects %}<br><small class="text-muted ms-4">Faltan: {{ p.missing_subjects | join(', ') }} — carga desde Panel A → Materias</small>{% endif %}
+            </li>
+            <li class="{{ 'prereq-ok' if not p.missing_groups else 'prereq-fail' }}">
+              <i class="bi bi-{{ 'check-circle-fill' if not p.missing_groups else 'x-circle-fill' }}"></i>
+              Grupos con abreviatura
+              {% if p.missing_groups %}<br><small class="text-muted ms-4">Faltan: {{ p.missing_groups | join(', ') }} — carga desde Panel A → Grupos</small>{% endif %}
+            </li>
+            <li class="{{ 'prereq-ok' if p.substitutions_count else 'text-muted' }}">
+              <i class="bi bi-{{ 'check-circle-fill' if p.substitutions_count else 'dash-circle' }}"></i>
+              Sustituciones: {% if p.substitutions_count %}<strong>{{ p.substitutions_count }}</strong> configuradas{% else %}ninguna — carga desde Panel A → Sustituciones si las hay{% endif %}
+            </li>
+          </ul>
+          {% endif %}
+        {% endif %}
+        <button class="btn btn-sm btn-outline-secondary mb-3" onclick="refreshPrereqs()"><i class="bi bi-arrow-clockwise"></i> Actualizar estado</button>
+      </div>
+
+      <div id="sched-preview-area" class="d-none">
+        <div id="sched-diff-new" class="mb-3">
+          <h6><span class="badge bg-success me-1">Nuevas</span> <span id="cnt-new">0</span> entradas a crear</h6>
+          <div class="table-responsive" style="max-height:250px;overflow-y:auto;">
+            <table class="table table-sm mb-0">
+              <thead class="table-light sticky-top"><tr>
+                <th><input type="checkbox" checked id="chk-all-new" onchange="selectAllDiff('new',this.checked)"></th>
+                <th>Profesor</th><th>Grupo</th><th>Materia</th><th>Aula</th><th>Día</th><th>Tramo</th>
+              </tr></thead>
+              <tbody id="diff-new-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="sched-diff-changed" class="mb-3 d-none">
+          <h6><span class="badge bg-warning text-dark me-1">Cambios</span> <span id="cnt-changed">0</span> entradas con modificaciones — marca las que quieres aplicar</h6>
+          <div class="table-responsive" style="max-height:250px;overflow-y:auto;">
+            <table class="table table-sm mb-0">
+              <thead class="table-light sticky-top"><tr>
+                <th><input type="checkbox" id="chk-all-changed" onchange="selectAllDiff('changed',this.checked)"></th>
+                <th>Profesor</th><th>Día/Tramo</th><th>Campo</th><th>Antes</th><th>Después</th>
+              </tr></thead>
+              <tbody id="diff-changed-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <p class="text-muted small" id="sched-unchanged"></p>
+        <div id="sched-unresolved" class="d-none alert alert-warning small"></div>
+        <button class="btn btn-purple btn-sm" style="background:#6f42c1;color:#fff;" onclick="createSchedules()">
+          <i class="bi bi-calendar-check"></i> Crear / actualizar horarios seleccionados
+        </button>
+      </div>
+
+      <button class="btn btn-outline-primary" id="btn-preview-sched" onclick="previewSchedules()" {% if not prereqs or not prereqs.ok %}disabled title="Completa los requisitos anteriores"{% endif %}>
+        <i class="bi bi-search"></i> Previsualizar cambios
+      </button>
+
+      <div id="sched-result" class="d-none mt-3"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Estado global ─────────────────────────────────────────────────────────────
+let uaRows = [], uaColumns = [], uaRawText = '';
+let hcRows = [], hcColumns = [], hcRawText = '';
+const driveState = {
+  prof: { sheet: null, rows: [], cols: [] },
+  mat:  { sheet: null, rows: [], cols: [] },
+  grp:  { sheet: null, rows: [], cols: [] },
+  sub:  { sheet: null, rows: [], cols: [] },
+};
+let driveSheets = [];
+let diffData = { new: [], changed: [] };
+
+// ── Utilidades CSV ─────────────────────────────────────────────────────────────
+
+// Detecta separador contando fuera de zonas entrecomilladas
+function autoDetectSep(line) {
+  const stripped = line.replace(/"[^"]*"/g, '');
+  const sc = (stripped.match(/;/g)||[]).length;
+  const cc = (stripped.match(/,/g)||[]).length;
+  const tc = (stripped.match(/\t/g)||[]).length;
+  if (tc > 0 && tc >= sc && tc >= cc) return '\t';
+  if (sc > 0 || cc === 0) return ';';
+  return ',';
+}
+
+// Para Panel C: respeta el radio de separador del usuario
+function getHcSep(line) {
+  const sel = document.querySelector('input[name="hcsep"]:checked').value;
+  if (sel !== 'auto') return sel === 'tab' ? '\t' : sel;
+  return autoDetectSep(line);
+}
+
+// Parser RFC 4180 + fallback para línea-envuelta ("campo1;""campo2"";campo3")
+function parseCSVLine(line, sep, ignoreQuotes) {
+  if (ignoreQuotes) {
+    return line.replace(/"/g, '').split(sep).map(f => f.trim());
+  }
+  // RFC 4180
+  const result = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQ) {
+      if (c === '"') {
+        if (i + 1 < line.length && line[i + 1] === '"') { cur += '"'; i++; }
+        else { inQ = false; }
+      } else { cur += c; }
+    } else {
+      if (c === '"') { inQ = true; }
+      else if (c === sep) { result.push(cur.trim()); cur = ''; }
+      else { cur += c; }
+    }
+  }
+  result.push(cur.trim());
+
+  // Fallback: si RFC 4180 produce 1 campo y la línea está envuelta en "...",
+  // es el formato de Sauce/Pincel: "val1;""val2"";val3"
+  if (result.length === 1 && line.startsWith('"') && line.endsWith('"') && line.length > 2) {
+    const inner = line.slice(1, -1).replace(/""/g, '"');
+    const fields = inner.split(sep).map(f => f.replace(/^"|"$/g, '').trim());
+    if (fields.length > 1) return fields;
+  }
+  return result;
+}
+
+function parseCSV(text, sep, ignoreQuotes, detectHeader = true) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return { cols: [], rows: [] };
+  const first = parseCSVLine(lines[0], sep, ignoreQuotes);
+  // detectHeader: ningún campo es un entero puro y al menos uno empieza por letra
+  const isHeader = detectHeader &&
+                   first.length > 1 &&
+                   first.every(f => !/^\d+$/.test(f.trim())) &&
+                   first.some(f => /^[a-zA-ZÀ-ÿ]/.test(f.trim()));
+  let cols, dataLines;
+  if (isHeader) {
+    cols = first;
+    dataLines = lines.slice(1);
+  } else {
+    cols = first.map((_, i) => `Col${i + 1}`);
+    dataLines = lines;
+  }
+  const rows = dataLines.map(l => {
+    const vals = parseCSVLine(l, sep, ignoreQuotes);
+    const obj = {};
+    cols.forEach((c, i) => obj[c] = vals[i] ?? '');
+    return obj;
+  });
+  return { cols, rows };
+}
+
+function fillSelect(sel, cols, placeholder='— Ignorar —') {
+  sel.innerHTML = `<option value="">${placeholder}</option>`;
+  cols.forEach(c => {
+    const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o);
+  });
+}
+
+function normalize(s) {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function autoMatch(cols, keywords) {
+  const kl = keywords.map(normalize);
+  return cols.find(c => kl.some(k => normalize(c).includes(k))) || '';
+}
+
+function showFileLoaded(zoneId, filename, rows, cols) {
+  const zone = document.getElementById(zoneId);
+  // Mantener el input oculto para permitir cambiar el fichero
+  const inputId = zoneId.replace('-upload', '-file');
+  zone.querySelector('.upload-placeholder').classList.add('d-none');
+  let info = zone.querySelector('.upload-info');
+  if (!info) {
+    info = document.createElement('div');
+    info.className = 'upload-info';
+    zone.appendChild(info);
+  }
+  info.innerHTML = `
+    <i class="bi bi-file-earmark-check fs-2 text-success"></i>
+    <p class="mb-0 fw-semibold text-success">${filename}</p>
+    <p class="mb-0 small text-muted">${rows} filas · ${cols} columnas detectadas</p>
+    <p class="mb-0 small text-muted mt-1"><i class="bi bi-arrow-repeat"></i> Haz clic o arrastra otro fichero para reemplazar</p>`;
+}
+
+function showResult(elId, data, type='success') {
+  const el = document.getElementById(elId);
+  el.className = `alert alert-${type} small mt-2`;
+  el.innerHTML = data;
+  el.classList.remove('d-none');
+}
+
+// ── Panel B: Emails desde CSV Workspace ────────────────────────────────────────
+function uaReloadCols() {
+  if (!uaRawText) return;
+  const skip = parseInt(document.getElementById('ua-skip').value) || 0;
+  const text = uaRawText.split(/\r?\n/).slice(skip).join('\n');
+  const sep = autoDetectSep(text.split('\n')[0]);
+  const parsed = parseCSV(text, sep, false); // detectHeader=true por defecto
+  uaRows = parsed.rows; uaColumns = parsed.cols;
+  // Fila de ejemplo
+  const sampleDiv = document.getElementById('ua-sample-row');
+  if (uaRows.length) {
+    const s = uaRows[0];
+    sampleDiv.innerHTML = '<strong>Ejemplo (primera fila de datos):</strong> ' +
+      uaColumns.map(c => `<span class="me-3"><em>${c}</em>: <strong>${s[c]||''}</strong></span>`).join('');
+    sampleDiv.classList.remove('d-none');
+  } else {
+    sampleDiv.classList.add('d-none');
+  }
+  ['nombre','apellidos','email'].forEach(fid => {
+    fillSelect(document.getElementById(`ua-col-${fid}`), uaColumns);
+  });
+  document.getElementById('ua-col-nombre').value    = autoMatch(uaColumns, ['first','nombre','name']);
+  document.getElementById('ua-col-apellidos').value = autoMatch(uaColumns, ['last','apellid','surname']);
+  document.getElementById('ua-col-email').value     = autoMatch(uaColumns, ['email','correo','mail']);
+  document.getElementById('ua-mapping').classList.remove('d-none');
+  document.getElementById('ua-preview').classList.add('d-none');
+  document.getElementById('ua-result').classList.add('d-none');
+}
+
+document.getElementById('ua-file').addEventListener('change', function() {
+  const file = this.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    uaRawText = e.target.result;
+    document.getElementById('ua-skip').value = 0;
+    document.getElementById('btn-ua-reload').disabled = false;
+    const zone = document.getElementById('ua-upload');
+    const old = zone.querySelector('.upload-info');
+    if (old) old.remove();
+    zone.querySelector('.upload-placeholder').classList.remove('d-none');
+    const allLines = uaRawText.split(/\r?\n/).filter(l => l.trim());
+    showFileLoaded('ua-upload', file.name, allLines.length, '…');
+    uaReloadCols();
+  };
+  reader.readAsText(file);
+});
+
+function uaPreview() {
+  const nC = document.getElementById('ua-col-nombre').value;
+  const aC = document.getElementById('ua-col-apellidos').value;
+  const eC = document.getElementById('ua-col-email').value;
+  if (!eC) { alert('Selecciona al menos la columna de Email.'); return; }
+  fetch('{{ url_for("admin.data_load_users_preview") }}', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ rows: uaRows, nombre_col: nC, apellidos_col: aC, email_col: eC })
+  })
+  .then(r => r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    const tbody = document.getElementById('ua-tbody');
+    tbody.innerHTML = '';
+    d.matches.forEach(m => {
+      const tr = document.createElement('tr');
+      const warn = m.already_has_email
+        ? `<br><small class="text-warning"><i class="bi bi-exclamation-triangle"></i> ya tiene ${m.current_email}</small>`
+        : '';
+      tr.innerHTML = `<td><input type="checkbox" class="ua-chk" data-teacher-id="${m.teacher_id}" data-email="${m.email_gw}" checked></td>
+        <td>${m.nombre_gw}</td><td>${m.apellidos_gw}</td><td><code>${m.email_gw}</code></td>
+        <td><strong>${m.teacher_name}</strong>${warn}</td>
+        <td><span class="badge bg-success">Encontrado</span></td>`;
+      tbody.appendChild(tr);
+    });
+    d.unmatched.forEach(u => {
+      const tr = document.createElement('tr');
+      tr.className = 'text-muted';
+      tr.innerHTML = `<td><input type="checkbox" disabled></td>
+        <td>${u.nombre_gw}</td><td>${u.apellidos_gw}</td><td><code>${u.email_gw}</code></td>
+        <td>—</td>
+        <td><span class="badge bg-secondary">${u.motivo}</span></td>`;
+      tbody.appendChild(tr);
+    });
+    document.getElementById('ua-count').textContent =
+      `${d.matches.length} coincidencias · ${d.unmatched.length} sin coincidencia`;
+    document.getElementById('ua-preview').classList.remove('d-none');
+  });
+}
+
+function uaSelectAll(v) {
+  document.querySelectorAll('.ua-chk:not([disabled])').forEach(c => c.checked = v);
+}
+
+function uaConfirm() {
+  const checked = [...document.querySelectorAll('.ua-chk:checked:not([disabled])')];
+  if (!checked.length) { alert('No hay coincidencias seleccionadas.'); return; }
+  const assignments = checked.map(c => ({ teacher_id: parseInt(c.dataset.teacherId), email: c.dataset.email }));
+  fetch('{{ url_for("admin.data_load_users") }}', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ assignments })
+  })
+  .then(r => r.json()).then(d => {
+    if (d.error) { showResult('ua-result', `<i class="bi bi-x-circle"></i> ${d.error}`, 'danger'); return; }
+    let msg = `<i class="bi bi-check-circle"></i> Emails asignados: <strong>${d.updated}</strong> — Sin cambios: ${d.skipped}`;
+    if (d.errors && d.errors.length) {
+      msg += `<br><strong>Conflictos:</strong><ul class="mb-0">`;
+      d.errors.forEach(e => { msg += `<li>${e}</li>`; });
+      msg += '</ul>';
+    }
+    if (d.archived && d.archived.length) {
+      msg += `<br><strong>Emails archivados de cursos anteriores:</strong><ul class="mb-0">`;
+      d.archived.forEach(a => { msg += `<li>${a.teacher} (${a.year}): ${a.email} → liberado para el curso vigente</li>`; });
+      msg += '</ul>';
+    }
+    showResult('ua-result', msg, d.updated ? 'success' : 'info');
+    refreshPrereqs();
+  });
+}
+
+// ── Panel A: Drive ────────────────────────────────────────────────────────────
+function driveLoadSheets() {
+  const fid = document.getElementById('drive-file-id').value.trim();
+  if (!fid) { alert('Introduce el ID del fichero.'); return; }
+  fetch(`{{ url_for("admin.drive_sheets") }}?file_id=${encodeURIComponent(fid)}`)
+  .then(r => r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    driveSheets = d.sheets || [];
+    const badges = document.getElementById('drive-sheets-badges');
+    badges.innerHTML = driveSheets.map(s => `<span class="col-badge">${s.title}</span>`).join('');
+    // Llenar los selects de hojas en los 4 tabs
+    ['dp-sheet','dm-sheet','dg-sheet','ds-sheet'].forEach(sid => {
+      const sel = document.getElementById(sid);
+      sel.innerHTML = '<option value="">— Seleccionar hoja —</option>';
+      driveSheets.forEach(s => {
+        const o = document.createElement('option'); o.value = s.title; o.textContent = s.title; sel.appendChild(o);
+      });
+    });
+    document.getElementById('drive-sheets-list').classList.remove('d-none');
+  });
+}
+
+function driveLoadCols(type) {
+  const pfx = {prof:'dp', mat:'dm', grp:'dg', sub:'ds'}[type];
+  const sheet = document.getElementById(`${pfx}-sheet`).value;
+  const fid = document.getElementById('drive-file-id').value.trim();
+  const skip = parseInt(document.getElementById(`${pfx}-skip`).value) || 0;
+  if (!sheet || !fid) { alert('Selecciona una hoja primero.'); return; }
+  fetch(`{{ url_for("admin.drive_fetch") }}?file_id=${encodeURIComponent(fid)}&sheet=${encodeURIComponent(sheet)}`)
+  .then(r => r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    let csvText = d.csv || '';
+    if (skip > 0) {
+      const allLines = csvText.split(/\r?\n/);
+      csvText = allLines.slice(skip).join('\n');
+    }
+    const firstLine = csvText.split('\n')[0] || '';
+    const sc = (firstLine.match(/;/g)||[]).length;
+    const cc = (firstLine.match(/,/g)||[]).length;
+    const tc = (firstLine.match(/\t/g)||[]).length;
+    const sep = tc > cc && tc > sc ? '\t' : (sc >= cc && sc > 0 ? ';' : ',');
+    const parsed = parseCSV(csvText, sep, false);
+    driveState[type].rows = parsed.rows;
+    driveState[type].cols = parsed.cols;
+    driveState[type].sheet = sheet;
+    if (type === 'sub') {
+      ['titular','sustituto'].forEach(fid2 => {
+        fillSelect(document.getElementById(`${pfx}-col-${fid2}`), parsed.cols);
+      });
+      document.getElementById(`${pfx}-col-titular`).value   = autoMatch(parsed.cols, ['titular','baja','ausente','original']);
+      document.getElementById(`${pfx}-col-sustituto`).value = autoMatch(parsed.cols, ['sustituto','sustit','sust','interino']);
+    } else {
+      ['abrev','nombre'].forEach(fid2 => {
+        fillSelect(document.getElementById(`${pfx}-col-${fid2}`), parsed.cols);
+      });
+      document.getElementById(`${pfx}-col-abrev`).value  = autoMatch(parsed.cols, ['abrev','abr','cod','code','short']);
+      document.getElementById(`${pfx}-col-nombre`).value = autoMatch(parsed.cols, ['nombre','name','completo','full','apellido']);
+    }
+    document.getElementById(`${pfx}-mapping`).classList.remove('d-none');
+    document.getElementById(`${pfx}-preview`).classList.add('d-none');
+  });
+}
+
+function drivePreview(type) {
+  if (type === 'sub') {
+    const titularC   = document.getElementById('ds-col-titular').value;
+    const sustitutoC = document.getElementById('ds-col-sustituto').value;
+    if (!titularC || !sustitutoC) { alert('Selecciona las columnas de titular y sustituto.'); return; }
+    const tbody = document.getElementById('ds-tbody');
+    tbody.innerHTML = '';
+    driveState.sub.rows.forEach((row, i) => {
+      const titular   = (row[titularC]||'').trim();
+      const sustituto = (row[sustitutoC]||'').trim();
+      if (!titular && !sustituto) return;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td><input type="checkbox" class="dr-chk-sub" value="${i}" checked></td>
+        <td>${titular}</td><td>${sustituto}</td>`;
+      tbody.appendChild(tr);
+    });
+    document.getElementById('ds-preview').classList.remove('d-none');
+    return;
+  }
+  const pfx = {prof:'dp', mat:'dm', grp:'dg'}[type];
+  const abrevC = document.getElementById(`${pfx}-col-abrev`).value;
+  const nombreC = document.getElementById(`${pfx}-col-nombre`).value;
+  const tbody = document.getElementById(`${pfx}-tbody`);
+  tbody.innerHTML = '';
+  driveState[type].rows.forEach((row, i) => {
+    const abrev = (row[abrevC]||'').trim();
+    const nombre = (row[nombreC]||'').trim();
+    if (!abrev && !nombre) return;
+    const tr = document.createElement('tr');
+    let abrevCell = abrev;
+    if (type === 'grp' && abrev.includes(',')) {
+      const parts = abrev.split(',').map(a => a.trim()).filter(Boolean);
+      abrevCell = parts.map(a => `<span class="badge bg-warning text-dark me-1">${a}</span>`).join('') +
+                  `<small class="text-muted d-block" style="font-size:.7rem">→ ${parts.length} grupos</small>`;
+    }
+    const badge = type === 'prof' ? `<span class="badge bg-secondary">—</span>` : '';
+    tr.innerHTML = `<td><input type="checkbox" class="dr-chk-${type}" value="${i}" checked></td>
+      <td>${abrevCell}</td><td>${nombre}</td>${type==='prof'?`<td>${badge}</td>`:''}`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById(`${pfx}-preview`).classList.remove('d-none');
+}
+
+function driveSelectAll(type, v) {
+  document.querySelectorAll(`.dr-chk-${type}`).forEach(c => c.checked = v);
+}
+
+function driveLoad(type) {
+  if (type === 'sub') {
+    const titularC   = document.getElementById('ds-col-titular').value;
+    const sustitutoC = document.getElementById('ds-col-sustituto').value;
+    const selected = [...document.querySelectorAll('.dr-chk-sub:checked')].map(c => parseInt(c.value));
+    fetch('{{ url_for("admin.data_load_substitutes") }}', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ rows: driveState.sub.rows, titular_col: titularC, sustituto_col: sustitutoC, selected })
+    })
+    .then(r => r.json()).then(d => {
+      if (d.error) { showResult('ds-result', `<i class="bi bi-x-circle"></i> ${d.error}`, 'danger'); return; }
+      let msg = `Sustituciones creadas: <strong>${d.created}</strong>`;
+      if (d.schedule_copied) msg += ` — Horarios copiados: <strong>${d.schedule_copied}</strong>`;
+      if (d.not_found && d.not_found.length) {
+        msg += `<br><strong>No encontrados:</strong><ul class="mb-0">`;
+        d.not_found.forEach(n => { msg += `<li>${n}</li>`; });
+        msg += '</ul>';
+      }
+      const type2 = d.not_found && d.not_found.length ? 'warning' : 'success';
+      showResult('ds-result', `<i class="bi bi-check-circle"></i> ` + msg, type2);
+    });
+    return;
+  }
+  const pfx = {prof:'dp', mat:'dm', grp:'dg'}[type];
+  const abrevC = document.getElementById(`${pfx}-col-abrev`).value;
+  const nombreC = document.getElementById(`${pfx}-col-nombre`).value;
+  const selected = [...document.querySelectorAll(`.dr-chk-${type}:checked`)].map(c => parseInt(c.value));
+  const urls = {
+    prof: '{{ url_for("admin.data_load_prof_abbrevs") }}',
+    mat:  '{{ url_for("admin.data_load_subjects") }}',
+    grp:  '{{ url_for("admin.data_load_groups") }}',
+  };
+  fetch(urls[type], {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ rows: driveState[type].rows, abrev_col: abrevC, nombre_col: nombreC, selected })
+  })
+  .then(r => r.json()).then(d => {
+    if (d.error) { showResult(`${pfx}-result`, `<i class="bi bi-x-circle"></i> ${d.error}`, 'danger'); return; }
+    let msg = '';
+    if (type === 'prof') {
+      msg = `Creados: <strong>${d.created}</strong> — Actualizados: <strong>${d.updated}</strong> — Sin cambios: ${d.skipped}`;
+      if (d.not_found) msg += ` — No procesados: ${d.not_found}`;
+      if (d.warnings && d.warnings.length) {
+        msg += '<ul class="mb-0 mt-1">';
+        d.warnings.forEach(w => {
+          if (w.no_encontrado) msg += `<li class="text-warning">${w.abrev_nueva} — no se pudo crear/encontrar (${w.nombre || 'sin nombre'})</li>`;
+          else msg += `<li>${w.nombre}: abrev cambia de <em>${w.abrev_bd}</em> a <em>${w.abrev_nueva}</em></li>`;
+        });
+        msg += '</ul>';
+      }
+    } else {
+      msg = `Creados: <strong>${d.created}</strong> — Actualizados: ${d.updated} — Sin cambios: ${d.skipped}`;
+    }
+    showResult(`${pfx}-result`, `<i class="bi bi-check-circle"></i> ` + msg, 'success');
+    refreshPrereqs();
+  });
+}
+
+// ── Panel C: Horarios CSV ─────────────────────────────────────────────────────
+function hcReloadCols() {
+  if (!hcRawText) return;
+  const skip = parseInt(document.getElementById('hc-skip').value) || 0;
+  const allLines = hcRawText.split(/\r?\n/);
+  const text = allLines.slice(skip).join('\n');
+  const sep = getHcSep(text.split('\n')[0]);
+  const ignoreQuotes = document.getElementById('hc-ignore-quotes').checked;
+  // Panel C nunca autodetecta cabecera: el usuario controla con "Ignorar filas"
+  const parsed = parseCSV(text, sep, ignoreQuotes, false);
+  hcRows = parsed.rows; hcColumns = parsed.cols;
+  // Fila de ejemplo
+  const sampleDiv = document.getElementById('hc-sample-row');
+  if (hcRows.length) {
+    const s = hcRows[0];
+    sampleDiv.innerHTML = '<strong>Ejemplo (primera fila de datos):</strong> ' +
+      hcColumns.map(c => `<span class="me-3"><em>${c}</em>: <strong>${s[c]||''}</strong></span>`).join('');
+    sampleDiv.classList.remove('d-none');
+  } else {
+    sampleDiv.classList.add('d-none');
+  }
+  const hints = {
+    grupo:      ['grupo','group','clase','class'],
+    abrev_prof: ['prof','teacher','doce','docente','abrevprof'],
+    abrev_asig: ['asig','mat','subj','materia','asignatura'],
+    aula:       ['aula','room','sala'],
+    dia:        ['dia','day','semana','weekday'],
+    tramo:      ['tramo','hora','slot','period','franja','htrasc','htramo'],
+  };
+  ['grupo','abrev_prof','abrev_asig','aula','dia','tramo'].forEach(fid => {
+    const sel = document.getElementById(`hc-col-${fid}`);
+    fillSelect(sel, hcColumns);
+    sel.value = autoMatch(hcColumns, hints[fid]);
+  });
+  document.getElementById('hc-mapping').classList.remove('d-none');
+  document.getElementById('hc-preview').classList.add('d-none');
+  document.getElementById('hc-result').classList.add('d-none');
+}
+
+document.getElementById('hc-file').addEventListener('change', function() {
+  const file = this.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    hcRawText = e.target.result;
+    document.getElementById('hc-skip').value = 0;
+    document.getElementById('btn-hc-reload').disabled = false;
+    // Limpiar info anterior antes de mostrar la nueva
+    const zone = document.getElementById('hc-upload');
+    const old = zone.querySelector('.upload-info');
+    if (old) old.remove();
+    zone.querySelector('.upload-placeholder').classList.remove('d-none');
+    const allLines = hcRawText.split(/\r?\n/).filter(l => l.trim());
+    showFileLoaded('hc-upload', file.name, allLines.length, '…');
+    hcReloadCols();
+  };
+  reader.readAsText(file);
+});
+
+function hcPreview() {
+  const cmap = {};
+  ['grupo','abrev_prof','abrev_asig','aula','dia','tramo'].forEach(fid => {
+    const v = document.getElementById(`hc-col-${fid}`).value;
+    if (v) cmap[fid] = v;
+  });
+  if (!cmap.abrev_prof || !cmap.dia || !cmap.tramo) {
+    const missing = [];
+    if (!cmap.abrev_prof) missing.push('Abrev. Profesor');
+    if (!cmap.dia) missing.push('Día');
+    if (!cmap.tramo) missing.push('Tramo');
+    alert('Selecciona la columna para: ' + missing.join(', ') + '\n\nSi el fichero no cargó bien, prueba cambiando el separador o marcando "Ignorar comillas dobles".');
+    return;
+  }
+  if (!hcRows.length) { alert('No hay filas cargadas. Sube primero el fichero CSV.'); return; }
+  const DAYS = ['','Lun','Mar','Mié','Jue','Vie'];
+  const tbody = document.getElementById('hc-tbody');
+  tbody.innerHTML = '';
+  hcRows.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><input type="checkbox" class="hc-chk" value="${i}" checked></td>
+      <td>${row[cmap.abrev_prof]||''}</td>
+      <td>${cmap.grupo ? row[cmap.grupo]||'' : ''}</td>
+      <td>${cmap.abrev_asig ? row[cmap.abrev_asig]||'' : ''}</td>
+      <td>${cmap.aula ? row[cmap.aula]||'' : ''}</td>
+      <td>${DAYS[parseInt(row[cmap.dia])||0]||row[cmap.dia]||''}</td>
+      <td>${row[cmap.tramo]||''}</td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('hc-count').textContent = `${hcRows.length} filas`;
+  document.getElementById('hc-preview').classList.remove('d-none');
+}
+
+function hcSelectAll(v) {
+  document.querySelectorAll('.hc-chk').forEach(c => c.checked = v);
+}
+
+function hcLoad() {
+  const cmap = {};
+  ['grupo','abrev_prof','abrev_asig','aula','dia','tramo'].forEach(fid => {
+    const v = document.getElementById(`hc-col-${fid}`).value;
+    if (v) cmap[v] = fid;   // col_name → field_type
+  });
+  const selected = [...document.querySelectorAll('.hc-chk:checked')].map(c => parseInt(c.value));
+  fetch('{{ url_for("admin.data_load_raw_schedule") }}', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ rows: hcRows, mapping: cmap, selected, replace: true })
+  })
+  .then(r => r.json()).then(d => {
+    if (d.error) { showResult('hc-result', `<i class="bi bi-x-circle"></i> ${d.error}`, 'danger'); return; }
+    showResult('hc-result', `<i class="bi bi-check-circle"></i> Cargadas en staging: <strong>${d.loaded}</strong> filas — Omitidas: ${d.skipped}`, 'success');
+    refreshPrereqs();
+  });
+}
+
+// ── Panel D: Crear horarios ───────────────────────────────────────────────────
+function refreshPrereqs() {
+  fetch('{{ url_for("admin.data_load_prereqs") }}')
+  .then(r => r.json()).then(p => {
+    const box = document.getElementById('prereq-box');
+    const DAYS = ['Lunes','Martes','Miércoles','Jueves','Viernes'];
+    let html = `<p class="mb-2 small text-muted">Filas en staging: <strong>${p.raw_rows}</strong></p><ul class="list-unstyled mb-3">`;
+    function row(ok, label, missing, hint) {
+      const icon = ok ? 'check-circle-fill text-success' : 'x-circle-fill text-danger';
+      let r = `<li><i class="bi bi-${icon}"></i> ${label}`;
+      if (!ok && missing.length) r += `<br><small class="text-muted ms-4">Faltan: ${missing.slice(0,10).join(', ')}${missing.length>10?' …':''} — ${hint}</small>`;
+      return r + '</li>';
+    }
+    html += row(!p.missing_teachers.length, 'Profesores con abreviatura', p.missing_teachers, 'Panel A → Profesores');
+    html += row(!p.missing_subjects.length, 'Materias con abreviatura', p.missing_subjects, 'Panel A → Materias');
+    html += row(!p.missing_groups.length, 'Grupos con abreviatura', p.missing_groups, 'Panel A → Grupos');
+    // Sustituciones: informativo, no bloqueante
+    const nSubs = p.substitutions_count || 0;
+    const subIcon = nSubs > 0 ? 'check-circle-fill text-success' : 'dash-circle text-muted';
+    const subLabel = nSubs > 0
+      ? `Sustituciones: <strong>${nSubs}</strong> configuradas`
+      : 'Sustituciones: ninguna — carga desde Panel A → Sustituciones si las hay';
+    html += `<li><i class="bi bi-${subIcon}"></i> ${subLabel}</li>`;
+    html += '</ul><button class="btn btn-sm btn-outline-secondary mb-3" onclick="refreshPrereqs()"><i class="bi bi-arrow-clockwise"></i> Actualizar estado</button>';
+    box.innerHTML = html;
+    document.getElementById('btn-preview-sched').disabled = !p.ok || p.raw_rows === 0;
+
+    // Panel B (emails GW) y Sustituciones: banner de prerequisito según profesores cargados desde Drive
+    const banner = document.getElementById('ua-prereq-banner');
+    if (banner) banner.classList.toggle('d-none', (p.drive_teachers_count || 0) > 0);
+    const subBanner = document.getElementById('ds-prereq-banner');
+    if (subBanner) subBanner.classList.toggle('d-none', (p.drive_teachers_count || 0) > 0);
+  });
+}
+
+function previewSchedules() {
+  document.getElementById('btn-preview-sched').disabled = true;
+  fetch('{{ url_for("admin.data_load_preview") }}')
+  .then(r => r.json()).then(d => {
+    document.getElementById('btn-preview-sched').disabled = false;
+    if (d.error) { showResult('sched-result','<i class="bi bi-x-circle"></i> '+d.error,'danger'); return; }
+    diffData = d;
+
+    // Nuevas entradas
+    document.getElementById('cnt-new').textContent = d.new.length;
+    const ntbody = document.getElementById('diff-new-tbody');
+    ntbody.innerHTML = '';
+    d.new.forEach(e => {
+      const tr = document.createElement('tr');
+      tr.className = 'diff-new';
+      tr.innerHTML = `<td><input type="checkbox" class="dn-chk" value="${e.raw_id}" checked></td>
+        <td>${e.teacher}</td><td>${e.group}</td><td>${e.subject}</td>
+        <td>${e.room}</td><td>${e.day}</td><td>${e.slot}</td>`;
+      ntbody.appendChild(tr);
+    });
+
+    // Cambios
+    document.getElementById('cnt-changed').textContent = d.changed.length;
+    const ctbody = document.getElementById('diff-changed-tbody');
+    ctbody.innerHTML = '';
+    d.changed.forEach(e => {
+      Object.entries(e.changes).forEach(([campo, vals]) => {
+        const tr = document.createElement('tr');
+        tr.className = 'diff-changed';
+        tr.innerHTML = `<td><input type="checkbox" class="dc-chk" data-existing="${e.existing_id}" data-raw="${e.raw_id}" checked></td>
+          <td>${e.teacher}</td><td>${e.day} T${e.slot}</td>
+          <td>${campo}</td>
+          <td class="text-decoration-line-through text-muted">${vals.old}</td>
+          <td><strong>${vals.new}</strong></td>`;
+        ctbody.appendChild(tr);
+      });
+    });
+
+    document.getElementById('sched-unchanged').textContent = d.unchanged ? `${d.unchanged} entradas sin cambios (se omiten).` : '';
+
+    if (d.unresolved && d.unresolved.length) {
+      const el = document.getElementById('sched-unresolved');
+      el.innerHTML = '<strong>No resueltos (no se crearán):</strong> ' + d.unresolved.join(', ');
+      el.classList.remove('d-none');
+    }
+
+    document.getElementById('sched-diff-changed').classList.toggle('d-none', d.changed.length === 0);
+    document.getElementById('sched-preview-area').classList.remove('d-none');
+  });
+}
+
+function selectAllDiff(type, v) {
+  document.querySelectorAll(`.d${type[0]}-chk`).forEach(c => c.checked = v);
+}
+
+function createSchedules() {
+  const newIds = [...document.querySelectorAll('.dn-chk:checked')].map(c => parseInt(c.value));
+  // Para cambios: agrupar por raw_id (un raw_id puede tener varios campos cambiados, basta con incluirlo si algún campo está marcado)
+  const changedMap = {};
+  document.querySelectorAll('.dc-chk:checked').forEach(c => {
+    const eid = parseInt(c.dataset.existing);
+    const rid = parseInt(c.dataset.raw);
+    changedMap[eid] = rid;
+  });
+  const changed = Object.entries(changedMap).map(([eid, rid]) => ({ existing_id: parseInt(eid), raw_id: rid }));
+
+  fetch('{{ url_for("admin.data_load_create_schedules") }}', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ new_ids: newIds, changed })
+  })
+  .then(r => r.json()).then(d => {
+    if (d.error) { showResult('sched-result','<i class="bi bi-x-circle"></i> '+d.error,'danger'); return; }
+    let msg = `<i class="bi bi-check-circle-fill"></i> Creadas: <strong>${d.created}</strong> — Actualizadas: <strong>${d.updated}</strong>`;
+    if (d.rooms_created) msg += ` — Aulas nuevas: ${d.rooms_created}`;
+    if (d.errors && d.errors.length) msg += `<br>Errores: ${d.errors.join(', ')}`;
+    showResult('sched-result', msg, 'success');
+    document.getElementById('sched-preview-area').classList.add('d-none');
+    refreshPrereqs();
+  });
+}
+
+// Drag & drop en las zonas de upload
+['ua','hc'].forEach(pfx => {
+  const zone = document.getElementById(`${pfx}-upload`);
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('bg-light'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('bg-light'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('bg-light');
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      const input = document.getElementById(`${pfx}-file`);
+      const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files;
+      input.dispatchEvent(new Event('change'));
+    }
+  });
+});
+</script>
+
+{% endblock %}

@@ -14,12 +14,14 @@ class AvailabilityPeriod(db.Model):
     __tablename__ = "availability_periods"
 
     id = db.Column(db.Integer, primary_key=True)
+    school_year_id = db.Column(db.Integer, db.ForeignKey("school_years.id"), nullable=True, index=True)
     teacher_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    school_year = db.relationship("SchoolYear", foreign_keys=[school_year_id])
     teacher = db.relationship("User", foreign_keys=[teacher_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])
     groups = db.relationship("AvailabilityPeriodGroup", backref="period", lazy="dynamic")

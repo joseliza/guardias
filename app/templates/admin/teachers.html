@@ -2,22 +2,73 @@
 {% block title %}Profesores{% endblock %}
 {% block main_class %}container-fluid pb-4{% endblock %}
 {% block content %}
-<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
-<div class="d-flex justify-content-between align-items-center mb-1">
-  <h4 class="mb-0"><i class="bi bi-people"></i> Profesores</h4>
-  <div class="d-flex gap-2">
-    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
-    <a href="{{ url_for('admin.teacher_create') }}" class="btn btn-primary"><i class="bi bi-person-plus"></i> Nuevo</a>
+
+{# Formulario oculto para borrado masivo #}
+<form id="form-bulk-delete" method="POST" action="{{ url_for('admin.teacher_bulk_delete') }}"></form>
+
+<!-- Modal confirmación borrado masivo -->
+<div class="modal fade" id="modalBulkDelete" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill"></i> Eliminar profesores</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Vas a eliminar permanentemente <strong id="modal-sel-count"></strong>. Esta acción <strong>no se puede deshacer</strong>.</p>
+        <p class="mb-1">Se borrará también para cada uno:</p>
+        <ul class="mb-3">
+          <li>Su horario completo</li>
+          <li>Todas sus ausencias registradas</li>
+          <li>Todas las guardias generadas por sus ausencias</li>
+          <li>Todos sus registros de guardia cubierta y los puntos asociados</li>
+        </ul>
+        <div class="alert alert-warning py-2 small mb-3">
+          <i class="bi bi-lightbulb"></i> Si solo quieres que no puedan acceder, considera <strong>desactivar</strong> la cuenta en lugar de eliminarla.
+        </div>
+        <p class="mb-1 fw-semibold">Revisa que son los profesores correctos:</p>
+        <div style="max-height:220px;overflow-y:auto;border:1px solid #dee2e6;border-radius:.375rem;">
+          <ul class="list-group list-group-flush mb-0" id="modal-sel-list"></ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btn-confirm-bulk-delete">
+          <i class="bi bi-trash"></i> Sí, eliminar definitivamente
+        </button>
+      </div>
+    </div>
   </div>
 </div>
-<input type="search" class="table-filter form-control mb-0" data-target="#tabla-profesores" placeholder="Buscar profesor...">
+
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <h4 class="mb-0"><i class="bi bi-people"></i> Profesores
+      {% if current_year %}<small class="text-muted fw-normal ms-2 fs-6">{{ current_year.name }}</small>{% endif %}
+    </h4>
+    <div class="d-flex gap-2 align-items-center">
+      <span id="sel-count" class="text-muted small d-none">0 seleccionados</span>
+      <button id="btn-bulk-delete" type="button"
+              class="btn btn-danger btn-sm d-none"
+              onclick="confirmBulkDelete()">
+        <i class="bi bi-trash"></i> Borrar seleccionados
+      </button>
+      <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+      <a href="{{ url_for('admin.teacher_create') }}" class="btn btn-primary"><i class="bi bi-person-plus"></i> Nuevo</a>
+    </div>
+  </div>
+  <input type="search" class="table-filter form-control mb-0" data-target="#tabla-profesores" placeholder="Buscar profesor...">
 </div>
+
 <div class="card">
   <div class="card-body p-0">
     <table class="table table-hover mb-0" id="tabla-profesores">
       <thead class="table-light">
         <tr>
-          <th>Apellidos, Nombre</th><th>Email</th><th>Rol</th>{% if points_enabled %}<th>Puntos</th>{% endif %}<th>Activo</th>
+          <th style="width:2rem;">
+            <input type="checkbox" id="cb-all" class="form-check-input" title="Seleccionar todo">
+          </th>
+          <th>Apellidos, Nombre</th><th>Abrev.</th><th>Email</th><th>Rol</th>{% if points_enabled %}<th>Puntos</th>{% endif %}<th>Activo</th><th>Sustitución</th>
           <th></th>
           <th>
             <form method="POST" action="{{ url_for('admin.teacher_toggle_emails_all') }}">
@@ -35,11 +86,39 @@
       <tbody>
         {% for t in teachers %}
         <tr>
+          <td>
+            <input type="checkbox" class="form-check-input cb-teacher" data-id="{{ t.id }}"
+                   {% if t.id == current_user.id %}disabled title="No puedes eliminarte a ti mismo"{% endif %}>
+          </td>
           <td>{{ t.full_name }}</td>
+          <td><span class="badge bg-light text-dark border">{{ t.abbreviation or '—' }}</span></td>
           <td>{{ t.email }}</td>
           <td><span class="badge bg-secondary">{{ t.role }}</span></td>
           {% if points_enabled %}<td>{{ '—' if t.role == 'management' else t.points }}</td>{% endif %}
-          <td><span class="badge bg-{{ 'success' if t.active else 'danger' }}">{{ 'Sí' if t.active else 'No' }}</span></td>
+          <td><span class="badge bg-{{ 'success' if t.active else 'warning text-dark' }}">{{ 'Sí' if t.active else 'Baja' }}</span></td>
+          <td>
+            {% if t.substitutes_id and t.substitutes %}
+              {# Muestra cadena completa: A → B → C #}
+              {% set chain = t.substitution_chain %}
+              <span class="badge bg-info text-dark"
+                    title="Sustituye a: {% for c in chain %}{{ c.full_name }}{% if not loop.last %} → {% endif %}{% endfor %}">
+                <i class="bi bi-arrow-right-circle"></i>
+                {% for c in chain %}{{ c.full_name }}{% if not loop.last %} → {% endif %}{% endfor %}
+              </span>
+              {% if not t.show_substitute_public %}
+                <i class="bi bi-eye-slash text-muted ms-1" title="No visible en espacios públicos"></i>
+              {% endif %}
+            {% elif covered_by.get(t.id) %}
+              <div class="d-flex flex-column gap-1">
+                {% for sub in covered_by[t.id] %}
+                <span class="badge bg-secondary"
+                      title="Sustituido por {{ sub.full_name }}">
+                  <i class="bi bi-person-fill-slash"></i> Sustituido por {{ sub.full_name }}
+                </span>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </td>
           <td>
             <div class="d-flex gap-1">
               <a href="{{ url_for('admin.teacher_edit', tid=t.id) }}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="bi bi-pencil"></i></a>
@@ -67,4 +146,78 @@
     </table>
   </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const cbAll    = document.getElementById('cb-all');
+  const btnDel   = document.getElementById('btn-bulk-delete');
+  const selCount = document.getElementById('sel-count');
+  const form     = document.getElementById('form-bulk-delete');
+
+  function getChecked() {
+    return [...document.querySelectorAll('.cb-teacher:not([disabled]):checked')];
+  }
+
+  function updateUI() {
+    const checked = getChecked();
+    const n = checked.length;
+    if (n > 0) {
+      selCount.textContent = n + ' seleccionado' + (n === 1 ? '' : 's');
+      selCount.classList.remove('d-none');
+      btnDel.classList.remove('d-none');
+    } else {
+      selCount.classList.add('d-none');
+      btnDel.classList.add('d-none');
+    }
+    const all = document.querySelectorAll('.cb-teacher:not([disabled])');
+    cbAll.indeterminate = n > 0 && n < all.length;
+    cbAll.checked = n > 0 && n === all.length;
+  }
+
+  cbAll.addEventListener('change', function () {
+    document.querySelectorAll('.cb-teacher:not([disabled])').forEach(cb => cb.checked = this.checked);
+    updateUI();
+  });
+
+  document.querySelectorAll('.cb-teacher').forEach(cb => {
+    cb.addEventListener('change', updateUI);
+  });
+
+  const bulkModal = new bootstrap.Modal(document.getElementById('modalBulkDelete'));
+
+  window.confirmBulkDelete = function () {
+    const checked = getChecked();
+    if (!checked.length) return;
+    const n = checked.length;
+    document.getElementById('modal-sel-count').textContent =
+      n + ' profesor' + (n === 1 ? '' : 'es');
+    const list = document.getElementById('modal-sel-list');
+    list.innerHTML = '';
+    checked.forEach(cb => {
+      const row = cb.closest('tr');
+      const name = row ? row.querySelector('td:nth-child(2)')?.textContent.trim() : cb.dataset.id;
+      const li = document.createElement('li');
+      li.className = 'list-group-item py-1 small';
+      li.innerHTML = `<i class="bi bi-person text-danger me-1"></i>${name}`;
+      list.appendChild(li);
+    });
+    bulkModal.show();
+  };
+
+  document.getElementById('btn-confirm-bulk-delete').addEventListener('click', function () {
+    const checked = getChecked();
+    form.querySelectorAll('input[name="ids[]"]').forEach(el => el.remove());
+    checked.forEach(cb => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden';
+      inp.name = 'ids[]';
+      inp.value = cb.dataset.id;
+      form.appendChild(inp);
+    });
+    bulkModal.hide();
+    form.submit();
+  });
+})();
+</script>
 {% endblock %}

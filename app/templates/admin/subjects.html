@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Materias{% endblock %}
+{% block main_class %}container-fluid pb-4{% endblock %}
+{% block content %}
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+<div class="d-flex justify-content-between align-items-center mb-1">
+  <h4 class="mb-0"><i class="bi bi-book"></i> Materias
+    {% if current_year %}<small class="text-muted fw-normal ms-2 fs-6">{{ current_year.name }}</small>{% endif %}
+  </h4>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+    <button class="btn btn-primary btn-sm" id="btn-nueva-materia"><i class="bi bi-plus-lg"></i> Nueva materia</button>
+  </div>
+</div>
+<input type="search" class="table-filter form-control mb-0" data-target="#tabla-materias" placeholder="Buscar materia...">
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0" id="tabla-materias">
+      <thead class="table-light">
+        <tr>
+          <th>Nombre</th>
+          <th>Abreviatura</th>
+          <th style="width:90px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in subjects %}
+        <tr>
+          <td>{{ s.name }}</td>
+          <td><code class="text-secondary">{{ s.abbreviation or '—' }}</code></td>
+          <td class="d-flex gap-1">
+            <button class="btn btn-sm btn-outline-primary btn-edit-subject" title="Editar"
+                    data-id="{{ s.id }}"
+                    data-name="{{ s.name }}"
+                    data-abbrev="{{ s.abbreviation or '' }}">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <form method="POST" action="{{ url_for('admin.subject_delete', sid=s.id) }}"
+                  onsubmit="return confirm('¿Borrar la materia {{ s.name | replace("'", "\\'") }}?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger" title="Borrar"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="text-muted text-center py-3">Sin materias cargadas para este curso.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# Modal crear / editar #}
+<div class="modal fade" id="subjectModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0" id="subject-modal-title"></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="subject-form" method="POST">
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Nombre</label>
+            <input type="text" name="name" id="subject-name" class="form-control form-control-sm" required>
+          </div>
+          <div class="mb-1">
+            <label class="form-label small fw-semibold mb-1">Abreviatura</label>
+            <input type="text" name="abbreviation" id="subject-abbrev" class="form-control form-control-sm" maxlength="20" placeholder="MAT">
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-sm btn-primary" id="subject-submit-btn"></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const modal      = new bootstrap.Modal(document.getElementById('subjectModal'));
+const form       = document.getElementById('subject-form');
+const nameInput  = document.getElementById('subject-name');
+const abbrevInput= document.getElementById('subject-abbrev');
+const titleEl    = document.getElementById('subject-modal-title');
+const submitBtn  = document.getElementById('subject-submit-btn');
+const createUrl  = {{ url_for('admin.subject_create')|tojson }};
+const editUrlTpl = {{ url_for('admin.subject_edit', sid=0)|tojson }};
+
+document.getElementById('btn-nueva-materia').addEventListener('click', function() {
+  titleEl.innerHTML = '<i class="bi bi-plus-lg"></i> Nueva materia';
+  submitBtn.textContent = 'Crear';
+  nameInput.value = '';
+  abbrevInput.value = '';
+  form.action = createUrl;
+  modal.show();
+  setTimeout(() => nameInput.focus(), 300);
+});
+
+document.querySelectorAll('.btn-edit-subject').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    titleEl.innerHTML = '<i class="bi bi-pencil"></i> Editar materia';
+    submitBtn.textContent = 'Guardar';
+    nameInput.value  = btn.dataset.name;
+    abbrevInput.value= btn.dataset.abbrev;
+    form.action = editUrlTpl.replace('/0/editar', '/' + btn.dataset.id + '/editar');
+    modal.show();
+    setTimeout(() => nameInput.focus(), 300);
+  });
+});
+</script>
+{% endblock %}

@@ -25,8 +25,14 @@ class User(UserMixin, db.Model):
     track_points = db.Column(db.Boolean, default=False, nullable=False)
     # Si False, el usuario no recibe correos del sistema (resúmenes, notificaciones)
     receive_emails = db.Column(db.Boolean, default=True, nullable=False)
+    # Abreviatura usada en los ficheros de horarios (ej: "EncLo")
+    abbreviation = db.Column(db.String(20), nullable=True, index=True)
+    # Curso escolar al que pertenece este profesor
+    school_year_id = db.Column(db.Integer, db.ForeignKey("school_years.id"), nullable=True, index=True)
     # Profesor al que sustituye (se copia su horario y se pone inactivo al original)
     substitutes_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    # Si True, el dashboard y la pantalla de sala muestran "(Sustituye a X)" delante del nombre
+    show_substitute_public = db.Column(db.Boolean, default=True, nullable=False)
     # Integración Google Drive: refresh_token OAuth y último file_id utilizado
     google_drive_token = db.Column(db.Text, nullable=True)
     google_drive_file_id = db.Column(db.String(200), nullable=True)
@@ -52,9 +58,21 @@ class User(UserMixin, db.Model):
         return f"{self.surname}, {self.name}"
 
     @property
+    def substitution_chain(self):
+        """Lista de titulares en cadena: [B, C] si self→B→C."""
+        chain, current, visited = [], self.substitutes, {self.id}
+        while current and current.id not in visited:
+            chain.append(current)
+            visited.add(current.id)
+            current = current.substitutes
+        return chain
+
+    @property
     def display_name(self):
-        if self.substitutes_id and self.substitutes:
-            return f"{self.full_name} (sustituye a {self.substitutes.full_name})"
+        if self.substitutes_id and self.substitutes and self.show_substitute_public:
+            chain = self.substitution_chain
+            names = ' → '.join(t.full_name for t in chain)
+            return f"{self.full_name} (Sustituye a {names})"
         return self.full_name
 
     @property

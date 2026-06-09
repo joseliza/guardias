@@ -25,6 +25,62 @@ def _require_management():
     return True
 
 
+def _is_placeholder_email(email):
+    """True si el email es un marcador interno (sin asignar / archivado)."""
+    email = email or ""
+    return email.startswith("_") and email.endswith("@pendiente.local")
+
+
+def _transfer_email_to_active_year(teacher, exclude_ids=None):
+    """Si el profesor a eliminar tiene un email real y existe otra fila suya
+    (mismo nombre y apellidos) en otro curso con el email pendiente/archivado
+    (_..._@pendiente.local), le transfiere el email -y la contraseña si no
+    tiene una propia- antes del borrado, para no perderlo.
+
+    Si entre las filas candidatas hay una del curso marcado como vigente
+    (is_current), se prioriza esa; si no, la del curso más reciente.
+
+    Devuelve la fila destino si se ha transferido algo, o None.
+    """
+    from app.models.school_year import SchoolYear
+
+    if _is_placeholder_email(teacher.email) or not teacher.school_year_id:
+        return None
+
+    years = SchoolYear.query.all()
+    starts = {y.id: y.start_date for y in years}
+    current_year_id = next((y.id for y in years if y.is_current), None)
+    if teacher.school_year_id not in starts:
+        return None
+
+    exclude_ids = set(exclude_ids or [])
+    candidates = User.query.filter(
+        User.id != teacher.id,
+        User.role != "display",
+        User.surname.ilike(teacher.surname),
+        User.name.ilike(teacher.name),
+    )
+    if exclude_ids:
+        candidates = candidates.filter(User.id.notin_(exclude_ids))
+
+    pending = [u for u in candidates.all()
+               if u.school_year_id and _is_placeholder_email(u.email)]
+    if not pending:
+        return None
+
+    target = next((u for u in pending if u.school_year_id == current_year_id), None)
+    if target is None:
+        target = max(pending, key=lambda u: starts.get(u.school_year_id, starts[teacher.school_year_id]))
+
+    email = teacher.email
+    teacher.email = f"_deleted_{teacher.id}@pendiente.local"
+    if not target.password_hash:
+        target.password_hash = teacher.password_hash
+    target.email = email
+    target.receive_emails = True
+    return target
+
+
 # ── Profesores ───────────────────────────────────────────────────────────────
 
 @admin_bp.route("/profesores")
@@ -32,9 +88,19 @@ def _require_management():
 def teachers():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
-    all_teachers = User.query.order_by(User.surname).all()
-    all_emails_on = all(t.receive_emails for t in all_teachers if t.role != "display")
-    return render_template("admin/teachers.html", teachers=all_teachers, all_emails_on=all_emails_on)
+    from app.utils.school_year import get_current_school_year
+    current_year = get_current_school_year()
+    all_teachers = (User.query
+                    .filter(User.school_year_id == current_year.id, User.role != "display")
+                    .order_by(User.surname, User.name).all())
+    all_emails_on = all(t.receive_emails for t in all_teachers)
+    covered_by = {}
+    for t in all_teachers:
+        if t.substitutes_id:
+            covered_by.setdefault(t.substitutes_id, []).append(t)
+    return render_template("admin/teachers.html", teachers=all_teachers,
+                           all_emails_on=all_emails_on, covered_by=covered_by,
+                           current_year=current_year)
 
 
 @admin_bp.route("/profesores/nuevo", methods=["GET", "POST"])
@@ -45,13 +111,16 @@ def teacher_create():
     if request.method == "POST":
         import secrets
         role = request.form.get("role", "teacher")
+        from app.utils.school_year import get_current_school_year as _get_year
         user = User(
             email=request.form["email"].strip().lower(),
             name=request.form["name"].strip(),
             surname=request.form["surname"].strip(),
+            abbreviation=request.form.get("abbreviation", "").strip() or None,
             role=role,
             track_points=request.form.get("track_points") == "on" and role == "management",
             receive_emails=True,
+            school_year_id=_get_year().id,
         )
         password = request.form.get("password") or secrets.token_hex(24)
         user.set_password(password)
@@ -76,10 +145,12 @@ def teacher_edit(tid):
         teacher.name = request.form["name"].strip()
         teacher.surname = request.form["surname"].strip()
         teacher.email = request.form["email"].strip().lower()
+        teacher.abbreviation = request.form.get("abbreviation", "").strip() or None
         teacher.role = request.form.get("role", "teacher")
         teacher.active = request.form.get("active") == "on"
         teacher.track_points = request.form.get("track_points") == "on" and teacher.role == "management"
         teacher.receive_emails = request.form.get("receive_emails") == "on"
+        teacher.show_substitute_public = request.form.get("show_substitute_public") == "on"
         if request.form.get("password"):
             teacher.set_password(request.form["password"])
         # Gestión de sustitución
@@ -156,9 +227,73 @@ def teacher_delete(tid):
     if substitute_teacher:
         substitute_teacher.substitutes_id = None
         TeacherSchedule.query.filter_by(teacher_id=substitute_teacher.id).delete(synchronize_session=False)
+
+    transferred = _transfer_email_to_active_year(teacher)
+
     db.session.delete(teacher)
     db.session.commit()
-    flash(f"Profesor {name} eliminado permanentemente.", "success")
+    msg = f"Profesor {name} eliminado permanentemente."
+    if transferred:
+        from app.models.school_year import SchoolYear
+        year = SchoolYear.query.get(transferred.school_year_id)
+        msg += f" Su email se ha transferido a su perfil del curso {year.name if year else ''}."
+    flash(msg, "success")
+    return redirect(url_for("admin.teachers"))
+
+
+@admin_bp.route("/profesores/borrar-masivo", methods=["POST"])
+@login_required
+def teacher_bulk_delete():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.guard import GuardRecord, Guard
+    from app.models.absence import Absence
+    from app.models.schedule import TeacherSchedule
+
+    raw_ids = request.form.getlist("ids[]")
+    try:
+        ids = [int(i) for i in raw_ids if i.strip().isdigit()]
+    except ValueError:
+        ids = []
+
+    ids = [i for i in ids if i != current_user.id]
+    if not ids:
+        flash("No se seleccionó ningún profesor válido.", "warning")
+        return redirect(url_for("admin.teachers"))
+
+    deleted = 0
+    transferred_count = 0
+    for tid in ids:
+        teacher = User.query.get(tid)
+        if not teacher:
+            continue
+        GuardRecord.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
+        absence_ids = [a.id for a in Absence.query.filter_by(teacher_id=tid).all()]
+        if absence_ids:
+            Guard.query.filter(Guard.absence_id.in_(absence_ids)).delete(synchronize_session=False)
+        Absence.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
+        Absence.query.filter_by(reported_by_id=tid).update({"reported_by_id": None}, synchronize_session=False)
+        TeacherSchedule.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
+        if teacher.substitutes_id:
+            original = User.query.get(teacher.substitutes_id)
+            if original:
+                original.active = True
+        substitute = User.query.filter_by(substitutes_id=tid).first()
+        if substitute:
+            substitute.substitutes_id = None
+            TeacherSchedule.query.filter_by(teacher_id=substitute.id).delete(synchronize_session=False)
+
+        if _transfer_email_to_active_year(teacher, exclude_ids=ids):
+            transferred_count += 1
+
+        db.session.delete(teacher)
+        deleted += 1
+
+    db.session.commit()
+    msg = f"{deleted} profesor{'es' if deleted != 1 else ''} eliminado{'s' if deleted != 1 else ''} permanentemente."
+    if transferred_count:
+        msg += f" Se transfirió el email a su perfil del curso vigente en {transferred_count} caso{'s' if transferred_count != 1 else ''}."
+    flash(msg, "success")
     return redirect(url_for("admin.teachers"))
 
 
@@ -192,8 +327,10 @@ def teacher_toggle_emails(tid):
 def groups():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
-    all_groups = Group.query.order_by(Group.name).all()
-    return render_template("admin/groups.html", groups=all_groups)
+    from app.utils.school_year import get_current_school_year
+    year = get_current_school_year()
+    all_groups = Group.query.filter_by(school_year_id=year.id).order_by(Group.name).all()
+    return render_template("admin/groups.html", groups=all_groups, current_year=year)
 
 
 @admin_bp.route("/grupos/nuevo", methods=["GET", "POST"])
@@ -201,9 +338,13 @@ def groups():
 def group_create():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
+    from app.utils.school_year import get_current_school_year
+    year = get_current_school_year()
     if request.method == "POST":
         group = Group(
+            school_year_id=year.id,
             name=request.form["name"].strip(),
+            abbreviation=request.form.get("abbreviation", "").strip() or None,
             high_difficulty=request.form.get("high_difficulty") == "on",
             difficulty_multiplier=float(request.form.get("difficulty_multiplier", 1.0)),
         )
@@ -222,6 +363,7 @@ def group_edit(gid):
     group = Group.query.get_or_404(gid)
     if request.method == "POST":
         group.name = request.form["name"].strip()
+        group.abbreviation = request.form.get("abbreviation", "").strip() or None
         group.high_difficulty = request.form.get("high_difficulty") == "on"
         group.difficulty_multiplier = float(request.form.get("difficulty_multiplier", 1.0))
         group.active = request.form.get("active") == "on"
@@ -242,7 +384,9 @@ def group_clone(gid):
         return redirect(url_for("dashboard.index"))
     original = Group.query.get_or_404(gid)
     clone = Group(
+        school_year_id=original.school_year_id,
         name=f"{original.name} (copia)",
+        abbreviation=original.abbreviation,
         high_difficulty=original.high_difficulty,
         difficulty_multiplier=original.difficulty_multiplier,
         active=original.active,
@@ -266,6 +410,65 @@ def group_delete(gid):
     db.session.commit()
     flash(f"Grupo '{group.name}' eliminado.", "success")
     return redirect(url_for("admin.groups"))
+
+
+@admin_bp.route("/materias")
+@login_required
+def subjects():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.subject import Subject
+    from app.utils.school_year import get_current_school_year
+    year = get_current_school_year()
+    all_subjects = Subject.query.filter_by(school_year_id=year.id).order_by(Subject.name).all()
+    return render_template("admin/subjects.html", subjects=all_subjects, current_year=year)
+
+
+@admin_bp.route("/materias/nueva", methods=["POST"])
+@login_required
+def subject_create():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.subject import Subject
+    from app.utils.school_year import get_current_school_year
+    year = get_current_school_year()
+    name = request.form.get("name", "").strip()
+    abbreviation = request.form.get("abbreviation", "").strip() or None
+    if name:
+        db.session.add(Subject(school_year_id=year.id, name=name, abbreviation=abbreviation))
+        db.session.commit()
+        flash("Materia creada.", "success")
+    return redirect(url_for("admin.subjects"))
+
+
+@admin_bp.route("/materias/<int:sid>/editar", methods=["POST"])
+@login_required
+def subject_edit(sid):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.subject import Subject
+    subject = Subject.query.get_or_404(sid)
+    subject.name = request.form.get("name", "").strip() or subject.name
+    subject.abbreviation = request.form.get("abbreviation", "").strip() or None
+    db.session.commit()
+    flash("Materia actualizada.", "success")
+    return redirect(url_for("admin.subjects"))
+
+
+@admin_bp.route("/materias/<int:sid>/borrar", methods=["POST"])
+@login_required
+def subject_delete(sid):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.subject import Subject
+    subject = Subject.query.get_or_404(sid)
+    if subject.schedule_entries.count() > 0:
+        flash(f"No se puede borrar '{subject.name}': tiene horarios asignados.", "danger")
+        return redirect(url_for("admin.subjects"))
+    db.session.delete(subject)
+    db.session.commit()
+    flash(f"Materia '{subject.name}' eliminada.", "success")
+    return redirect(url_for("admin.subjects"))
 
 
 @admin_bp.route("/aulas")
@@ -382,7 +585,8 @@ def schedules():
 
     from app.models.group import Group as GroupModel
     from app.models.room import Room as RoomModel
-    groups = GroupModel.query.filter_by(active=True).order_by(GroupModel.name).all()
+    from app.utils.school_year import get_year_groups
+    groups = get_year_groups(year_id)
     rooms  = RoomModel.query.filter_by(active=True).order_by(RoomModel.name).all()
 
     from datetime import date as _date
@@ -590,110 +794,398 @@ def drive_fetch():
         return jsonify({"error": str(e)}), 500
 
 
-@admin_bp.route("/importar-horarios")
+@admin_bp.route("/carga-datos")
 @login_required
-def schedule_wizard():
+def data_load():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
+    from app.utils.school_year import get_current_school_year
+    from app.models.raw_schedule import RawScheduleRow
+    year = get_current_school_year()
+    raw_count = RawScheduleRow.query.filter_by(school_year_id=year.id).count() if year else 0
+    prereqs = _dl_prereqs(year.id) if year else None
     return render_template(
-        "admin/schedule_wizard.html",
+        "admin/carga_datos.html",
         drive_connected=bool(current_user.google_drive_token),
         drive_file_id=current_user.google_drive_file_id or "",
+        current_year=year,
+        raw_count=raw_count,
+        prereqs=prereqs,
     )
 
 
-@admin_bp.route("/importar-horarios/usuarios")
+@admin_bp.route("/carga-datos/usuarios", methods=["POST"])
 @login_required
-def schedule_users():
+def data_load_users():
+    """Asigna emails de Google Workspace a profesores ya creados desde Drive."""
     if not _require_management():
         return jsonify({"error": "No autorizado"}), 403
-    users = [
-        {"id": u.id, "full_name": u.full_name}
-        for u in User.query.filter(User.active == True).order_by(User.surname, User.name).all()
-        if u.role in ("teacher", "management", "extracurricular")
-    ]
-    return jsonify({"users": users})
-
-
-@admin_bp.route("/importar-horarios/resolver", methods=["POST"])
-@login_required
-def schedule_resolve():
-    """Recibe lista de nombres del Drive y devuelve el usuario del sistema más parecido."""
-    import unicodedata
-
-    def _norm(s):
-        s = unicodedata.normalize("NFD", (s or "").lower())
-        s = "".join(c for c in s if unicodedata.category(c) != "Mn")
-        return set(s.split())
-
-    if not _require_management():
-        return jsonify({"error": "No autorizado"}), 403
-
-    names = (request.get_json(force=True, silent=True) or {}).get("names", [])
-    teachers = [
-        u for u in User.query.filter(User.active == True).all()
-        if u.role in ("teacher", "management", "extracurricular")
-    ]
-    results = {}
-    for name in names:
-        target = _norm(name)
-        best, best_score = None, 0.0
-        for u in teachers:
-            words = _norm(u.full_name)
-            union = len(target | words)
-            score = len(target & words) / union if union else 0.0
-            if score > best_score:
-                best_score = score
-                best = u
-        if best and best_score >= 0.4:
-            results[name] = {"user_id": best.id, "user_name": best.full_name, "conf": round(best_score, 2)}
-        else:
-            results[name] = {"user_id": None, "user_name": None, "conf": 0.0}
-    return jsonify(results)
-
-
-@admin_bp.route("/importar-horarios/importar", methods=["POST"])
-@login_required
-def schedule_import():
-    if not _require_management():
-        return jsonify({"error": "No autorizado"}), 403
-
-    from app.models.subject import Subject
-    from app.models.room import Room
-    from app.utils.school_year import get_current_school_year
-
     payload = request.get_json(force=True, silent=True) or {}
-    rows_data = payload.get("rows", [])
-    cmap = payload.get("mapping", {})
-    day_offset = int(payload.get("day_offset", 1))
-    prof_by_abrev = payload.get("prof_by_abrev", {})
-    asig_dict = payload.get("asig_dict", {})
-    aula_dict = payload.get("aula_dict", {})
+    assignments = payload.get("assignments", [])   # [{teacher_id, email}]
 
-    if not rows_data:
-        return jsonify({"error": "No hay filas."}), 400
+    if not assignments:
+        return jsonify({"error": "Sin asignaciones."}), 400
 
-    # ── Crear profesores desde CSV de emails (opcional) ───────────────────────
-    teachers_created = 0
-    email_data = payload.get("email_data")
-    if email_data:
-        email_col = email_data.get("email_col", "")
-        nombre_col = email_data.get("nombre_col", "")
-        apellidos_col = email_data.get("apellidos_col", "")
-        for erow in email_data.get("rows", []):
-            email = (erow.get(email_col) or "").strip().lower()
-            if not email or "@" not in email:
+    from app.utils.school_year import get_current_school_year as _get_year
+    year_id = _get_year().id
+
+    from app.models.school_year import SchoolYear
+
+    updated = skipped = 0
+    errors = []
+    archived = []
+    for a in assignments:
+        tid   = a.get("teacher_id")
+        email = (a.get("email") or "").strip().lower()
+        if not tid or not email or "@" not in email:
+            skipped += 1
+            continue
+        user = User.query.filter_by(id=tid, school_year_id=year_id).first()
+        if not user:
+            skipped += 1
+            continue
+        conflict = User.query.filter(User.email == email, User.id != tid).first()
+        if conflict:
+            if conflict.school_year_id != year_id:
+                # El email pertenece a la fila de un curso anterior del mismo
+                # profesor: se archiva para liberarlo y asignarlo al curso vigente.
+                conflict_year = SchoolYear.query.get(conflict.school_year_id)
+                archived.append({
+                    "teacher": conflict.full_name,
+                    "email": conflict.email,
+                    "year": conflict_year.name if conflict_year else "—",
+                })
+                conflict.email = f"_archived_{conflict.id}@pendiente.local"
+            else:
+                errors.append(f"{email} ya en uso por {conflict.full_name}")
+                skipped += 1
                 continue
-            if User.query.filter_by(email=email).first():
+        user.email = email
+        user.receive_emails = True
+        updated += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"updated": updated, "skipped": skipped, "errors": errors, "archived": archived})
+
+
+@admin_bp.route("/carga-datos/usuarios/preview", methods=["POST"])
+@login_required
+def data_load_users_preview():
+    """Vista previa de coincidencias CSV Workspace → profesores creados desde Drive."""
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    payload       = request.get_json(force=True, silent=True) or {}
+    rows          = payload.get("rows", [])
+    nombre_col    = payload.get("nombre_col", "")
+    apellidos_col = payload.get("apellidos_col", "")
+    email_col     = payload.get("email_col", "")
+
+    from app.utils.school_year import get_current_school_year as _get_year
+    year_id = _get_year().id
+
+    matches   = []
+    unmatched = []
+
+    for i, row in enumerate(rows):
+        nombre    = (row.get(nombre_col)    or "").strip()
+        apellidos = (row.get(apellidos_col) or "").strip()
+        email     = (row.get(email_col)     or "").strip().lower()
+
+        if not email or "@" not in email:
+            unmatched.append({"row_idx": i, "nombre_gw": nombre,
+                              "apellidos_gw": apellidos, "email_gw": email or "(vacío)",
+                              "motivo": "Email inválido"})
+            continue
+
+        user = None
+        if apellidos and nombre:
+            user = User.query.filter(
+                User.surname.ilike(apellidos),
+                User.name.ilike(nombre),
+                User.school_year_id == year_id,
+            ).first()
+
+        if user:
+            already = bool(user.email and not user.email.startswith("_"))
+            matches.append({
+                "row_idx"         : i,
+                "teacher_id"      : user.id,
+                "teacher_name"    : user.full_name,
+                "email_gw"        : email,
+                "nombre_gw"       : nombre,
+                "apellidos_gw"    : apellidos,
+                "already_has_email": already,
+                "current_email"   : user.email if already else None,
+            })
+        else:
+            unmatched.append({
+                "row_idx"     : i,
+                "nombre_gw"   : nombre,
+                "apellidos_gw": apellidos,
+                "email_gw"    : email,
+                "motivo"      : "No encontrado en BD del curso activo",
+            })
+
+    return jsonify({"matches": matches, "unmatched": unmatched})
+
+
+@admin_bp.route("/carga-datos/abreviaturas-prof", methods=["POST"])
+@login_required
+def data_load_prof_abbrevs():
+    """Carga profesores desde Drive: crea los que falten y actualiza abreviaturas.
+
+    El Drive es la fuente canónica del curso activo. Si un profesor no existe
+    todavía se crea (sin email, pendiente de Panel B) en lugar de descartarlo.
+    """
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    payload = request.get_json(force=True, silent=True) or {}
+    rows = payload.get("rows", [])
+    abrev_col = payload.get("abrev_col", "")
+    nombre_col = payload.get("nombre_col", "")
+    selected_ids = payload.get("selected", None)
+
+    from app.utils.school_year import get_current_school_year as _get_year
+    year_id = _get_year().id
+
+    created = updated = skipped = not_found = 0
+    warnings = []
+    for i, row in enumerate(rows):
+        if selected_ids is not None and i not in selected_ids:
+            continue
+        abrev = (row.get(abrev_col) or "").strip()
+        nombre = (row.get(nombre_col) or "").strip()
+        if not abrev:
+            skipped += 1
+            continue
+        # Buscar en el curso activo por abreviatura o por nombre "Apellidos, Nombre"
+        user = User.query.filter_by(abbreviation=abrev, school_year_id=year_id).first()
+        if not user and nombre:
+            parts = nombre.split(",", 1)
+            if len(parts) == 2:
+                user = User.query.filter(
+                    User.surname.ilike(parts[0].strip()),
+                    User.name.ilike(parts[1].strip()),
+                    User.school_year_id == year_id,
+                ).first()
+        if user:
+            if user.abbreviation and user.abbreviation != abrev:
+                warnings.append({"nombre": user.full_name, "abrev_bd": user.abbreviation, "abrev_nueva": abrev})
+            user.abbreviation = abrev
+            updated += 1
+            continue
+        # No existe: crear si el nombre viene en formato "Apellidos, Nombre"
+        parts = nombre.split(",", 1) if nombre else []
+        if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+            surname_new, name_new = parts[0].strip(), parts[1].strip()
+            placeholder = f"_{abrev}_{year_id}@pendiente.local".lower()
+            if not User.query.filter_by(email=placeholder).first():
+                u = User(email=placeholder, name=name_new, surname=surname_new,
+                         abbreviation=abrev, role="teacher", active=True,
+                         school_year_id=year_id, receive_emails=False)
+                u.password_hash = ""
+                db.session.add(u)
+                created += 1
                 continue
-            nombre = (erow.get(nombre_col) or "").strip()
-            apellidos = (erow.get(apellidos_col) or "").strip()
-            u = User(email=email, name=nombre, surname=apellidos, role="teacher", receive_emails=True)
-            u.set_password("cambiar123")
-            db.session.add(u)
-            teachers_created += 1
-        if teachers_created:
-            db.session.flush()
+        not_found += 1
+        warnings.append({"nombre": nombre, "abrev_bd": None, "abrev_nueva": abrev, "no_encontrado": True})
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"created": created, "updated": updated, "skipped": skipped, "not_found": not_found, "warnings": warnings})
+
+
+@admin_bp.route("/carga-datos/materias", methods=["POST"])
+@login_required
+def data_load_subjects():
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    from app.models.subject import Subject
+    from app.utils.school_year import get_current_school_year
+    payload = request.get_json(force=True, silent=True) or {}
+    rows = payload.get("rows", [])
+    abrev_col = payload.get("abrev_col", "")
+    nombre_col = payload.get("nombre_col", "")
+    selected_ids = payload.get("selected", None)
+    year_id = get_current_school_year().id
+
+    created = updated = skipped = 0
+    for i, row in enumerate(rows):
+        if selected_ids is not None and i not in selected_ids:
+            continue
+        abrev = (row.get(abrev_col) or "").strip()
+        nombre = (row.get(nombre_col) or "").strip()
+        if not abrev and not nombre:
+            skipped += 1
+            continue
+        subj = Subject.query.filter_by(abbreviation=abrev, school_year_id=year_id).first() if abrev else None
+        if not subj and nombre:
+            subj = Subject.query.filter_by(name=nombre, school_year_id=year_id).first()
+        if subj:
+            changed = False
+            if abrev and subj.abbreviation != abrev:
+                subj.abbreviation = abrev
+                changed = True
+            if nombre and subj.name != nombre:
+                subj.name = nombre
+                changed = True
+            updated += changed
+            skipped += not changed
+        else:
+            db.session.add(Subject(school_year_id=year_id, name=nombre or abrev, abbreviation=abrev or None))
+            created += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"created": created, "updated": updated, "skipped": skipped})
+
+
+@admin_bp.route("/carga-datos/grupos", methods=["POST"])
+@login_required
+def data_load_groups():
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    from app.utils.school_year import get_current_school_year
+    payload = request.get_json(force=True, silent=True) or {}
+    rows = payload.get("rows", [])
+    abrev_col = payload.get("abrev_col", "")
+    nombre_col = payload.get("nombre_col", "")
+    selected_ids = payload.get("selected", None)
+    year_id = get_current_school_year().id
+
+    created = updated = skipped = 0
+    for i, row in enumerate(rows):
+        if selected_ids is not None and i not in selected_ids:
+            continue
+        abrev_raw = (row.get(abrev_col) or "").strip()
+        nombre = (row.get(nombre_col) or "").strip()
+        if not abrev_raw and not nombre:
+            skipped += 1
+            continue
+        # Una celda puede tener varias abreviaturas separadas por comas:
+        # se crea un Group por cada una, todas con el mismo nombre.
+        abrevs = [a.strip() for a in abrev_raw.split(",") if a.strip()] if abrev_raw else [""]
+        for abrev in abrevs:
+            grp = Group.query.filter_by(abbreviation=abrev, school_year_id=year_id).first() if abrev else None
+            if not grp and nombre and not abrev:
+                grp = Group.query.filter_by(name=nombre, school_year_id=year_id).first()
+            if grp:
+                changed = False
+                if nombre and grp.name != nombre:
+                    grp.name = nombre
+                    changed = True
+                updated += changed
+                skipped += not changed
+            else:
+                db.session.add(Group(school_year_id=year_id, name=nombre or abrev, abbreviation=abrev or None))
+                created += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"created": created, "updated": updated, "skipped": skipped})
+
+
+@admin_bp.route("/carga-datos/sustitutos", methods=["POST"])
+@login_required
+def data_load_substitutes():
+    """Carga masiva de sustituciones desde Drive: relaciona titular→sustituto y copia horario si existe."""
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    from app.utils.school_year import get_current_school_year
+    data = request.get_json()
+    rows = data.get("rows", [])
+    titular_col = data.get("titular_col", "")
+    sustituto_col = data.get("sustituto_col", "")
+    selected = set(data.get("selected", []))
+    year_id = get_current_school_year().id
+
+    def find_by_fullname(fullname):
+        fullname = (fullname or "").strip()
+        if ", " not in fullname:
+            return None
+        idx = fullname.index(", ")
+        surname = fullname[:idx].strip()
+        name = fullname[idx + 2:].strip()
+        return User.query.filter(
+            User.surname.ilike(surname),
+            User.name.ilike(name),
+            User.school_year_id == year_id,
+        ).first()
+
+    created = schedule_copied = 0
+    not_found = []
+
+    for i, row in enumerate(rows):
+        if i not in selected:
+            continue
+        titular_name = (row.get(titular_col) or "").strip()
+        sustituto_name = (row.get(sustituto_col) or "").strip()
+        if not titular_name or not sustituto_name:
+            continue
+        titular = find_by_fullname(titular_name)
+        sustituto = find_by_fullname(sustituto_name)
+        if not titular:
+            not_found.append(f"Titular no encontrado: {titular_name}")
+            continue
+        if not sustituto:
+            not_found.append(f"Sustituto no encontrado: {sustituto_name}")
+            continue
+        if titular.id == sustituto.id:
+            continue
+        # Replicar la lógica de teacher_edit: borrar horario previo del sustituto y copiar el del titular
+        TeacherSchedule.query.filter_by(teacher_id=sustituto.id, school_year_id=year_id).delete(synchronize_session=False)
+        entries = TeacherSchedule.query.filter_by(teacher_id=titular.id, school_year_id=year_id).all()
+        for entry in entries:
+            db.session.add(TeacherSchedule(
+                teacher_id=sustituto.id,
+                group_id=entry.group_id,
+                day_of_week=entry.day_of_week,
+                slot_id=entry.slot_id,
+                is_guard_slot=entry.is_guard_slot,
+                room_id=entry.room_id,
+                notes=entry.notes,
+                school_year_id=year_id,
+            ))
+        if entries:
+            schedule_copied += 1
+        titular.active = False
+        sustituto.substitutes_id = titular.id
+        created += 1
+
+    db.session.commit()
+    return jsonify({"created": created, "schedule_copied": schedule_copied, "not_found": not_found})
+
+
+@admin_bp.route("/carga-datos/raw-horarios", methods=["POST"])
+@login_required
+def data_load_raw_schedule():
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    from app.models.raw_schedule import RawScheduleRow
+    from app.utils.school_year import get_current_school_year
+    payload = request.get_json(force=True, silent=True) or {}
+    rows = payload.get("rows", [])
+    cmap = payload.get("mapping", {})   # {col_name: field_type}
+    selected_ids = payload.get("selected", None)
+    replace = payload.get("replace", True)
+
+    year = get_current_school_year()
+    if not year:
+        return jsonify({"error": "No hay curso activo."}), 400
 
     def field(row, ftype):
         for col, ft in cmap.items():
@@ -701,220 +1193,262 @@ def schedule_import():
                 return (row[col] or "").strip()
         return ""
 
-    year_id = get_current_school_year().id
-    created = skipped = subjects_created = groups_created = rooms_created = 0
-    errors = []
+    if replace:
+        RawScheduleRow.query.filter_by(school_year_id=year.id).delete(synchronize_session=False)
 
-    for row in rows_data:
-        abrev_prof = field(row, "abrev_prof")
-        teacher_id = prof_by_abrev.get(abrev_prof)
-        if not teacher_id:
-            errors.append(f"Profesor sin asignar: {abrev_prof}")
-            skipped += 1
+    loaded = skipped = 0
+    for i, row in enumerate(rows):
+        if selected_ids is not None and i not in selected_ids:
             continue
-
+        teacher_abbr = field(row, "abrev_prof")
+        group_abbr = field(row, "grupo")
         try:
-            dia = int(field(row, "dia") or 0) - day_offset
-            tramo = int(field(row, "tramo") or 0)
+            day = int(field(row, "dia") or 0)
+            slot = int(field(row, "tramo") or 0)
         except ValueError:
             skipped += 1
             continue
-
-        if not (0 <= dia <= 4) or tramo < 1:
+        if not teacher_abbr or not group_abbr or not (1 <= day <= 5) or not (1 <= slot <= 7):
             skipped += 1
             continue
-
-        abrev_asig = field(row, "abrev_asig")
-        asig_name = (asig_dict.get(abrev_asig) or abrev_asig).strip() or None
-        subject = None
-        if asig_name:
-            subject = Subject.query.filter_by(name=asig_name).first()
-            if not subject:
-                subject = Subject(name=asig_name, abbreviation=abrev_asig or None)
-                db.session.add(subject)
-                db.session.flush()
-                subjects_created += 1
-
-        grupo_name = field(row, "grupo")
-        group = None
-        if grupo_name:
-            group = Group.query.filter_by(name=grupo_name).first()
-            if not group:
-                group = Group(name=grupo_name)
-                db.session.add(group)
-                db.session.flush()
-                groups_created += 1
-
-        abrev_aula = field(row, "abrev_aula")
-        aula_name = (aula_dict.get(abrev_aula) or abrev_aula).strip() or None
-        room = None
-        if aula_name:
-            room = Room.query.filter_by(name=aula_name).first()
-            if not room:
-                room = Room(name=aula_name)
-                db.session.add(room)
-                db.session.flush()
-                rooms_created += 1
-
-        existing = TeacherSchedule.query.filter_by(
-            teacher_id=teacher_id, day_of_week=dia,
-            slot_id=tramo, school_year_id=year_id,
-        ).first()
-        if existing:
-            skipped += 1
-            continue
-
-        db.session.add(TeacherSchedule(
-            teacher_id=teacher_id,
-            group_id=group.id if group else None,
-            subject_id=subject.id if subject else None,
-            room_id=room.id if room else None,
-            day_of_week=dia,
-            slot_id=tramo,
-            is_guard_slot=False,
-            school_year_id=year_id,
+        db.session.add(RawScheduleRow(
+            school_year_id=year.id,
+            teacher_abbr=teacher_abbr,
+            subject_abbr=field(row, "abrev_asig") or None,
+            group_abbr=group_abbr,
+            room_abbr=field(row, "aula") or None,
+            day_of_week=day,
+            slot_number=slot,
         ))
-        created += 1
+        loaded += 1
 
     try:
         db.session.commit()
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+    return jsonify({"loaded": loaded, "skipped": skipped, "year": year.label if hasattr(year, "label") else str(year)})
 
+
+def _dl_prereqs(year_id):
+    """Devuelve dict con el estado de los prerequisitos para crear horarios."""
+    from app.models.raw_schedule import RawScheduleRow
+    from app.models.subject import Subject
+
+    drive_teachers_count = User.query.filter(
+        User.school_year_id == year_id,
+        User.role.in_(["teacher", "management", "extracurricular"]),
+    ).count()
+
+    rows = RawScheduleRow.query.filter_by(school_year_id=year_id).all()
+    if not rows:
+        return {"ok": False, "raw_rows": 0,
+                "missing_teachers": [], "missing_subjects": [], "missing_groups": [],
+                "substitutions_count": 0, "drive_teachers_count": drive_teachers_count}
+
+    t_abbrs = {r.teacher_abbr for r in rows if r.teacher_abbr}
+    s_abbrs = {r.subject_abbr for r in rows if r.subject_abbr}
+    g_abbrs = {r.group_abbr for r in rows if r.group_abbr}
+
+    t_known = {u.abbreviation for u in User.query.filter(User.abbreviation.isnot(None)).all()}
+    from app.models.subject import Subject
+    s_known = {s.abbreviation for s in Subject.query.filter(Subject.abbreviation.isnot(None), Subject.school_year_id == year_id).all()}
+    g_known = {g.abbreviation for g in Group.query.filter(Group.abbreviation.isnot(None), Group.school_year_id == year_id).all()}
+
+    miss_t = sorted(t_abbrs - t_known)
+    miss_s = sorted(s_abbrs - s_known)
+    miss_g = sorted(g_abbrs - g_known)
+
+    subs_count = User.query.filter(
+        User.substitutes_id.isnot(None),
+        User.school_year_id == year_id,
+    ).count()
+
+    return {
+        "ok": not miss_t and not miss_s and not miss_g,
+        "raw_rows": len(rows),
+        "missing_teachers": miss_t,
+        "missing_subjects": miss_s,
+        "missing_groups": miss_g,
+        "substitutions_count": subs_count,
+        "drive_teachers_count": drive_teachers_count,
+    }
+
+
+@admin_bp.route("/carga-datos/prereqs")
+@login_required
+def data_load_prereqs():
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    from app.utils.school_year import get_current_school_year
+    year = get_current_school_year()
+    if not year:
+        return jsonify({"error": "Sin curso activo"}), 400
+    return jsonify(_dl_prereqs(year.id))
+
+
+@admin_bp.route("/carga-datos/preview-horarios")
+@login_required
+def data_load_preview():
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    from app.models.raw_schedule import RawScheduleRow
+    from app.models.subject import Subject
+    from app.utils.school_year import get_current_school_year
+
+    year = get_current_school_year()
+    if not year:
+        return jsonify({"error": "Sin curso activo"}), 400
+
+    rows = RawScheduleRow.query.filter_by(school_year_id=year.id).all()
+    from app.models.subject import Subject
+    teacher_map = {u.abbreviation: u for u in User.query.filter(User.abbreviation.isnot(None)).all()}
+    subject_map = {s.abbreviation: s for s in Subject.query.filter(Subject.abbreviation.isnot(None), Subject.school_year_id == year.id).all()}
+    group_map = {g.abbreviation: g for g in Group.query.filter(Group.abbreviation.isnot(None), Group.school_year_id == year.id).all()}
+    room_map = {r.name: r for r in Room.query.all()}
+
+    new_entries = []
+    changed_entries = []
+    unchanged = 0
+    unresolved = []
+
+    DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+
+    for raw in rows:
+        teacher = teacher_map.get(raw.teacher_abbr)
+        if not teacher:
+            unresolved.append(f"Profesor: {raw.teacher_abbr}")
+            continue
+        subject = subject_map.get(raw.subject_abbr) if raw.subject_abbr else None
+        group = group_map.get(raw.group_abbr) if raw.group_abbr else None
+        room = room_map.get(raw.room_abbr) if raw.room_abbr else None
+
+        # Auto-crear aula si no existe
+        if raw.room_abbr and not room:
+            room = Room(name=raw.room_abbr)
+            db.session.add(room)
+            db.session.flush()
+            room_map[raw.room_abbr] = room
+
+        day_idx = raw.day_of_week - 1   # 0-based para TeacherSchedule
+        existing = TeacherSchedule.query.filter_by(
+            teacher_id=teacher.id, day_of_week=day_idx,
+            slot_id=raw.slot_number, school_year_id=year.id,
+        ).first()
+
+        entry = {
+            "raw_id": raw.id,
+            "teacher": teacher.full_name,
+            "teacher_abbr": raw.teacher_abbr,
+            "group": group.name if group else raw.group_abbr,
+            "subject": subject.name if subject else (raw.subject_abbr or ""),
+            "room": raw.room_abbr or "",
+            "day": DAYS[day_idx] if 0 <= day_idx < 5 else str(raw.day_of_week),
+            "slot": raw.slot_number,
+        }
+
+        if not existing:
+            new_entries.append(entry)
+        else:
+            changes = {}
+            new_gid = group.id if group else None
+            new_sid = subject.id if subject else None
+            new_rid = room.id if room else None
+            if existing.group_id != new_gid:
+                old = Group.query.get(existing.group_id) if existing.group_id else None
+                changes["grupo"] = {"old": old.name if old else "", "new": entry["group"]}
+            if existing.subject_id != new_sid:
+                old = Subject.query.get(existing.subject_id) if existing.subject_id else None
+                changes["materia"] = {"old": old.name if old else "", "new": entry["subject"]}
+            if existing.room_id != new_rid:
+                old = Room.query.get(existing.room_id) if existing.room_id else None
+                changes["aula"] = {"old": old.name if old else "", "new": entry["room"]}
+            if changes:
+                entry["existing_id"] = existing.id
+                entry["changes"] = changes
+                changed_entries.append(entry)
+            else:
+                unchanged += 1
+
+    db.session.rollback()  # deshacer flush de aulas temporales
     return jsonify({
-        "created": created, "skipped": skipped, "errors": errors,
-        "teachers_created": teachers_created,
-        "subjects_created": subjects_created,
-        "groups_created": groups_created,
-        "rooms_created": rooms_created,
+        "new": new_entries,
+        "changed": changed_entries,
+        "unchanged": unchanged,
+        "unresolved": list(set(unresolved)),
     })
 
 
-@admin_bp.route("/horarios/plantilla-csv")
+@admin_bp.route("/carga-datos/crear-horarios", methods=["POST"])
 @login_required
-def schedule_csv_template():
+def data_load_create_schedules():
     if not _require_management():
-        return redirect(url_for("dashboard.index"))
-    from flask import Response
-    content = "email_profesor,dia,tramo,grupo,es_guardia\nana.garcia@iesciudadjardin.es,0,1,1A Bach,false\nana.garcia@iesciudadjardin.es,0,3,,true\n"
-    return Response(
-        "﻿" + content,
-        mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=plantilla_horarios.csv"},
-    )
+        return jsonify({"error": "No autorizado"}), 403
+    from app.models.raw_schedule import RawScheduleRow
+    from app.models.subject import Subject
+    from app.utils.school_year import get_current_school_year
 
+    year = get_current_school_year()
+    if not year:
+        return jsonify({"error": "Sin curso activo"}), 400
 
-@admin_bp.route("/carga-datos", methods=["GET", "POST"])
-@login_required
-def data_load():
-    if not _require_management():
-        return redirect(url_for("dashboard.index"))
-    if request.method == "GET":
-        return render_template(
-            "admin/data_load.html",
-            drive_connected=bool(current_user.google_drive_token),
-            drive_file_id=current_user.google_drive_file_id or "",
-        )
-
-    # POST: recibe JSON {mapping, rows} y devuelve JSON con resultado
     payload = request.get_json(force=True, silent=True) or {}
-    mapping = payload.get("mapping", {})
-    rows = payload.get("rows", [])
+    # raw_ids_new: lista de raw_id a crear; changed_approved: lista de {existing_id, raw_id}
+    raw_ids_new = set(payload.get("new_ids", []))
+    changed_approved = {item["existing_id"]: item["raw_id"] for item in payload.get("changed", [])}
 
-    if not rows:
-        return jsonify({"error": "No hay filas para importar."}), 400
+    rows = RawScheduleRow.query.filter_by(school_year_id=year.id).all()
+    from app.models.subject import Subject
+    teacher_map = {u.abbreviation: u for u in User.query.filter(User.abbreviation.isnot(None)).all()}
+    subject_map = {s.abbreviation: s for s in Subject.query.filter(Subject.abbreviation.isnot(None), Subject.school_year_id == year.id).all()}
+    group_map = {g.abbreviation: g for g in Group.query.filter(Group.abbreviation.isnot(None), Group.school_year_id == year.id).all()}
+    room_map = {r.name: r for r in Room.query.all()}
 
-    active = {v for v in mapping.values() if v != "ignorar"}
+    created = updated = rooms_created = 0
+    errors = []
 
-    def field(row, ftype):
-        for col, ft in mapping.items():
-            if ft == ftype and col in row:
-                return (row[col] or "").strip()
-        return None
+    for raw in rows:
+        if raw.id not in raw_ids_new and raw.id not in set(changed_approved.values()):
+            continue
+        teacher = teacher_map.get(raw.teacher_abbr)
+        if not teacher:
+            errors.append(f"Profesor no resuelto: {raw.teacher_abbr}")
+            continue
+        subject = subject_map.get(raw.subject_abbr) if raw.subject_abbr else None
+        group = group_map.get(raw.group_abbr) if raw.group_abbr else None
 
-    created, skipped, errors = {}, 0, []
+        room = room_map.get(raw.room_abbr) if raw.room_abbr else None
+        if raw.room_abbr and not room:
+            room = Room(name=raw.room_abbr)
+            db.session.add(room)
+            db.session.flush()
+            room_map[raw.room_abbr] = room
+            rooms_created += 1
 
-    # ── Profesores (cuando hay columna 'email') ───────────────────────────────
-    if "email" in active:
-        n = 0
-        for row in rows:
-            email = field(row, "email")
-            if not email:
-                skipped += 1
-                continue
-            email = email.lower()
-            if User.query.filter_by(email=email).first():
-                skipped += 1
-                continue
-            nombre = field(row, "nombre") or ""
-            apellidos = field(row, "apellidos") or ""
-            if not nombre and not apellidos:
-                nc = field(row, "nombre_completo") or ""
-                parts = nc.split(" ", 1)
-                nombre = parts[0]
-                apellidos = parts[1] if len(parts) > 1 else ""
-            rol = field(row, "rol") or "teacher"
-            if rol not in ("teacher", "management", "display", "extracurricular"):
-                rol = "teacher"
-            u = User(email=email, name=nombre, surname=apellidos, role=rol, receive_emails=True)
-            u.set_password("cambiar123")
-            db.session.add(u)
-            n += 1
-        if n:
-            created["profesores"] = n
+        day_idx = raw.day_of_week - 1
 
-    # ── Horarios (cuando hay columnas 'dia' y 'tramo') ────────────────────────
-    elif "dia" in active and "tramo" in active:
-        from app.utils.school_year import get_current_school_year
-        year_id = get_current_school_year().id
-        n = 0
-        for row in rows:
-            email = field(row, "email")
-            if not email:
-                skipped += 1
-                continue
-            teacher = User.query.filter_by(email=email.lower()).first()
-            if not teacher:
-                skipped += 1
-                errors.append(f"Profesor no encontrado: {email}")
-                continue
-            try:
-                day = int(field(row, "dia") or 0)
-                slot = int(field(row, "tramo") or 1)
-            except ValueError:
-                skipped += 1
-                continue
-            is_guard = (field(row, "es_guardia") or "false").lower() in ("true", "1", "si", "sí")
-            group_name = field(row, "grupo") or ""
-            group = None
-            if group_name:
-                group = Group.query.filter_by(name=group_name).first()
-                if not group:
-                    group = Group(name=group_name)
-                    db.session.add(group)
-                    db.session.flush()
-            existing = TeacherSchedule.query.filter_by(
-                teacher_id=teacher.id, day_of_week=day, slot_id=slot,
-                school_year_id=year_id,
-            ).first()
-            if existing:
-                skipped += 1
-                continue
+        if raw.id in raw_ids_new:
             db.session.add(TeacherSchedule(
                 teacher_id=teacher.id,
                 group_id=group.id if group else None,
-                day_of_week=day,
-                slot_id=slot,
-                is_guard_slot=is_guard,
-                school_year_id=year_id,
+                subject_id=subject.id if subject else None,
+                room_id=room.id if room else None,
+                day_of_week=day_idx,
+                slot_id=raw.slot_number,
+                is_guard_slot=False,
+                school_year_id=year.id,
             ))
-            n += 1
-        if n:
-            created["horarios"] = n
-
-    else:
-        return jsonify({"error": "No se reconoce el tipo de datos. Mapea al menos 'Email' para importar profesores, o 'Email + Día + Tramo' para importar horarios."}), 400
+            created += 1
+        else:
+            # Actualizar existente
+            for existing_id, rid in changed_approved.items():
+                if rid == raw.id:
+                    ts = TeacherSchedule.query.get(existing_id)
+                    if ts:
+                        ts.group_id = group.id if group else None
+                        ts.subject_id = subject.id if subject else None
+                        ts.room_id = room.id if room else None
+                        updated += 1
 
     try:
         db.session.commit()
@@ -922,7 +1456,7 @@ def data_load():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-    return jsonify({"created": created, "skipped": skipped, "errors": errors})
+    return jsonify({"created": created, "updated": updated, "rooms_created": rooms_created, "errors": errors})
 
 
 @admin_bp.route("/horarios/disponibilidad/nueva", methods=["POST"])
@@ -951,7 +1485,9 @@ def availability_create():
         flash("La fecha de fin no puede ser anterior a la de inicio.", "warning")
         return redirect(url_for("admin.schedules", teacher_id=teacher_id))
 
+    from app.utils.school_year import get_current_school_year
     period = AvailabilityPeriod(
+        school_year_id=get_current_school_year().id,
         teacher_id=teacher_id,
         start_date=start_date,
         end_date=end_date,
@@ -1732,9 +2268,9 @@ def points_export_csv():
 def points_reset_all():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
-    User.query.filter(User.role.notin_(["management", "display"])).update({"points": 0.0})
-    # También resetear management con track_points
-    User.query.filter_by(role="management", track_points=True).update({"points": 0.0})
+    # Solo resetear profesores activos; los sustituidos (inactivos) quedan con sus puntos congelados
+    User.query.filter(User.role.notin_(["management", "display"]), User.active == True).update({"points": 0.0})
+    User.query.filter_by(role="management", track_points=True, active=True).update({"points": 0.0})
     db.session.commit()
     flash("Puntos de todos los profesores reseteados a 0.", "success")
     return redirect(url_for("admin.config") + "#section-points")
@@ -1788,7 +2324,8 @@ def school_year_create():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     from app.models.school_year import SchoolYear
-    from app.utils.school_year import year_dates
+    from app.models.subject import Subject
+    from app.utils.school_year import year_dates, get_current_school_year
 
     name = request.form.get("name", "").strip()
     if not name or '/' not in name:
@@ -1799,20 +2336,47 @@ def school_year_create():
         flash(f"El curso {name} ya existe.", "warning")
         return redirect(url_for("admin.config"))
 
+    prev_year = get_current_school_year()
     start, end = year_dates(name)
 
-    # Desactivar curso actual y crear el nuevo
     SchoolYear.query.update({"is_current": False})
     new_year = SchoolYear(name=name, start_date=start, end_date=end, is_current=True)
     db.session.add(new_year)
-    db.session.flush()  # obtener new_year.id antes de recalcular
+    db.session.flush()
 
-    # Recalcular puntos para el nuevo curso (estará en 0 al no tener datos aún)
+    copy_groups   = request.form.get("copy_groups") == "on"
+    copy_subjects = request.form.get("copy_subjects") == "on"
+    copied_g = copied_s = 0
+
+    if copy_groups and prev_year:
+        for g in Group.query.filter_by(school_year_id=prev_year.id).all():
+            db.session.add(Group(
+                school_year_id=new_year.id,
+                name=g.name,
+                abbreviation=g.abbreviation,
+                high_difficulty=g.high_difficulty,
+                difficulty_multiplier=g.difficulty_multiplier,
+                active=True,
+            ))
+            copied_g += 1
+
+    if copy_subjects and prev_year:
+        for s in Subject.query.filter_by(school_year_id=prev_year.id).all():
+            db.session.add(Subject(
+                school_year_id=new_year.id,
+                name=s.name,
+                abbreviation=s.abbreviation,
+            ))
+            copied_s += 1
+
     from app.utils.points import recalculate_points_for_year
     recalculate_points_for_year(new_year)
 
     db.session.commit()
-    flash(f"Curso {name} iniciado. Puntos recalculados para este curso (0 al empezar).", "success")
+    msg = f"Curso {name} creado."
+    if copied_g: msg += f" {copied_g} grupos copiados."
+    if copied_s: msg += f" {copied_s} materias copiadas."
+    flash(msg, "success")
     return redirect(url_for("admin.config"))
 
 
@@ -1832,4 +2396,86 @@ def school_year_activate(year_id):
 
     db.session.commit()
     flash(f"Curso {year.name} activado. Puntos recalculados para este curso.", "success")
+    return redirect(url_for("admin.config"))
+
+
+@admin_bp.route("/cursos/<int:year_id>/editar", methods=["GET", "POST"])
+@login_required
+def school_year_edit(year_id):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.school_year import SchoolYear
+    from datetime import date as _date
+
+    year = SchoolYear.query.get_or_404(year_id)
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        start_str = request.form.get("start_date", "").strip()
+        end_str = request.form.get("end_date", "").strip()
+
+        if not name or '/' not in name:
+            flash("Nombre de curso inválido (formato AAAA/AAAA).", "danger")
+            return redirect(url_for("admin.school_year_edit", year_id=year_id))
+
+        existing = SchoolYear.query.filter(SchoolYear.name == name, SchoolYear.id != year_id).first()
+        if existing:
+            flash(f"Ya existe un curso con el nombre {name}.", "danger")
+            return redirect(url_for("admin.school_year_edit", year_id=year_id))
+
+        try:
+            year.start_date = _date.fromisoformat(start_str)
+            year.end_date = _date.fromisoformat(end_str)
+        except ValueError:
+            flash("Fechas inválidas.", "danger")
+            return redirect(url_for("admin.school_year_edit", year_id=year_id))
+
+        year.name = name
+        db.session.commit()
+        flash(f"Curso {name} actualizado.", "success")
+        return redirect(url_for("admin.config"))
+
+    return render_template("admin/school_year_form.html", year=year)
+
+
+@admin_bp.route("/cursos/<int:year_id>/borrar", methods=["POST"])
+@login_required
+def school_year_delete(year_id):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.school_year import SchoolYear
+    from app.models.schedule import TeacherSchedule
+    from app.models.raw_schedule import RawScheduleRow
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
+    from app.models.activity import ExtraActivity, ExtraActivityGroup, ExtraActivityTeacher
+    from app.models.subject import Subject
+
+    year = SchoolYear.query.get_or_404(year_id)
+
+    if year.is_current:
+        flash("No se puede borrar el curso activo.", "danger")
+        return redirect(url_for("admin.config"))
+
+    # Borrar dependencias en orden para respetar FKs
+    TeacherSchedule.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
+    RawScheduleRow.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
+
+    period_ids = [p.id for p in AvailabilityPeriod.query.filter_by(school_year_id=year_id).with_entities(AvailabilityPeriod.id).all()]
+    if period_ids:
+        AvailabilityPeriodGroup.query.filter(AvailabilityPeriodGroup.period_id.in_(period_ids)).delete(synchronize_session=False)
+    AvailabilityPeriod.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
+
+    activity_ids = [a.id for a in ExtraActivity.query.filter_by(school_year_id=year_id).with_entities(ExtraActivity.id).all()]
+    if activity_ids:
+        ExtraActivityGroup.query.filter(ExtraActivityGroup.activity_id.in_(activity_ids)).delete(synchronize_session=False)
+        ExtraActivityTeacher.query.filter(ExtraActivityTeacher.activity_id.in_(activity_ids)).delete(synchronize_session=False)
+    ExtraActivity.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
+
+    Group.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
+    Subject.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
+
+    name = year.name
+    db.session.delete(year)
+    db.session.commit()
+    flash(f"Curso {name} y todos sus datos eliminados.", "success")
     return redirect(url_for("admin.config"))

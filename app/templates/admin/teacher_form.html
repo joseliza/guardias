@@ -17,9 +17,15 @@
           <label class="form-label">Apellidos</label>
           <input type="text" name="surname" class="form-control" value="{{ teacher.surname if teacher else '' }}" required>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-5">
           <label class="form-label">Email</label>
           <input type="email" name="email" class="form-control" value="{{ teacher.email if teacher else '' }}" required>
+        </div>
+        <div class="col-md-1">
+          <label class="form-label">Abrev.</label>
+          <input type="text" name="abbreviation" class="form-control" maxlength="20"
+                 value="{{ teacher.abbreviation if teacher and teacher.abbreviation else '' }}"
+                 placeholder="EncLo">
         </div>
         <div class="col-md-3">
           <label class="form-label">Rol</label>
@@ -55,18 +61,28 @@
         </div>
         {% if teacher %}
         <div class="col-12">
-          <label class="form-label">Sustituye a <small class="text-muted">(opcional — copia el horario del sustituido y lo pone inactivo)</small></label>
+          <label class="form-label">Sustituye a</label>
           <select name="substitutes_id" class="form-select" id="substitutes_id">
             <option value="">Sin sustitución</option>
             {% for t in all_teachers %}
             <option value="{{ t.id }}" {% if teacher.substitutes_id == t.id %}selected{% endif %}>
-              {{ t.full_name }}{% if not t.active %} (inactivo){% endif %}
+              {{ t.full_name }}{% if t.substitutes_id %} → {{ t.substitutes.full_name }}{% elif not t.active %} (inactivo){% endif %}
             </option>
             {% endfor %}
           </select>
+          <div class="form-text">
+            <i class="bi bi-info-circle"></i> Copia el horario del sustituido y lo pone inactivo.
+          </div>
           {% if teacher.substitutes %}
           <div class="form-text text-warning">
-            <i class="bi bi-info-circle"></i> Actualmente sustituye a <strong>{{ teacher.substitutes.full_name }}</strong>. Al quitar la sustitución se reactivará el original y se borrará este horario copiado.
+            <i class="bi bi-info-circle"></i> Actualmente sustituye a <strong>{{ teacher.substitutes.full_name }}</strong>{% if teacher.substitutes.substitutes %}, que a su vez sustituye a <strong>{{ teacher.substitutes.substitutes.full_name }}</strong>{% endif %}. Al quitar la sustitución se reactivará el inmediato superior y se borrará este horario copiado.
+          </div>
+          <div class="form-check mt-2" id="show-sub-public-wrapper">
+            <input type="checkbox" class="form-check-input" name="show_substitute_public" id="show_substitute_public"
+                   {% if teacher.show_substitute_public %}checked{% endif %}>
+            <label class="form-check-label" for="show_substitute_public">
+              Mostrar "(Sustituye a {{ teacher.substitutes.full_name }})" detrás de su nombre en dashboard y pantalla de sala
+            </label>
           </div>
           {% endif %}
         </div>

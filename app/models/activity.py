@@ -13,12 +13,15 @@ class ExtraActivity(db.Model):
     __tablename__ = "extra_activities"
 
     id = db.Column(db.Integer, primary_key=True)
+    school_year_id = db.Column(db.Integer, db.ForeignKey("school_years.id"), nullable=True, index=True)
     name = db.Column(db.String(150), nullable=False)
     date = db.Column(db.Date, nullable=False)
     slot_ids = db.Column(db.String(50), nullable=False)   # "1,2,3" — tramos afectados
     description = db.Column(db.Text, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    school_year = db.relationship("SchoolYear", foreign_keys=[school_year_id])
 
     created_by = db.relationship("User")
     groups = db.relationship("ExtraActivityGroup", backref="activity", lazy="dynamic")

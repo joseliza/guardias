@@ -11,6 +11,7 @@ from .activity import ExtraActivity, ExtraActivityGroup, ExtraActivityTeacher
 from .availability import AvailabilityPeriod, AvailabilityPeriodGroup
 from .chat import ChatMessage
 from .subject import Subject
+from .raw_schedule import RawScheduleRow
 
 __all__ = [
     "db",
@@ -29,4 +30,5 @@ __all__ = [
     "AvailabilityPeriodGroup",
     "ChatMessage",
     "Subject",
+    "RawScheduleRow",
 ]

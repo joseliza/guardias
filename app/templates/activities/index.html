@@ -2,6 +2,11 @@
 {% block title %}Actividades extraescolares{% endblock %}
 {% block main_class %}container-fluid pb-4{% endblock %}
 {% block content %}
+<style>
+  .act-past   { --bs-table-bg: rgba(0,0,0,.10); }
+  .act-today  { --bs-table-bg: #d6f0e0; }
+  .act-future { --bs-table-bg: #fff9db; }
+</style>
 <div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
 <div class="d-flex justify-content-between align-items-center mb-0">
   <h4 class="mb-0"><i class="bi bi-backpack"></i> Actividades extraescolares</h4>
@@ -17,7 +22,14 @@
       <thead class="table-light"><tr><th>Fecha</th><th>Nombre</th><th>Tramos</th><th>Grupos</th><th>Acompañantes</th><th></th></tr></thead>
       <tbody>
         {% for a in activities %}
-        <tr>
+        {% if a.date < today %}
+          {% set row_class = "act-past" %}
+        {% elif a.date == today %}
+          {% set row_class = "act-today" %}
+        {% else %}
+          {% set row_class = "act-future" %}
+        {% endif %}
+        <tr class="{{ row_class }}">
           <td class="text-nowrap">{{ a.date.strftime('%d/%m/%Y') }}</td>
           <td>{{ a.name }}{% if a.description %}<br><small class="text-muted">{{ a.description }}</small>{% endif %}</td>
           <td class="text-nowrap small">

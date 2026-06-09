@@ -4,7 +4,9 @@
 {% block content %}
 <div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
 <div class="d-flex justify-content-between align-items-center mb-1">
-  <h4 class="mb-0"><i class="bi bi-diagram-3"></i> Grupos</h4>
+  <h4 class="mb-0"><i class="bi bi-diagram-3"></i> Grupos
+    {% if current_year %}<small class="text-muted fw-normal ms-2 fs-6">{{ current_year.name }}</small>{% endif %}
+  </h4>
   <div class="d-flex gap-2">
     <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
     <a href="{{ url_for('admin.group_create') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nuevo grupo</a>
@@ -15,11 +17,12 @@
 <div class="card">
   <div class="card-body p-0">
     <table class="table table-hover mb-0" id="tabla-grupos">
-      <thead class="table-light"><tr><th>Nombre</th><th>Alta dificultad</th><th>Multiplicador</th><th>Activo</th><th></th></tr></thead>
+      <thead class="table-light"><tr><th>Nombre</th><th>Abreviatura</th><th>Alta dificultad</th><th>Multiplicador</th><th>Activo</th><th></th></tr></thead>
       <tbody>
         {% for g in groups %}
         <tr>
           <td>{{ g.name }}</td>
+          <td><code class="text-secondary">{{ g.abbreviation or '—' }}</code></td>
           <td>{% if g.high_difficulty %}<i class="bi bi-star-fill text-warning"></i> Sí{% else %}No{% endif %}</td>
           <td>x{{ g.difficulty_multiplier }}</td>
           <td><span class="badge bg-{{ 'success' if g.active else 'danger' }}">{{ 'Sí' if g.active else 'No' }}</span></td>

@@ -27,9 +27,12 @@ def _require_extracurricular():
 @activities_bp.route("/")
 @login_required
 def index():
-    activities = ExtraActivity.query.order_by(ExtraActivity.date.desc()).all()
+    from datetime import date as _date
+    from app.utils.school_year import get_current_school_year
+    year = get_current_school_year()
+    activities = ExtraActivity.query.filter_by(school_year_id=year.id).order_by(ExtraActivity.date.desc()).all()
     slots = current_app.config["TIME_SLOTS"]
-    return render_template("activities/index.html", activities=activities, slots=slots)
+    return render_template("activities/index.html", activities=activities, slots=slots, today=_date.today())
 
 
 @activities_bp.route("/nueva", methods=["GET", "POST"])
@@ -38,8 +41,10 @@ def create():
     if not _require_extracurricular():
         return redirect(url_for("dashboard.index"))
 
+    from app.utils.school_year import get_current_school_year, get_year_groups
+    year = get_current_school_year()
     teachers = User.query.filter_by(active=True).order_by(User.surname).all()
-    groups = Group.query.filter_by(active=True).order_by(Group.name).all()
+    groups = get_year_groups(year.id)
     slots = current_app.config["TIME_SLOTS"]
 
     if request.method == "POST":
@@ -49,6 +54,7 @@ def create():
         description = request.form.get("description", "")
 
         activity = ExtraActivity(
+            school_year_id=year.id,
             name=name,
             date=activity_date,
             slot_ids=",".join(slot_ids),
@@ -119,8 +125,10 @@ def edit(aid):
         return redirect(url_for("dashboard.index"))
 
     activity = ExtraActivity.query.get_or_404(aid)
+    from app.utils.school_year import get_year_groups
+    year_id = activity.school_year_id
     teachers = User.query.filter_by(active=True).order_by(User.surname).all()
-    groups = Group.query.filter_by(active=True).order_by(Group.name).all()
+    groups = get_year_groups(year_id) if year_id else Group.query.filter_by(active=True).order_by(Group.name).all()
     slots = current_app.config["TIME_SLOTS"]
 
     from datetime import date as _date

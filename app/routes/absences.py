@@ -326,8 +326,9 @@ def tasks(absence_id):
         flash("No tienes acceso a esta ausencia.", "danger")
         return redirect(url_for("absences.index"))
 
-    groups = Group.query.filter_by(active=True).order_by(Group.name).all()
     _yid = get_current_school_year().id
+    from app.utils.school_year import get_year_groups
+    groups = get_year_groups(_yid)
     schedule_entry = TeacherSchedule.query.filter_by(
         teacher_id=absence.teacher_id,
         day_of_week=absence.date.weekday(),
