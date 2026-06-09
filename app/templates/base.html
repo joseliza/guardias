@@ -96,8 +96,6 @@
             <li><a class="dropdown-item" href="{{ url_for('admin.rooms') }}">Aulas</a></li>
             <li><a class="dropdown-item" href="{{ url_for('admin.schedules') }}"><i class="bi bi-calendar3"></i> Horarios</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin.schedule_wizard') }}"><i class="bi bi-calendar3"></i> Importar horarios</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin.data_load') }}">Carga de datos</a></li>
             <li><hr class="dropdown-divider"></li>
             <li>
               <a class="dropdown-item d-flex justify-content-between align-items-center"
@@ -124,7 +122,6 @@
             <li><a class="dropdown-item" href="{{ url_for('chat.report') }}">Informe de incidencias</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{{ url_for('admin.config') }}"><i class="bi bi-sliders"></i> Configuración</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin.school_years') }}"><i class="bi bi-calendar2-range"></i> Cursos escolares</a></li>
             <li><hr class="dropdown-divider"></li>
             {% if not impersonating %}
             <li>

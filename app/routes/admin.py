@@ -1153,6 +1153,16 @@ def config():
                          .order_by(User.surname, User.name)
                          .all())
     help_content = _read_help_content()
+
+    from app.models.school_year import SchoolYear
+    from app.utils.school_year import get_current_school_year, year_dates
+    from datetime import date as _date
+    _sy_years = SchoolYear.query.order_by(SchoolYear.start_date.desc()).all()
+    _sy_current = get_current_school_year()
+    _sy_start_year = int(_sy_current.name.split('/')[0]) + 1
+    _next_year_name = f"{_sy_start_year}/{_sy_start_year + 1}"
+    _next_year_start, _next_year_end = year_dates(_next_year_name)
+
     return render_template("admin/config.html",
                            mail_config=mail_config,
                            schedule_config=schedule_config,
@@ -1160,7 +1170,12 @@ def config():
                            points_config=points_config,
                            users=users,
                            scorable_teachers=scorable_teachers,
-                           help_content=help_content)
+                           help_content=help_content,
+                           school_years=_sy_years,
+                           next_year_name=_next_year_name,
+                           next_year_start=_next_year_start,
+                           next_year_end=_next_year_end,
+                           today=_date.today())
 
 
 @admin_bp.route("/configuracion/general", methods=["POST"])
@@ -1778,11 +1793,11 @@ def school_year_create():
     name = request.form.get("name", "").strip()
     if not name or '/' not in name:
         flash("Nombre de curso inválido.", "danger")
-        return redirect(url_for("admin.school_years"))
+        return redirect(url_for("admin.config"))
 
     if SchoolYear.query.filter_by(name=name).first():
         flash(f"El curso {name} ya existe.", "warning")
-        return redirect(url_for("admin.school_years"))
+        return redirect(url_for("admin.config"))
 
     start, end = year_dates(name)
 
@@ -1798,7 +1813,7 @@ def school_year_create():
 
     db.session.commit()
     flash(f"Curso {name} iniciado. Puntos recalculados para este curso (0 al empezar).", "success")
-    return redirect(url_for("admin.school_years"))
+    return redirect(url_for("admin.config"))
 
 
 @admin_bp.route("/cursos/<int:year_id>/activar", methods=["POST"])
@@ -1817,4 +1832,4 @@ def school_year_activate(year_id):
 
     db.session.commit()
     flash(f"Curso {year.name} activado. Puntos recalculados para este curso.", "success")
-    return redirect(url_for("admin.school_years"))
+    return redirect(url_for("admin.config"))
