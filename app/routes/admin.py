@@ -500,6 +500,24 @@ def subject_edit(sid):
     return redirect(url_for("admin.subjects"))
 
 
+@admin_bp.route("/materias/<int:sid>/clonar", methods=["POST"])
+@login_required
+def subject_clone(sid):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.subject import Subject
+    original = Subject.query.get_or_404(sid)
+    clone = Subject(
+        school_year_id=original.school_year_id,
+        name=f"{original.name} (copia)",
+        abbreviation=None,
+    )
+    db.session.add(clone)
+    db.session.commit()
+    flash(f"Materia clonada como '{clone.name}'. Edítala para asignarle una abreviatura.", "success")
+    return redirect(url_for("admin.subjects"))
+
+
 @admin_bp.route("/materias/<int:sid>/borrar", methods=["POST"])
 @login_required
 def subject_delete(sid):
@@ -560,6 +578,25 @@ def room_edit(rid):
         flash("Aula actualizada.", "success")
         return redirect(url_for("admin.rooms"))
     return render_template("admin/room_form.html", room=room)
+
+
+@admin_bp.route("/aulas/<int:rid>/clonar", methods=["POST"])
+@login_required
+def room_clone(rid):
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    original = Room.query.get_or_404(rid)
+    base_name = f"{original.name} (copia)"
+    name = base_name
+    n = 1
+    while Room.query.filter_by(name=name).first():
+        n += 1
+        name = f"{base_name} {n}"
+    clone = Room(name=name, description=original.description, active=original.active)
+    db.session.add(clone)
+    db.session.commit()
+    flash(f"Aula clonada como '{clone.name}'. Edítala para cambiar el nombre.", "success")
+    return redirect(url_for("admin.rooms"))
 
 
 @admin_bp.route("/aulas/<int:rid>/borrar", methods=["POST"])
@@ -998,45 +1035,62 @@ def data_load_prof_abbrevs():
     from app.utils.school_year import get_current_school_year as _get_year
     year_id = _get_year().id
 
-    created = updated = skipped = not_found = 0
+    created = updated = skipped = not_found = created_no_abrev = 0
     warnings = []
     for i, row in enumerate(rows):
         if selected_ids is not None and i not in selected_ids:
             continue
         abrev = (row.get(abrev_col) or "").strip()
         nombre = (row.get(nombre_col) or "").strip()
-        if not abrev:
+        parts = nombre.split(",", 1) if nombre else []
+        has_full_name = len(parts) == 2 and parts[0].strip() and parts[1].strip()
+        if not abrev and not has_full_name:
             skipped += 1
             continue
         # Buscar en el curso activo por abreviatura o por nombre "Apellidos, Nombre"
-        user = User.query.filter_by(abbreviation=abrev, school_year_id=year_id).first()
-        if not user and nombre:
-            parts = nombre.split(",", 1)
-            if len(parts) == 2:
-                user = User.query.filter(
-                    User.surname.ilike(parts[0].strip()),
-                    User.name.ilike(parts[1].strip()),
-                    User.school_year_id == year_id,
-                ).first()
+        user = User.query.filter_by(abbreviation=abrev, school_year_id=year_id).first() if abrev else None
+        if not user and has_full_name:
+            user = User.query.filter(
+                User.surname.ilike(parts[0].strip()),
+                User.name.ilike(parts[1].strip()),
+                User.school_year_id == year_id,
+            ).first()
         if user:
-            if user.abbreviation and user.abbreviation != abrev:
-                warnings.append({"nombre": user.full_name, "abrev_bd": user.abbreviation, "abrev_nueva": abrev})
-            user.abbreviation = abrev
-            updated += 1
+            if abrev:
+                if user.abbreviation and user.abbreviation != abrev:
+                    warnings.append({"nombre": user.full_name, "abrev_bd": user.abbreviation, "abrev_nueva": abrev})
+                user.abbreviation = abrev
+                updated += 1
+            else:
+                skipped += 1
             continue
         # No existe: crear si el nombre viene en formato "Apellidos, Nombre"
-        parts = nombre.split(",", 1) if nombre else []
-        if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+        if has_full_name:
             surname_new, name_new = parts[0].strip(), parts[1].strip()
-            placeholder = f"_{abrev}_{year_id}@pendiente.local".lower()
-            if not User.query.filter_by(email=placeholder).first():
-                u = User(email=placeholder, name=name_new, surname=surname_new,
-                         abbreviation=abrev, role="teacher", active=True,
-                         school_year_id=year_id, receive_emails=False)
-                u.password_hash = ""
-                db.session.add(u)
+            if abrev:
+                placeholder = f"_{abrev}_{year_id}@pendiente.local".lower()
+                if User.query.filter_by(email=placeholder).first():
+                    not_found += 1
+                    warnings.append({"nombre": nombre, "abrev_bd": None, "abrev_nueva": abrev, "no_encontrado": True})
+                    continue
+            else:
+                slug = re.sub(r"[^a-z0-9]+", "", f"{surname_new}{name_new}".lower()) or "profesor"
+                placeholder = f"_{slug}_{year_id}@pendiente.local"
+                n = 1
+                while User.query.filter_by(email=placeholder).first():
+                    n += 1
+                    placeholder = f"_{slug}{n}_{year_id}@pendiente.local"
+            u = User(email=placeholder, name=name_new, surname=surname_new,
+                     abbreviation=abrev or None, role="teacher", active=True,
+                     school_year_id=year_id, receive_emails=False)
+            u.password_hash = ""
+            db.session.add(u)
+            if abrev:
                 created += 1
-                continue
+            else:
+                created_no_abrev += 1
+                warnings.append({"nombre": u.full_name, "abrev_bd": None, "abrev_nueva": None, "sin_abrev": True})
+            continue
         not_found += 1
         warnings.append({"nombre": nombre, "abrev_bd": None, "abrev_nueva": abrev, "no_encontrado": True})
 
@@ -1045,7 +1099,10 @@ def data_load_prof_abbrevs():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-    return jsonify({"created": created, "updated": updated, "skipped": skipped, "not_found": not_found, "warnings": warnings})
+    return jsonify({
+        "created": created, "updated": updated, "skipped": skipped,
+        "not_found": not_found, "created_no_abrev": created_no_abrev, "warnings": warnings,
+    })
 
 
 @admin_bp.route("/carga-datos/materias", methods=["POST"])
@@ -1072,7 +1129,7 @@ def data_load_subjects():
             skipped += 1
             continue
         subj = Subject.query.filter_by(abbreviation=abrev, school_year_id=year_id).first() if abrev else None
-        if not subj and nombre:
+        if not subj and nombre and not abrev:
             subj = Subject.query.filter_by(name=nombre, school_year_id=year_id).first()
         if subj:
             changed = False

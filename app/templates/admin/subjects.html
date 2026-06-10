@@ -37,6 +37,9 @@
                     data-abbrev="{{ s.abbreviation or '' }}">
               <i class="bi bi-pencil"></i>
             </button>
+            <form method="POST" action="{{ url_for('admin.subject_clone', sid=s.id) }}">
+              <button type="submit" class="btn btn-sm btn-outline-secondary" title="Clonar materia"><i class="bi bi-copy"></i></button>
+            </form>
             <form method="POST" action="{{ url_for('admin.subject_delete', sid=s.id) }}"
                   onsubmit="return confirm('¿Borrar la materia {{ s.name | replace("'", "\\'") }}?')">
               <button type="submit" class="btn btn-sm btn-outline-danger" title="Borrar"><i class="bi bi-trash"></i></button>

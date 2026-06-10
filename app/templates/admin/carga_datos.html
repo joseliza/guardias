@@ -823,11 +823,13 @@ function driveLoad(type) {
     let msg = '';
     if (type === 'prof') {
       msg = `Creados: <strong>${d.created}</strong> — Actualizados: <strong>${d.updated}</strong> — Sin cambios: ${d.skipped}`;
+      if (d.created_no_abrev) msg += ` — Creados sin abreviatura: <strong>${d.created_no_abrev}</strong>`;
       if (d.not_found) msg += ` — No procesados: ${d.not_found}`;
       if (d.warnings && d.warnings.length) {
         msg += '<ul class="mb-0 mt-1">';
         d.warnings.forEach(w => {
           if (w.no_encontrado) msg += `<li class="text-warning">${w.abrev_nueva} — no se pudo crear/encontrar (${w.nombre || 'sin nombre'})</li>`;
+          else if (w.sin_abrev) msg += `<li class="text-info">${w.nombre}: creado sin abreviatura</li>`;
           else msg += `<li>${w.nombre}: abrev cambia de <em>${w.abrev_bd}</em> a <em>${w.abrev_nueva}</em></li>`;
         });
         msg += '</ul>';

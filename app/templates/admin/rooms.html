@@ -26,6 +26,9 @@
           <td><span class="badge bg-{{ 'success' if r.active else 'danger' }}">{{ 'Sí' if r.active else 'No' }}</span></td>
           <td class="d-flex gap-1">
             <a href="{{ url_for('admin.room_edit', rid=r.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+            <form method="POST" action="{{ url_for('admin.room_clone', rid=r.id) }}">
+              <button type="submit" class="btn btn-sm btn-outline-secondary" title="Clonar aula"><i class="bi bi-copy"></i></button>
+            </form>
             <form method="POST" action="{{ url_for('admin.room_delete', rid=r.id) }}"
                   onsubmit="return confirm('¿Borrar el aula {{ r.name }}?')">
               <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
