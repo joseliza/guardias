@@ -585,19 +585,19 @@
     </div>
   </div>
 
-  <!-- ── Importar horarios ──────────────────────────────────────────── -->
+  <!-- ── Carga de datos ─────────────────────────────────────────────── -->
   <div class="accordion-item">
     <h2 class="accordion-header">
       <button class="accordion-button collapsed" type="button"
               data-bs-toggle="collapse" data-bs-target="#section-import-schedules">
-        Importar horarios
+        Carga de datos
       </button>
     </h2>
     <div id="section-import-schedules" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
       <div class="accordion-body">
-        <p class="text-muted mb-3">Importa los horarios del profesorado desde un fichero CSV local o desde una hoja de Google Drive.</p>
+        <p class="text-muted mb-3">Importa profesores, materias, grupos y horarios desde Google Drive o desde ficheros CSV locales.</p>
         <a href="{{ url_for('admin.data_load') }}" class="btn btn-primary">
-          <i class="bi bi-calendar3"></i> Abrir wizard de importación
+          <i class="bi bi-cloud-upload"></i> Abrir wizard de carga de datos
         </a>
       </div>
     </div>
