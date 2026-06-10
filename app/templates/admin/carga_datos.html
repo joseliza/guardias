@@ -433,6 +433,11 @@
         </button>
       </div>
 
+      <button class="btn btn-outline-secondary mb-2" id="btn-create-rooms" onclick="createRoomsFromCsv()" {% if not prereqs or not prereqs.ok %}disabled title="Completa los requisitos anteriores"{% endif %}>
+        <i class="bi bi-door-open"></i> Crear aulas desde el CSV
+      </button>
+      <div id="rooms-result" class="d-none mb-2"></div>
+
       <button class="btn btn-outline-primary" id="btn-preview-sched" onclick="previewSchedules()" {% if not prereqs or not prereqs.ok %}disabled title="Completa los requisitos anteriores"{% endif %}>
         <i class="bi bi-search"></i> Previsualizar cambios
       </button>
@@ -984,10 +989,25 @@ function refreshPrereqs() {
     html += '</ul><button class="btn btn-sm btn-outline-secondary mb-3" onclick="refreshPrereqs()"><i class="bi bi-arrow-clockwise"></i> Actualizar estado</button>';
     box.innerHTML = html;
     document.getElementById('btn-preview-sched').disabled = !p.ok || p.raw_rows === 0;
+    document.getElementById('btn-create-rooms').disabled = !p.ok || p.raw_rows === 0;
 
     // Panel B (emails GW): banner de prerequisito según profesores cargados desde Drive
     const banner = document.getElementById('ua-prereq-banner');
     if (banner) banner.classList.toggle('d-none', (p.drive_teachers_count || 0) > 0);
+  });
+}
+
+function createRoomsFromCsv() {
+  document.getElementById('btn-create-rooms').disabled = true;
+  fetch('{{ url_for("admin.data_load_create_rooms") }}', { method: 'POST' })
+  .then(r => r.json()).then(d => {
+    document.getElementById('btn-create-rooms').disabled = false;
+    if (d.error) { showResult('rooms-result','<i class="bi bi-x-circle"></i> '+d.error,'danger'); return; }
+    if (d.created) {
+      showResult('rooms-result', `<i class="bi bi-check-circle-fill"></i> Aulas nuevas creadas: <strong>${d.created}</strong> (${d.names.join(', ')})`, 'success');
+    } else {
+      showResult('rooms-result', '<i class="bi bi-info-circle"></i> No hay aulas nuevas que crear: todas las del CSV ya existen.', 'secondary');
+    }
   });
 }
 

@@ -1330,6 +1330,36 @@ def data_load_prereqs():
     return jsonify(_dl_prereqs(year.id))
 
 
+@admin_bp.route("/carga-datos/crear-aulas", methods=["POST"])
+@login_required
+def data_load_create_rooms():
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    from app.models.raw_schedule import RawScheduleRow
+    from app.utils.school_year import get_current_school_year
+
+    year = get_current_school_year()
+    if not year:
+        return jsonify({"error": "Sin curso activo"}), 400
+
+    room_abbrs = {
+        r.room_abbr for r in RawScheduleRow.query.filter_by(school_year_id=year.id).all()
+        if r.room_abbr
+    }
+    existing = {r.name for r in Room.query.all()}
+    to_create = sorted(room_abbrs - existing)
+    for name in to_create:
+        db.session.add(Room(name=name))
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"created": len(to_create), "names": to_create})
+
+
 @admin_bp.route("/carga-datos/preview-horarios")
 @login_required
 def data_load_preview():
@@ -1354,6 +1384,7 @@ def data_load_preview():
     changed_entries = []
     unchanged = 0
     unresolved = []
+    seen_new_keys = {}  # (teacher_id, day_idx, slot) -> entry ya añadida a new_entries
 
     DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
 
@@ -1391,6 +1422,16 @@ def data_load_preview():
         }
 
         if not existing:
+            key = (teacher.id, day_idx, raw.slot_number)
+            prev = seen_new_keys.get(key)
+            if prev:
+                unresolved.append(
+                    f"Conflicto: {teacher.full_name} tiene más de una clase nueva el {entry['day']} "
+                    f"tramo {entry['slot']} (aulas: {prev['room'] or '—'} / {entry['room'] or '—'}) "
+                    f"— revisa el CSV o el horario manualmente."
+                )
+                continue
+            seen_new_keys[key] = entry
             new_entries.append(entry)
         else:
             changes = {}
@@ -1449,6 +1490,9 @@ def data_load_create_schedules():
 
     created = updated = rooms_created = 0
     errors = []
+    created_keys = set()  # (teacher_id, day_idx, slot) ya añadidas en este lote
+
+    DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
 
     for raw in rows:
         if raw.id not in raw_ids_new and raw.id not in set(changed_approved.values()):
@@ -1471,6 +1515,15 @@ def data_load_create_schedules():
         day_idx = raw.day_of_week - 1
 
         if raw.id in raw_ids_new:
+            key = (teacher.id, day_idx, raw.slot_number)
+            if key in created_keys:
+                day_label = DAYS[day_idx] if 0 <= day_idx < 5 else str(raw.day_of_week)
+                errors.append(
+                    f"Conflicto: {teacher.full_name} tiene más de una clase nueva el "
+                    f"{day_label} tramo {raw.slot_number} — se omite (aula: {raw.room_abbr or '—'})."
+                )
+                continue
+            created_keys.add(key)
             db.session.add(TeacherSchedule(
                 teacher_id=teacher.id,
                 group_id=group.id if group else None,
