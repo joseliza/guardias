@@ -74,6 +74,9 @@ def _transfer_email_to_active_year(teacher, exclude_ids=None):
 
     email = teacher.email
     teacher.email = f"_deleted_{teacher.id}@pendiente.local"
+    # Flush para liberar el email único antes de asignarlo a target (evita
+    # IntegrityError si el UPDATE de target se ejecuta antes que este).
+    db.session.flush()
     if not target.password_hash:
         target.password_hash = teacher.password_hash
     target.email = email
@@ -208,15 +211,36 @@ def teacher_delete(tid):
     from app.models.absence import Absence
     from app.models.schedule import TeacherSchedule
     from app.models.guard import Guard
+    from app.models.presence import UserPresence
+    from app.models.activity import ExtraActivity, ExtraActivityTeacher
+    from app.models.chat import ChatMessage, ChatClear
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
 
+    UserPresence.query.filter_by(user_id=tid).delete(synchronize_session=False)
     GuardRecord.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
     # Guardias generadas por ausencias de este profesor
     absence_ids = [a.id for a in Absence.query.filter_by(teacher_id=tid).all()]
     if absence_ids:
+        guard_ids = [g.id for g in Guard.query.filter(Guard.absence_id.in_(absence_ids)).all()]
+        if guard_ids:
+            # Registros de OTROS profesores que cubrieron estas guardias
+            GuardRecord.query.filter(GuardRecord.guard_id.in_(guard_ids)).delete(synchronize_session=False)
         Guard.query.filter(Guard.absence_id.in_(absence_ids)).delete(synchronize_session=False)
     Absence.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
     Absence.query.filter_by(reported_by_id=tid).update({"reported_by_id": None}, synchronize_session=False)
     TeacherSchedule.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
+    # Periodos de disponibilidad de este profesor (y sus restricciones de grupo)
+    period_ids = [p.id for p in AvailabilityPeriod.query.filter_by(teacher_id=tid).all()]
+    if period_ids:
+        AvailabilityPeriodGroup.query.filter(AvailabilityPeriodGroup.period_id.in_(period_ids)).delete(synchronize_session=False)
+        AvailabilityPeriod.query.filter(AvailabilityPeriod.id.in_(period_ids)).delete(synchronize_session=False)
+    AvailabilityPeriod.query.filter_by(created_by_id=tid).update({"created_by_id": current_user.id}, synchronize_session=False)
+    # Asignaciones a actividades extraescolares de este profesor; autoría se transfiere al admin que borra
+    ExtraActivityTeacher.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
+    ExtraActivity.query.filter_by(created_by_id=tid).update({"created_by_id": current_user.id}, synchronize_session=False)
+    # Mensajes de chat: se conservan, pero la autoría se transfiere al admin que borra
+    ChatMessage.query.filter_by(author_id=tid).update({"author_id": current_user.id}, synchronize_session=False)
+    ChatClear.query.filter_by(cleared_by_id=tid).update({"cleared_by_id": current_user.id}, synchronize_session=False)
     # Si este profesor era sustituto, reactivar al original
     if teacher.substitutes_id:
         original = User.query.get(teacher.substitutes_id)
@@ -249,6 +273,10 @@ def teacher_bulk_delete():
     from app.models.guard import GuardRecord, Guard
     from app.models.absence import Absence
     from app.models.schedule import TeacherSchedule
+    from app.models.presence import UserPresence
+    from app.models.activity import ExtraActivity, ExtraActivityTeacher
+    from app.models.chat import ChatMessage, ChatClear
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
 
     raw_ids = request.form.getlist("ids[]")
     try:
@@ -267,13 +295,30 @@ def teacher_bulk_delete():
         teacher = User.query.get(tid)
         if not teacher:
             continue
+        UserPresence.query.filter_by(user_id=tid).delete(synchronize_session=False)
         GuardRecord.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
         absence_ids = [a.id for a in Absence.query.filter_by(teacher_id=tid).all()]
         if absence_ids:
+            guard_ids = [g.id for g in Guard.query.filter(Guard.absence_id.in_(absence_ids)).all()]
+            if guard_ids:
+                # Registros de OTROS profesores que cubrieron estas guardias
+                GuardRecord.query.filter(GuardRecord.guard_id.in_(guard_ids)).delete(synchronize_session=False)
             Guard.query.filter(Guard.absence_id.in_(absence_ids)).delete(synchronize_session=False)
         Absence.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
         Absence.query.filter_by(reported_by_id=tid).update({"reported_by_id": None}, synchronize_session=False)
         TeacherSchedule.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
+        # Periodos de disponibilidad de este profesor (y sus restricciones de grupo)
+        period_ids = [p.id for p in AvailabilityPeriod.query.filter_by(teacher_id=tid).all()]
+        if period_ids:
+            AvailabilityPeriodGroup.query.filter(AvailabilityPeriodGroup.period_id.in_(period_ids)).delete(synchronize_session=False)
+            AvailabilityPeriod.query.filter(AvailabilityPeriod.id.in_(period_ids)).delete(synchronize_session=False)
+        AvailabilityPeriod.query.filter_by(created_by_id=tid).update({"created_by_id": current_user.id}, synchronize_session=False)
+        # Asignaciones a actividades extraescolares de este profesor; autoría se transfiere al admin que borra
+        ExtraActivityTeacher.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
+        ExtraActivity.query.filter_by(created_by_id=tid).update({"created_by_id": current_user.id}, synchronize_session=False)
+        # Mensajes de chat: se conservan, pero la autoría se transfiere al admin que borra
+        ChatMessage.query.filter_by(author_id=tid).update({"author_id": current_user.id}, synchronize_session=False)
+        ChatClear.query.filter_by(cleared_by_id=tid).update({"cleared_by_id": current_user.id}, synchronize_session=False)
         if teacher.substitutes_id:
             original = User.query.get(teacher.substitutes_id)
             if original:
@@ -1099,77 +1144,6 @@ def data_load_groups():
     return jsonify({"created": created, "updated": updated, "skipped": skipped})
 
 
-@admin_bp.route("/carga-datos/sustitutos", methods=["POST"])
-@login_required
-def data_load_substitutes():
-    """Carga masiva de sustituciones desde Drive: relaciona titular→sustituto y copia horario si existe."""
-    if not _require_management():
-        return jsonify({"error": "No autorizado"}), 403
-    from app.utils.school_year import get_current_school_year
-    data = request.get_json()
-    rows = data.get("rows", [])
-    titular_col = data.get("titular_col", "")
-    sustituto_col = data.get("sustituto_col", "")
-    selected = set(data.get("selected", []))
-    year_id = get_current_school_year().id
-
-    def find_by_fullname(fullname):
-        fullname = (fullname or "").strip()
-        if ", " not in fullname:
-            return None
-        idx = fullname.index(", ")
-        surname = fullname[:idx].strip()
-        name = fullname[idx + 2:].strip()
-        return User.query.filter(
-            User.surname.ilike(surname),
-            User.name.ilike(name),
-            User.school_year_id == year_id,
-        ).first()
-
-    created = schedule_copied = 0
-    not_found = []
-
-    for i, row in enumerate(rows):
-        if i not in selected:
-            continue
-        titular_name = (row.get(titular_col) or "").strip()
-        sustituto_name = (row.get(sustituto_col) or "").strip()
-        if not titular_name or not sustituto_name:
-            continue
-        titular = find_by_fullname(titular_name)
-        sustituto = find_by_fullname(sustituto_name)
-        if not titular:
-            not_found.append(f"Titular no encontrado: {titular_name}")
-            continue
-        if not sustituto:
-            not_found.append(f"Sustituto no encontrado: {sustituto_name}")
-            continue
-        if titular.id == sustituto.id:
-            continue
-        # Replicar la lógica de teacher_edit: borrar horario previo del sustituto y copiar el del titular
-        TeacherSchedule.query.filter_by(teacher_id=sustituto.id, school_year_id=year_id).delete(synchronize_session=False)
-        entries = TeacherSchedule.query.filter_by(teacher_id=titular.id, school_year_id=year_id).all()
-        for entry in entries:
-            db.session.add(TeacherSchedule(
-                teacher_id=sustituto.id,
-                group_id=entry.group_id,
-                day_of_week=entry.day_of_week,
-                slot_id=entry.slot_id,
-                is_guard_slot=entry.is_guard_slot,
-                room_id=entry.room_id,
-                notes=entry.notes,
-                school_year_id=year_id,
-            ))
-        if entries:
-            schedule_copied += 1
-        titular.active = False
-        sustituto.substitutes_id = titular.id
-        created += 1
-
-    db.session.commit()
-    return jsonify({"created": created, "schedule_copied": schedule_copied, "not_found": not_found})
-
-
 @admin_bp.route("/carga-datos/raw-horarios", methods=["POST"])
 @login_required
 def data_load_raw_schedule():
@@ -1273,6 +1247,18 @@ def _dl_prereqs(year_id):
         "substitutions_count": subs_count,
         "drive_teachers_count": drive_teachers_count,
     }
+
+
+@admin_bp.route("/carga-datos/prefs", methods=["GET", "POST"])
+@login_required
+def data_load_prefs():
+    if not _require_management():
+        return jsonify({"error": "No autorizado"}), 403
+    if request.method == "POST":
+        current_user.data_load_prefs = request.get_json(silent=True) or {}
+        db.session.commit()
+        return jsonify({"ok": True})
+    return jsonify(current_user.data_load_prefs or {})
 
 
 @admin_bp.route("/carga-datos/prereqs")

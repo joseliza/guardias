@@ -67,12 +67,11 @@
         <span id="drive-sheets-badges"></span>
       </div>
 
-      {# Tabs para los 3 tipos de datos de Drive #}
+      {# Tabs para los tipos de datos de Drive #}
       <ul class="nav nav-tabs mb-3" id="driveTabs">
         <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#dt-prof">Profesores</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dt-mat">Materias</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dt-grp">Grupos</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dt-sub">Sustituciones</button></li>
       </ul>
       <div class="tab-content">
 
@@ -188,50 +187,6 @@
             <button class="btn btn-primary btn-sm mt-2" onclick="driveLoad('grp')"><i class="bi bi-save"></i> Cargar grupos</button>
           </div>
           <div id="dg-result" class="d-none"></div>
-        </div>
-
-        {# ── Tab: sustituciones ── #}
-        <div class="tab-pane fade" id="dt-sub">
-          <div id="ds-prereq-banner" class="alert alert-warning small mb-3 {% if prereqs and prereqs.drive_teachers_count %}d-none{% endif %}">
-            <i class="bi bi-exclamation-triangle"></i> Aún no hay profesores cargados para el curso activo. Carga primero <strong>Profesores</strong> (pestaña anterior) — si titular o sustituto no existen todavía, la sustitución no se podrá crear.
-          </div>
-          <p class="text-muted small">Selecciona la hoja con las sustituciones. Cada fila debe tener el <strong>titular</strong> (quien está de baja) y el <strong>sustituto</strong>, ambos en formato <code>Apellidos, Nombre</code>.</p>
-          <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
-            <select class="form-select form-select-sm w-auto" id="ds-sheet"><option value="">— Seleccionar hoja —</option></select>
-            <label class="form-label small mb-0 text-nowrap">Ignorar filas:</label>
-            <input type="number" min="0" value="0" class="form-control form-control-sm" id="ds-skip" style="width:70px">
-            <button class="btn btn-sm btn-outline-primary" onclick="driveLoadCols('sub')"><i class="bi bi-table"></i> Cargar columnas</button>
-          </div>
-          <div id="ds-mapping" class="d-none row g-2 mb-2">
-            <div class="col-md-4">
-              <label class="form-label small">Titular (de baja)</label>
-              <select class="form-select form-select-sm" id="ds-col-titular"></select>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label small">Sustituto</label>
-              <select class="form-select form-select-sm" id="ds-col-sustituto"></select>
-            </div>
-            <div class="col-md-4 d-flex align-items-end">
-              <button class="btn btn-sm btn-outline-primary" onclick="drivePreview('sub')"><i class="bi bi-eye"></i> Previsualizar</button>
-            </div>
-          </div>
-          <div id="ds-preview" class="d-none mb-2">
-            <div class="d-flex gap-2 mb-1">
-              <button class="btn btn-sm btn-outline-secondary" onclick="driveSelectAll('sub',true)">Todo</button>
-              <button class="btn btn-sm btn-outline-secondary" onclick="driveSelectAll('sub',false)">Ninguno</button>
-            </div>
-            <div class="table-responsive" style="max-height:250px;overflow-y:auto;">
-              <table class="table table-sm table-hover mb-0">
-                <thead class="table-light sticky-top"><tr><th></th><th>Titular (de baja)</th><th>Sustituto</th></tr></thead>
-                <tbody id="ds-tbody"></tbody>
-              </table>
-            </div>
-            <div class="alert alert-info small mt-2 mb-1 py-2">
-              <i class="bi bi-info-circle"></i> El titular quedará <strong>inactivo</strong>. El sustituto se marcará como que <strong>sustituye a</strong> él. Si el titular ya tiene horario creado, se copiará automáticamente al sustituto.
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="driveLoad('sub')"><i class="bi bi-save"></i> Cargar sustituciones</button>
-          </div>
-          <div id="ds-result" class="d-none"></div>
         </div>
 
       </div>
@@ -435,7 +390,7 @@
             </li>
             <li class="{{ 'prereq-ok' if p.substitutions_count else 'text-muted' }}">
               <i class="bi bi-{{ 'check-circle-fill' if p.substitutions_count else 'dash-circle' }}"></i>
-              Sustituciones: {% if p.substitutions_count %}<strong>{{ p.substitutions_count }}</strong> configuradas{% else %}ninguna — carga desde Panel A → Sustituciones si las hay{% endif %}
+              Sustituciones: {% if p.substitutions_count %}<strong>{{ p.substitutions_count }}</strong> configuradas{% else %}ninguna — asígnalas editando el profesor en Admin → Profesores{% endif %}
             </li>
           </ul>
           {% endif %}
@@ -492,10 +447,12 @@ const driveState = {
   prof: { sheet: null, rows: [], cols: [] },
   mat:  { sheet: null, rows: [], cols: [] },
   grp:  { sheet: null, rows: [], cols: [] },
-  sub:  { sheet: null, rows: [], cols: [] },
 };
 let driveSheets = [];
 let diffData = { new: [], changed: [] };
+
+// Preferencias del wizard recordadas para este usuario (hojas, columnas, separador...)
+let dlPrefs = {};
 
 // ── Utilidades CSV ─────────────────────────────────────────────────────────────
 
@@ -641,6 +598,13 @@ function uaReloadCols() {
   document.getElementById('ua-col-nombre').value    = autoMatch(uaColumns, ['first','nombre','name']);
   document.getElementById('ua-col-apellidos').value = autoMatch(uaColumns, ['last','apellid','surname']);
   document.getElementById('ua-col-email').value     = autoMatch(uaColumns, ['email','correo','mail']);
+  // Restaurar mapeo de columnas guardado, si la columna existe en este fichero
+  if (dlPrefs.ua) {
+    ['nombre','apellidos','email'].forEach(f => {
+      const saved = dlPrefs.ua[`col_${f}`];
+      if (saved && uaColumns.includes(saved)) document.getElementById(`ua-col-${f}`).value = saved;
+    });
+  }
   document.getElementById('ua-mapping').classList.remove('d-none');
   document.getElementById('ua-preview').classList.add('d-none');
   document.getElementById('ua-result').classList.add('d-none');
@@ -651,7 +615,7 @@ document.getElementById('ua-file').addEventListener('change', function() {
   const reader = new FileReader();
   reader.onload = e => {
     uaRawText = e.target.result;
-    document.getElementById('ua-skip').value = 0;
+    document.getElementById('ua-skip').value = (dlPrefs.ua && dlPrefs.ua.skip) || 0;
     document.getElementById('btn-ua-reload').disabled = false;
     const zone = document.getElementById('ua-upload');
     const old = zone.querySelector('.upload-info');
@@ -743,20 +707,29 @@ function driveLoadSheets() {
     driveSheets = d.sheets || [];
     const badges = document.getElementById('drive-sheets-badges');
     badges.innerHTML = driveSheets.map(s => `<span class="col-badge">${s.title}</span>`).join('');
-    // Llenar los selects de hojas en los 4 tabs
-    ['dp-sheet','dm-sheet','dg-sheet','ds-sheet'].forEach(sid => {
-      const sel = document.getElementById(sid);
+    // Llenar los selects de hojas en las pestañas
+    const driveTypePfx = {prof:'dp', mat:'dm', grp:'dg'};
+    Object.values(driveTypePfx).forEach(sid => {
+      const sel = document.getElementById(`${sid}-sheet`);
       sel.innerHTML = '<option value="">— Seleccionar hoja —</option>';
       driveSheets.forEach(s => {
         const o = document.createElement('option'); o.value = s.title; o.textContent = s.title; sel.appendChild(o);
       });
     });
     document.getElementById('drive-sheets-list').classList.remove('d-none');
+    // Restaurar hoja guardada y recargar columnas automáticamente
+    Object.entries(driveTypePfx).forEach(([type, pfx]) => {
+      const saved = dlPrefs.drive && dlPrefs.drive[type];
+      if (saved && saved.sheet && driveSheets.some(s => s.title === saved.sheet)) {
+        document.getElementById(`${pfx}-sheet`).value = saved.sheet;
+        driveLoadCols(type);
+      }
+    });
   });
 }
 
 function driveLoadCols(type) {
-  const pfx = {prof:'dp', mat:'dm', grp:'dg', sub:'ds'}[type];
+  const pfx = {prof:'dp', mat:'dm', grp:'dg'}[type];
   const sheet = document.getElementById(`${pfx}-sheet`).value;
   const fid = document.getElementById('drive-file-id').value.trim();
   const skip = parseInt(document.getElementById(`${pfx}-skip`).value) || 0;
@@ -778,18 +751,18 @@ function driveLoadCols(type) {
     driveState[type].rows = parsed.rows;
     driveState[type].cols = parsed.cols;
     driveState[type].sheet = sheet;
-    if (type === 'sub') {
-      ['titular','sustituto'].forEach(fid2 => {
-        fillSelect(document.getElementById(`${pfx}-col-${fid2}`), parsed.cols);
+    ['abrev','nombre'].forEach(fid2 => {
+      fillSelect(document.getElementById(`${pfx}-col-${fid2}`), parsed.cols);
+    });
+    document.getElementById(`${pfx}-col-abrev`).value  = autoMatch(parsed.cols, ['abrev','abr','cod','code','short']);
+    document.getElementById(`${pfx}-col-nombre`).value = autoMatch(parsed.cols, ['nombre','name','completo','full','apellido']);
+    // Restaurar mapeo de columnas guardado, si la columna existe en esta hoja
+    const saved = dlPrefs.drive && dlPrefs.drive[type];
+    if (saved) {
+      ['abrev','nombre'].forEach(col => {
+        const v = saved[`col_${col}`];
+        if (v && parsed.cols.includes(v)) document.getElementById(`${pfx}-col-${col}`).value = v;
       });
-      document.getElementById(`${pfx}-col-titular`).value   = autoMatch(parsed.cols, ['titular','baja','ausente','original']);
-      document.getElementById(`${pfx}-col-sustituto`).value = autoMatch(parsed.cols, ['sustituto','sustit','sust','interino']);
-    } else {
-      ['abrev','nombre'].forEach(fid2 => {
-        fillSelect(document.getElementById(`${pfx}-col-${fid2}`), parsed.cols);
-      });
-      document.getElementById(`${pfx}-col-abrev`).value  = autoMatch(parsed.cols, ['abrev','abr','cod','code','short']);
-      document.getElementById(`${pfx}-col-nombre`).value = autoMatch(parsed.cols, ['nombre','name','completo','full','apellido']);
     }
     document.getElementById(`${pfx}-mapping`).classList.remove('d-none');
     document.getElementById(`${pfx}-preview`).classList.add('d-none');
@@ -797,24 +770,6 @@ function driveLoadCols(type) {
 }
 
 function drivePreview(type) {
-  if (type === 'sub') {
-    const titularC   = document.getElementById('ds-col-titular').value;
-    const sustitutoC = document.getElementById('ds-col-sustituto').value;
-    if (!titularC || !sustitutoC) { alert('Selecciona las columnas de titular y sustituto.'); return; }
-    const tbody = document.getElementById('ds-tbody');
-    tbody.innerHTML = '';
-    driveState.sub.rows.forEach((row, i) => {
-      const titular   = (row[titularC]||'').trim();
-      const sustituto = (row[sustitutoC]||'').trim();
-      if (!titular && !sustituto) return;
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td><input type="checkbox" class="dr-chk-sub" value="${i}" checked></td>
-        <td>${titular}</td><td>${sustituto}</td>`;
-      tbody.appendChild(tr);
-    });
-    document.getElementById('ds-preview').classList.remove('d-none');
-    return;
-  }
   const pfx = {prof:'dp', mat:'dm', grp:'dg'}[type];
   const abrevC = document.getElementById(`${pfx}-col-abrev`).value;
   const nombreC = document.getElementById(`${pfx}-col-nombre`).value;
@@ -844,28 +799,6 @@ function driveSelectAll(type, v) {
 }
 
 function driveLoad(type) {
-  if (type === 'sub') {
-    const titularC   = document.getElementById('ds-col-titular').value;
-    const sustitutoC = document.getElementById('ds-col-sustituto').value;
-    const selected = [...document.querySelectorAll('.dr-chk-sub:checked')].map(c => parseInt(c.value));
-    fetch('{{ url_for("admin.data_load_substitutes") }}', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ rows: driveState.sub.rows, titular_col: titularC, sustituto_col: sustitutoC, selected })
-    })
-    .then(r => r.json()).then(d => {
-      if (d.error) { showResult('ds-result', `<i class="bi bi-x-circle"></i> ${d.error}`, 'danger'); return; }
-      let msg = `Sustituciones creadas: <strong>${d.created}</strong>`;
-      if (d.schedule_copied) msg += ` — Horarios copiados: <strong>${d.schedule_copied}</strong>`;
-      if (d.not_found && d.not_found.length) {
-        msg += `<br><strong>No encontrados:</strong><ul class="mb-0">`;
-        d.not_found.forEach(n => { msg += `<li>${n}</li>`; });
-        msg += '</ul>';
-      }
-      const type2 = d.not_found && d.not_found.length ? 'warning' : 'success';
-      showResult('ds-result', `<i class="bi bi-check-circle"></i> ` + msg, type2);
-    });
-    return;
-  }
   const pfx = {prof:'dp', mat:'dm', grp:'dg'}[type];
   const abrevC = document.getElementById(`${pfx}-col-abrev`).value;
   const nombreC = document.getElementById(`${pfx}-col-nombre`).value;
@@ -934,6 +867,9 @@ function hcReloadCols() {
     const sel = document.getElementById(`hc-col-${fid}`);
     fillSelect(sel, hcColumns);
     sel.value = autoMatch(hcColumns, hints[fid]);
+    // Restaurar mapeo de columnas guardado, si la columna existe en este fichero
+    const saved = dlPrefs.hc && dlPrefs.hc.cols && dlPrefs.hc.cols[fid];
+    if (saved && hcColumns.includes(saved)) sel.value = saved;
   });
   document.getElementById('hc-mapping').classList.remove('d-none');
   document.getElementById('hc-preview').classList.add('d-none');
@@ -945,7 +881,7 @@ document.getElementById('hc-file').addEventListener('change', function() {
   const reader = new FileReader();
   reader.onload = e => {
     hcRawText = e.target.result;
-    document.getElementById('hc-skip').value = 0;
+    document.getElementById('hc-skip').value = (dlPrefs.hc && dlPrefs.hc.skip) || 0;
     document.getElementById('btn-hc-reload').disabled = false;
     // Limpiar info anterior antes de mostrar la nueva
     const zone = document.getElementById('hc-upload');
@@ -1035,17 +971,15 @@ function refreshPrereqs() {
     const subIcon = nSubs > 0 ? 'check-circle-fill text-success' : 'dash-circle text-muted';
     const subLabel = nSubs > 0
       ? `Sustituciones: <strong>${nSubs}</strong> configuradas`
-      : 'Sustituciones: ninguna — carga desde Panel A → Sustituciones si las hay';
+      : 'Sustituciones: ninguna — asígnalas editando el profesor en Admin → Profesores';
     html += `<li><i class="bi bi-${subIcon}"></i> ${subLabel}</li>`;
     html += '</ul><button class="btn btn-sm btn-outline-secondary mb-3" onclick="refreshPrereqs()"><i class="bi bi-arrow-clockwise"></i> Actualizar estado</button>';
     box.innerHTML = html;
     document.getElementById('btn-preview-sched').disabled = !p.ok || p.raw_rows === 0;
 
-    // Panel B (emails GW) y Sustituciones: banner de prerequisito según profesores cargados desde Drive
+    // Panel B (emails GW): banner de prerequisito según profesores cargados desde Drive
     const banner = document.getElementById('ua-prereq-banner');
     if (banner) banner.classList.toggle('d-none', (p.drive_teachers_count || 0) > 0);
-    const subBanner = document.getElementById('ds-prereq-banner');
-    if (subBanner) subBanner.classList.toggle('d-none', (p.drive_teachers_count || 0) > 0);
   });
 }
 
@@ -1127,6 +1061,101 @@ function createSchedules() {
     showResult('sched-result', msg, 'success');
     document.getElementById('sched-preview-area').classList.add('d-none');
     refreshPrereqs();
+  });
+}
+
+// ── Preferencias del wizard (recordadas por usuario) ───────────────────────────
+let dlPrefsSaveTimer = null;
+function saveDlPrefs() {
+  clearTimeout(dlPrefsSaveTimer);
+  dlPrefsSaveTimer = setTimeout(() => {
+    fetch('{{ url_for("admin.data_load_prefs") }}', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(dlPrefs)
+    });
+  }, 400);
+}
+
+function dlSetDrive(type, field, value) {
+  dlPrefs.drive = dlPrefs.drive || {};
+  dlPrefs.drive[type] = dlPrefs.drive[type] || {};
+  dlPrefs.drive[type][field] = value;
+  saveDlPrefs();
+}
+
+// Aplica las preferencias estáticas (separadores, "saltar filas", checkboxes) al cargar la página
+function applyDlPrefsStatic() {
+  if (dlPrefs.hc) {
+    if (dlPrefs.hc.sep) {
+      const r = document.querySelector(`input[name="hcsep"][value="${dlPrefs.hc.sep}"]`);
+      if (r) r.checked = true;
+    }
+    if (dlPrefs.hc.skip != null) document.getElementById('hc-skip').value = dlPrefs.hc.skip;
+    if (dlPrefs.hc.ignore_quotes != null) document.getElementById('hc-ignore-quotes').checked = dlPrefs.hc.ignore_quotes;
+  }
+  if (dlPrefs.ua && dlPrefs.ua.skip != null) {
+    document.getElementById('ua-skip').value = dlPrefs.ua.skip;
+  }
+  const driveTypePfx = {prof:'dp', mat:'dm', grp:'dg'};
+  Object.entries(driveTypePfx).forEach(([type, pfx]) => {
+    const saved = dlPrefs.drive && dlPrefs.drive[type];
+    if (saved && saved.skip != null) document.getElementById(`${pfx}-skip`).value = saved.skip;
+  });
+}
+
+fetch('{{ url_for("admin.data_load_prefs") }}')
+.then(r => r.json()).then(p => {
+  dlPrefs = p || {};
+  applyDlPrefsStatic();
+});
+
+// Listeners para guardar automáticamente las selecciones del wizard
+{
+  const driveTypePfx = {prof:'dp', mat:'dm', grp:'dg'};
+  Object.entries(driveTypePfx).forEach(([type, pfx]) => {
+    document.getElementById(`${pfx}-sheet`).addEventListener('change', e => dlSetDrive(type, 'sheet', e.target.value));
+    document.getElementById(`${pfx}-skip`).addEventListener('change', e => dlSetDrive(type, 'skip', parseInt(e.target.value) || 0));
+    document.getElementById(`${pfx}-col-abrev`).addEventListener('change', e => dlSetDrive(type, 'col_abrev', e.target.value));
+    document.getElementById(`${pfx}-col-nombre`).addEventListener('change', e => dlSetDrive(type, 'col_nombre', e.target.value));
+  });
+
+  document.getElementById('ua-skip').addEventListener('change', e => {
+    dlPrefs.ua = dlPrefs.ua || {};
+    dlPrefs.ua.skip = parseInt(e.target.value) || 0;
+    saveDlPrefs();
+  });
+  ['nombre','apellidos','email'].forEach(f => {
+    document.getElementById(`ua-col-${f}`).addEventListener('change', e => {
+      dlPrefs.ua = dlPrefs.ua || {};
+      dlPrefs.ua[`col_${f}`] = e.target.value;
+      saveDlPrefs();
+    });
+  });
+
+  document.querySelectorAll('input[name="hcsep"]').forEach(r => {
+    r.addEventListener('change', () => {
+      dlPrefs.hc = dlPrefs.hc || {};
+      dlPrefs.hc.sep = document.querySelector('input[name="hcsep"]:checked').value;
+      saveDlPrefs();
+    });
+  });
+  document.getElementById('hc-skip').addEventListener('change', e => {
+    dlPrefs.hc = dlPrefs.hc || {};
+    dlPrefs.hc.skip = parseInt(e.target.value) || 0;
+    saveDlPrefs();
+  });
+  document.getElementById('hc-ignore-quotes').addEventListener('change', e => {
+    dlPrefs.hc = dlPrefs.hc || {};
+    dlPrefs.hc.ignore_quotes = e.target.checked;
+    saveDlPrefs();
+  });
+  ['grupo','abrev_prof','abrev_asig','aula','dia','tramo'].forEach(fid => {
+    document.getElementById(`hc-col-${fid}`).addEventListener('change', e => {
+      dlPrefs.hc = dlPrefs.hc || {};
+      dlPrefs.hc.cols = dlPrefs.hc.cols || {};
+      dlPrefs.hc.cols[fid] = e.target.value;
+      saveDlPrefs();
+    });
   });
 }
 

@@ -36,6 +36,8 @@ class User(UserMixin, db.Model):
     # Integración Google Drive: refresh_token OAuth y último file_id utilizado
     google_drive_token = db.Column(db.Text, nullable=True)
     google_drive_file_id = db.Column(db.String(200), nullable=True)
+    # Preferencias recordadas del wizard de carga de datos (hojas, mapeo de columnas, separador...)
+    data_load_prefs = db.Column(db.JSON, nullable=True)
     substitutes = db.relationship(
         "User",
         primaryjoin="foreign(User.substitutes_id) == User.id",
