@@ -499,8 +499,11 @@ function parseCSVLine(line, sep, ignoreQuotes) {
 
   // Fallback: si RFC 4180 produce 1 campo y la línea está envuelta en "...",
   // es el formato de Sauce/Pincel: "val1;""val2"";val3"
-  if (result.length === 1 && line.startsWith('"') && line.endsWith('"') && line.length > 2) {
-    const inner = line.slice(1, -1).replace(/""/g, '"');
+  // Solo aplica si hay comillas escapadas ("") dentro: si no, es un único
+  // campo RFC4180 normal que contiene el separador (p.ej. "Apellidos, Nombre").
+  const innerRaw = line.slice(1, -1);
+  if (result.length === 1 && line.startsWith('"') && line.endsWith('"') && line.length > 2 && innerRaw.includes('""')) {
+    const inner = innerRaw.replace(/""/g, '"');
     const fields = inner.split(sep).map(f => f.replace(/^"|"$/g, '').trim());
     if (fields.length > 1) return fields;
   }
