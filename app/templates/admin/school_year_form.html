@@ -39,6 +39,47 @@
   </div>
 </div>
 
+{% if prev_year %}
+<div class="card mb-4">
+  <div class="card-header fw-semibold">
+    <i class="bi bi-copy"></i> Copiar datos del curso anterior ({{ prev_year.name }})
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      Copia al curso <strong>{{ year.name }}</strong> los datos del curso {{ prev_year.name }}.
+      Los elementos que ya existan (mismo nombre o abreviatura) no se duplican, así que
+      puedes repetir la copia sin riesgo. Las <strong>aulas no necesitan copiarse</strong>:
+      son comunes a todos los cursos.
+    </p>
+    <form method="POST" action="{{ url_for('admin.school_year_copy_data', year_id=year.id) }}"
+          onsubmit="return confirm('¿Copiar los datos seleccionados del curso {{ prev_year.name }} al curso {{ year.name }}?')">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="copy_teachers" id="edit_copy_teachers" checked>
+        <label class="form-check-label" for="edit_copy_teachers">Profesores</label>
+        {% if year.is_current %}
+        <div class="form-text">El email y la contraseña de cada profesor pasan a su ficha del nuevo curso; podrán seguir entrando con las mismas credenciales. Los puntos empiezan a 0.</div>
+        {% else %}
+        <div class="form-text">Como este curso no es el vigente, los profesores se copian con email pendiente para no afectar al curso en uso.</div>
+        {% endif %}
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="copy_groups" id="edit_copy_groups" checked>
+        <label class="form-check-label" for="edit_copy_groups">Grupos</label>
+        <div class="form-text">Con su multiplicador de dificultad.</div>
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="copy_subjects" id="edit_copy_subjects" checked>
+        <label class="form-check-label" for="edit_copy_subjects">Materias</label>
+        <div class="form-text">Incluidas las de guardia (GUARD, GUA-2) y desdoble.</div>
+      </div>
+      <button type="submit" class="btn btn-outline-primary">
+        <i class="bi bi-copy"></i> Copiar de {{ prev_year.name }}
+      </button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 {% if not year.is_current %}
 <div class="card border-danger">
   <div class="card-header bg-danger text-white fw-semibold">

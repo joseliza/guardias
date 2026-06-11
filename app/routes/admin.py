@@ -2408,6 +2408,121 @@ def points_reset_teacher(tid):
 
 # ── Cursos escolares ──────────────────────────────────────────────────────────
 
+def _previous_school_year(year):
+    """Devuelve el curso inmediatamente anterior al dado (por fecha de inicio)."""
+    from app.models.school_year import SchoolYear
+    return (SchoolYear.query
+            .filter(SchoolYear.start_date < year.start_date)
+            .order_by(SchoolYear.start_date.desc())
+            .first())
+
+
+def _copy_year_data(src_year, dst_year, copy_teachers=False, copy_groups=False, copy_subjects=False):
+    """Copia profesores, grupos y/o materias de src_year a dst_year.
+
+    Es idempotente: los elementos que ya existen en el curso destino (mismo
+    nombre o abreviatura) se saltan, así que puede ejecutarse varias veces.
+
+    Profesores: si el curso destino es el vigente, el email real y la
+    contraseña se transfieren a la fila nueva y la antigua queda archivada
+    (_archived_...@pendiente.local), igual que hace la carga de datos. Si el
+    destino no es el vigente, la fila nueva recibe un email marcador para no
+    romper el login del curso en uso. Los puntos empiezan a 0 y no se copian
+    los vínculos de sustitución.
+
+    Las aulas no se copian porque son globales (no dependen del curso).
+    Devuelve un dict de contadores. El llamador hace commit.
+    """
+    from app.models.subject import Subject
+
+    counts = {"teachers": 0, "groups": 0, "subjects": 0, "skipped": 0}
+
+    if copy_groups:
+        existing = {(g.name or "").strip().lower()
+                    for g in Group.query.filter_by(school_year_id=dst_year.id).all()}
+        for g in Group.query.filter_by(school_year_id=src_year.id).all():
+            if (g.name or "").strip().lower() in existing:
+                counts["skipped"] += 1
+                continue
+            db.session.add(Group(
+                school_year_id=dst_year.id,
+                name=g.name,
+                abbreviation=g.abbreviation,
+                high_difficulty=g.high_difficulty,
+                difficulty_multiplier=g.difficulty_multiplier,
+                active=g.active,
+            ))
+            counts["groups"] += 1
+
+    if copy_subjects:
+        existing = {(s.name or "").strip().lower()
+                    for s in Subject.query.filter_by(school_year_id=dst_year.id).all()}
+        for s in Subject.query.filter_by(school_year_id=src_year.id).all():
+            if (s.name or "").strip().lower() in existing:
+                counts["skipped"] += 1
+                continue
+            db.session.add(Subject(
+                school_year_id=dst_year.id,
+                name=s.name,
+                abbreviation=s.abbreviation,
+                guard_type=s.guard_type,
+            ))
+            counts["subjects"] += 1
+
+    if copy_teachers:
+        existing_users = User.query.filter(User.school_year_id == dst_year.id,
+                                           User.role != "display").all()
+        by_abbr = {u.abbreviation.strip().lower() for u in existing_users if u.abbreviation}
+        by_name = {(u.surname.strip().lower(), u.name.strip().lower()) for u in existing_users}
+        src_teachers = User.query.filter(User.school_year_id == src_year.id,
+                                         User.role != "display").all()
+        for t in src_teachers:
+            if ((t.abbreviation and t.abbreviation.strip().lower() in by_abbr)
+                    or (t.surname.strip().lower(), t.name.strip().lower()) in by_name):
+                counts["skipped"] += 1
+                continue
+            new_t = User(
+                name=t.name,
+                surname=t.surname,
+                abbreviation=t.abbreviation,
+                role=t.role,
+                track_points=t.track_points,
+                active=t.active,
+                receive_emails=t.receive_emails,
+                school_year_id=dst_year.id,
+                points=0.0,
+            )
+            if dst_year.is_current and not _is_placeholder_email(t.email):
+                email = t.email
+                t.email = f"_archived_{t.id}@pendiente.local"
+                # Flush para liberar el email único antes de insertarlo en la
+                # fila nueva (los INSERT se ejecutan antes que los UPDATE).
+                db.session.flush()
+                new_t.email = email
+                new_t.password_hash = t.password_hash
+            else:
+                new_t.email = f"_copia_{t.id}_{dst_year.id}@pendiente.local"
+                new_t.password_hash = t.password_hash or ""
+                new_t.receive_emails = False
+            db.session.add(new_t)
+            counts["teachers"] += 1
+
+    return counts
+
+
+def _copy_summary_msg(counts):
+    parts = []
+    if counts["teachers"]:
+        parts.append(f"{counts['teachers']} profesores copiados.")
+    if counts["groups"]:
+        parts.append(f"{counts['groups']} grupos copiados.")
+    if counts["subjects"]:
+        parts.append(f"{counts['subjects']} materias copiadas.")
+    if counts["skipped"]:
+        parts.append(f"{counts['skipped']} elementos ya existían y se han saltado.")
+    return " ".join(parts)
+
+
 @admin_bp.route("/cursos")
 @login_required
 def school_years():
@@ -2442,7 +2557,6 @@ def school_year_create():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     from app.models.school_year import SchoolYear
-    from app.models.subject import Subject
     from app.utils.school_year import year_dates, get_current_school_year
 
     name = request.form.get("name", "").strip()
@@ -2462,39 +2576,20 @@ def school_year_create():
     db.session.add(new_year)
     db.session.flush()
 
-    copy_groups   = request.form.get("copy_groups") == "on"
-    copy_subjects = request.form.get("copy_subjects") == "on"
-    copied_g = copied_s = 0
-
-    if copy_groups and prev_year:
-        for g in Group.query.filter_by(school_year_id=prev_year.id).all():
-            db.session.add(Group(
-                school_year_id=new_year.id,
-                name=g.name,
-                abbreviation=g.abbreviation,
-                high_difficulty=g.high_difficulty,
-                difficulty_multiplier=g.difficulty_multiplier,
-                active=True,
-            ))
-            copied_g += 1
-
-    if copy_subjects and prev_year:
-        for s in Subject.query.filter_by(school_year_id=prev_year.id).all():
-            db.session.add(Subject(
-                school_year_id=new_year.id,
-                name=s.name,
-                abbreviation=s.abbreviation,
-            ))
-            copied_s += 1
+    counts = {"teachers": 0, "groups": 0, "subjects": 0, "skipped": 0}
+    if prev_year:
+        counts = _copy_year_data(
+            prev_year, new_year,
+            copy_teachers=request.form.get("copy_teachers") == "on",
+            copy_groups=request.form.get("copy_groups") == "on",
+            copy_subjects=request.form.get("copy_subjects") == "on",
+        )
 
     from app.utils.points import recalculate_points_for_year
     recalculate_points_for_year(new_year)
 
     db.session.commit()
-    msg = f"Curso {name} creado."
-    if copied_g: msg += f" {copied_g} grupos copiados."
-    if copied_s: msg += f" {copied_s} materias copiadas."
-    flash(msg, "success")
+    flash(f"Curso {name} creado. {_copy_summary_msg(counts)}".strip(), "success")
     return redirect(url_for("admin.config"))
 
 
@@ -2553,7 +2648,37 @@ def school_year_edit(year_id):
         flash(f"Curso {name} actualizado.", "success")
         return redirect(url_for("admin.config"))
 
-    return render_template("admin/school_year_form.html", year=year)
+    return render_template("admin/school_year_form.html", year=year,
+                           prev_year=_previous_school_year(year))
+
+
+@admin_bp.route("/cursos/<int:year_id>/copiar-datos", methods=["POST"])
+@login_required
+def school_year_copy_data(year_id):
+    """Copia profesores/grupos/materias del curso anterior al curso dado."""
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.models.school_year import SchoolYear
+
+    year = SchoolYear.query.get_or_404(year_id)
+    prev_year = _previous_school_year(year)
+    if not prev_year:
+        flash("No hay ningún curso anterior del que copiar datos.", "warning")
+        return redirect(url_for("admin.school_year_edit", year_id=year_id))
+
+    counts = _copy_year_data(
+        prev_year, year,
+        copy_teachers=request.form.get("copy_teachers") == "on",
+        copy_groups=request.form.get("copy_groups") == "on",
+        copy_subjects=request.form.get("copy_subjects") == "on",
+    )
+    db.session.commit()
+
+    msg = _copy_summary_msg(counts)
+    if not msg:
+        msg = "No se ha copiado nada (no había nada seleccionado o nada que copiar)."
+    flash(f"Copia desde {prev_year.name}: {msg}", "success")
+    return redirect(url_for("admin.school_year_edit", year_id=year_id))
 
 
 @admin_bp.route("/cursos/<int:year_id>/borrar", methods=["POST"])

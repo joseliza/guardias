@@ -85,6 +85,22 @@
                      value="{{ next_end | fecha_es('%d/%m/%Y') }}">
             </div>
           </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="copy_teachers" id="copy_teachers" checked>
+            <label class="form-check-label small" for="copy_teachers">Copiar profesores del curso anterior</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="copy_groups" id="copy_groups" checked>
+            <label class="form-check-label small" for="copy_groups">Copiar grupos del curso anterior</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="copy_subjects" id="copy_subjects" checked>
+            <label class="form-check-label small" for="copy_subjects">Copiar materias del curso anterior</label>
+          </div>
+          <div class="form-text mb-3">
+            Los profesores conservan su email y contraseña (sus puntos empiezan a 0).
+            Las aulas no necesitan copiarse: son comunes a todos los cursos.
+          </div>
           <button type="submit" class="btn btn-primary w-100">
             <i class="bi bi-arrow-right-circle"></i> Crear e iniciar curso
           </button>
