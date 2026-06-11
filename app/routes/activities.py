@@ -219,10 +219,6 @@ def delete(aid):
         return redirect(url_for("dashboard.index"))
 
     activity = ExtraActivity.query.get_or_404(aid)
-    from datetime import date as _date
-    if activity.date < _date.today():
-        flash("No se puede eliminar una actividad pasada.", "warning")
-        return redirect(url_for("activities.edit", aid=aid))
     from app.models.guard import Guard, GuardRecord
 
     for at in activity.accompanying_teachers:

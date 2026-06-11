@@ -234,12 +234,18 @@
                       <div class="mb-3">
                         <label class="form-label">Profesor disponible {% if points_enabled %}<small class="text-muted">(ordenado por puntos)</small>{% endif %}</label>
                         <select name="teacher_id" class="form-select" required>
-                          {% set avail = available_by_slot.get(slot.id, ([], [])) %}
+                          {% set avail = available_by_slot.get(slot.id, ([], [], [], {})) %}
                           {% set prim = avail[0] if avail is iterable and avail | length > 0 else [] %}
-                          {% set sec  = avail[1] if avail is iterable and avail | length > 1 else [] %}
+                          {% set ex   = avail[1] if avail is iterable and avail | length > 1 else [] %}
+                          {% set sec  = avail[2] if avail is iterable and avail | length > 2 else [] %}
                           {% if prim %}
                           <optgroup label="— Guardia asignada —">
                             {% for t in prim %}<option value="{{ t.id }}">{{ t.display_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
+                          </optgroup>
+                          {% endif %}
+                          {% if ex %}
+                          <optgroup label="— Guardia EX (actividad extraescolar) —">
+                            {% for t in ex %}<option value="{{ t.id }}">{{ t.display_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
                           </optgroup>
                           {% endif %}
                           {% if sec %}
@@ -247,7 +253,7 @@
                             {% for t in sec %}<option value="{{ t.id }}">{{ t.display_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
                           </optgroup>
                           {% endif %}
-                          {% if not prim and not sec %}
+                          {% if not prim and not ex and not sec %}
                           <option disabled>No hay profesores disponibles</option>
                           {% endif %}
                         </select>
@@ -316,6 +322,33 @@
             {% endfor %}
           {% else %}
           <div class="guard-row text-muted small">Sin ausencias registradas en este tramo.</div>
+          {% endif %}
+        </div>
+
+        {# Profesores de guardia disponibles (visible aunque no haya ausencias) #}
+        {% set avail = available_by_slot.get(slot.id, ([], [], [], {})) %}
+        <div class="px-3 py-2 border-top bg-light small d-flex flex-wrap align-items-center gap-2">
+          <div class="d-flex flex-wrap gap-1 align-items-center">
+            <span class="text-muted me-1">Guardia:</span>
+            {% for t in avail[0] %}
+            <span class="badge bg-success">
+              <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+            </span>
+            {% else %}
+            <span class="text-muted fst-italic">Ninguno asignado.</span>
+            {% endfor %}
+          </div>
+          {% if avail[1] %}
+          <div class="vr mx-1"></div>
+          <div class="d-flex flex-wrap gap-1 align-items-center">
+            <span class="text-muted me-1">Guardia EX:</span>
+            {% for t in avail[1] %}
+            <span class="badge text-white" style="background-color:#0d9488!important"
+                  title="Disponible por actividad extraescolar">
+              <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+            </span>
+            {% endfor %}
+          </div>
           {% endif %}
         </div>
       </div>

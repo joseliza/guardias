@@ -280,9 +280,12 @@
             {% endfor %}
           </tbody>
         </table>
+      </div>
+      {% else %}
+      <div class="card-body py-2 text-muted small">Sin ausencias en este tramo.</div>
+      {% endif %}
 
-        {# Panel de profesores de guardia #}
-        {% if item.guard_teachers or item.ex_guard_teachers or item.extra_teachers or item.overload %}
+      {# Panel de profesores de guardia (visible aunque no haya ausencias) #}
         <div class="px-3 py-2 border-top bg-light small">
           {% if item.overload %}
           <div class="alert alert-warning py-1 px-2 mb-2 small">
@@ -386,11 +389,6 @@
             {% endif %}
           </div>
         </div>
-        {% endif %}
-      </div>
-      {% else %}
-      <div class="card-body py-2 text-muted small">Sin ausencias en este tramo.</div>
-      {% endif %}
     </div>
     {% endif %}
     {% endfor %}
