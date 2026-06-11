@@ -37,7 +37,9 @@
             {% elif s.guard_type == 'guard_55' %}
               <span class="badge bg-info text-dark">Guardia +55</span>
             {% elif s.guard_type == 'desdoble' %}
-              <span class="badge bg-purple" style="background:#6f42c1">Desdoble</span>
+              <span class="badge" style="background:#6f42c1">Desdoble</span>
+            {% elif s.guard_type == 'desdoble_fp' %}
+              <span class="badge" style="background:#6f42c1">Desdoble FP</span>
             {% else %}
               <span class="text-muted small">—</span>
             {% endif %}
@@ -92,6 +94,7 @@
               <option value="guard">Guardia (pool primario)</option>
               <option value="guard_55">Guardia +55 (solo pool de libres, no se cubre)</option>
               <option value="desdoble">Desdoble (acompaña a otro profesor)</option>
+              <option value="desdoble_fp">Desdoble FP (acompaña a otro profesor)</option>
             </select>
           </div>
         </div>

@@ -22,15 +22,10 @@ class TeacherSchedule(db.Model):
     is_guard_slot = db.Column(db.Boolean, default=False, nullable=False)
     room_id = db.Column(db.Integer, db.ForeignKey("rooms.id"), nullable=True)
     subject_id = db.Column(db.Integer, db.ForeignKey("subjects.id"), nullable=True)
-    # Solo en tramos con materia de tipo desdoble: profesor titular al que acompaña.
-    # Si está definido, la ausencia de este profesor no genera guardia y la del
-    # titular muestra a este profesor como apoyo.
-    companion_teacher_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     notes = db.Column(db.String(120), nullable=True)
 
     room = db.relationship("Room", foreign_keys=[room_id])
     school_year = db.relationship("SchoolYear", foreign_keys=[school_year_id])
-    companion = db.relationship("User", foreign_keys=[companion_teacher_id])
 
     __table_args__ = (
         db.UniqueConstraint("teacher_id", "day_of_week", "slot_id", "school_year_id", name="uq_schedule"),

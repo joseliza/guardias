@@ -162,54 +162,32 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
 
 def get_support_teachers(group_id, slot_id: int, target_date: date, absent_teacher_id: int):
     """Devuelve la lista de profesores que pueden actuar como apoyo:
-    - comparten grupo y tramo con el ausente (clase compartida), o
-    - tienen un tramo de desdoble vinculado explícitamente al ausente.
-    Los tramos de desdoble sin vínculo no cuentan como apoyo (deben cubrirse),
-    ni en un sentido ni en otro."""
+    comparten tramo, grupo y aula con el ausente (apoyo automático en ambos
+    sentidos, p. ej. desdobles) y no están ausentes ese día."""
+    if not group_id:
+        return []
     day_idx = target_date.weekday()
     year_id = get_current_school_year().id
-
-    support_ids = set()
-
-    # Desdoble vinculado: profesores que acompañan al ausente en este tramo
-    companions = TeacherSchedule.query.filter_by(
-        day_of_week=day_idx, slot_id=slot_id,
-        companion_teacher_id=absent_teacher_id,
-        school_year_id=year_id,
-    ).all()
-    support_ids.update(e.teacher_id for e in companions)
-
-    # Si el tramo del ausente es de desdoble sin vínculo, su ausencia debe
-    # cubrirse: no se considera apoyo por grupo compartido
     absent_entry = TeacherSchedule.query.filter_by(
-        teacher_id=absent_teacher_id, day_of_week=day_idx,
-        slot_id=slot_id, school_year_id=year_id,
+        teacher_id=absent_teacher_id, group_id=group_id,
+        day_of_week=day_idx, slot_id=slot_id, is_guard_slot=False,
+        school_year_id=year_id,
     ).first()
-    absent_is_desdoble = bool(absent_entry and absent_entry.subject
-                              and absent_entry.subject.guard_type == "desdoble")
-
-    if group_id and not absent_is_desdoble:
-        others = TeacherSchedule.query.filter_by(
-            group_id=group_id, day_of_week=day_idx,
-            slot_id=slot_id, is_guard_slot=False,
-            school_year_id=year_id,
-        ).filter(TeacherSchedule.teacher_id != absent_teacher_id).all()
-        for e in others:
-            # Un tramo de desdoble solo es apoyo si está vinculado al ausente
-            if (e.subject and e.subject.guard_type == "desdoble"
-                    and e.companion_teacher_id != absent_teacher_id):
-                continue
-            support_ids.add(e.teacher_id)
-
-    if not support_ids:
+    others = TeacherSchedule.query.filter_by(
+        group_id=group_id, day_of_week=day_idx,
+        slot_id=slot_id, is_guard_slot=False,
+        school_year_id=year_id,
+        room_id=absent_entry.room_id if absent_entry else None,
+    ).filter(TeacherSchedule.teacher_id != absent_teacher_id).all()
+    if not others:
         return []
     absent_ids = {
         row[0] for row in Absence.query
         .filter_by(date=target_date, slot_id=slot_id)
         .with_entities(Absence.teacher_id).all()
     }
-    return [User.query.get(tid) for tid in support_ids
-            if tid not in absent_ids and User.query.get(tid)]
+    return [User.query.get(e.teacher_id) for e in others
+            if e.teacher_id not in absent_ids and User.query.get(e.teacher_id)]
 
 
 def auto_assign_pending_guards(target_date: date, slot_id: int) -> dict:
