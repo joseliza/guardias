@@ -438,7 +438,7 @@
 <script>
 const groupData   = [{% for g in groups %}{ id: {{ g.id }}, name: {{ g.name|tojson }} },{% endfor %}];
 const roomData    = [{% for r in rooms %}{ id: {{ r.id }}, name: {{ r.name|tojson }} },{% endfor %}];
-const subjectData = [{% for sub in subjects %}{ id: {{ sub.id }}, name: {{ sub.name|tojson }}, guardType: {{ sub.guard_type|tojson }} },{% endfor %}];
+const subjectData = [{% for sub in subjects %}{ id: {{ sub.id }}, name: {{ sub.name|tojson }} },{% endfor %}];
 const slotsConf = [{% for s in slots %}{% if not s.is_break %}{ id: {{ s.id }}, label: {{ s.label|tojson }} },{% endif %}{% endfor %}];
 const daysConf  = [{% for d in days %}{{ d|tojson }},{% endfor %}];
 const slotModal = document.getElementById('slotModal') ? new bootstrap.Modal(document.getElementById('slotModal')) : null;
@@ -502,16 +502,9 @@ function openSlotModal(el) {
   slotModal.show();
 }
 
-function getSubjectGuardType(id) {
-  const sub = subjectData.find(x => String(x.id) === String(id));
-  return sub ? sub.guardType : null;
-}
-
 function updateSaveGroupBtn() {
   const hasGroup = !!document.getElementById('slot-group-id').value;
-  const subjectId = document.getElementById('slot-subject-id').value;
-  const isGuardSubject = subjectId && getSubjectGuardType(subjectId) === 'guard';
-  document.getElementById('btn-save-group').style.display = (hasGroup || isGuardSubject) ? '' : 'none';
+  document.getElementById('btn-save-group').style.display = hasGroup ? '' : 'none';
 }
 
 function clearSlotGroup() {
@@ -542,9 +535,7 @@ function submitSlotOther() {
 function submitSlot(action) {
   if (action === 'group') {
     const groupId = document.getElementById('slot-group-id').value;
-    const subjectId = document.getElementById('slot-subject-id').value;
-    const isGuardSubject = subjectId && getSubjectGuardType(subjectId) === 'guard';
-    if (!groupId && !isGuardSubject) return;
+    if (!groupId) return;
   }
   document.getElementById('slot-action').value = action;
   document.getElementById('slot-form').submit();

@@ -18,6 +18,14 @@
           <input type="text" name="abbreviation" class="form-control" maxlength="20"
                  value="{{ group.abbreviation if group else '' }}" placeholder="1ESO_A">
         </div>
+        <div class="col-md-3">
+          <label class="form-label">Tipo de grupo</label>
+          <select name="guard_type" class="form-select">
+            <option value="">Grupo normal</option>
+            <option value="guard" {% if group and group.guard_type == 'guard' %}selected{% endif %}>Guardia (pool primario)</option>
+            <option value="guard_55" {% if group and group.guard_type == 'guard_55' %}selected{% endif %}>Guardia +55 (solo pool de libres, no se cubre)</option>
+          </select>
+        </div>
         <div class="col-md-4 d-flex align-items-center gap-3 pt-4">
           <div class="form-check">
             <input type="checkbox" class="form-check-input" name="high_difficulty" id="hd" {% if group and group.high_difficulty %}checked{% endif %}>

@@ -210,10 +210,10 @@ def create():
             db.session.flush()
             created_ids.append(absence.id)
 
-            # Guardia de mayores de 55 (GUA-2): se registra la ausencia pero
-            # no hay nada que cubrir ni penalización
-            if (schedule_entry and schedule_entry.subject
-                    and schedule_entry.subject.guard_type == "guard_55"):
+            # Guardia de mayores de 55 (grupo GUA-2): se registra la ausencia
+            # pero no hay nada que cubrir ni penalización
+            if (schedule_entry and schedule_entry.group
+                    and schedule_entry.group.guard_type == "guard_55"):
                 continue
 
             db.session.add(Guard(

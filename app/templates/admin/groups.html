@@ -17,12 +17,21 @@
 <div class="card">
   <div class="card-body p-0">
     <table class="table table-hover mb-0" id="tabla-grupos">
-      <thead class="table-light"><tr><th>Nombre</th><th>Abreviatura</th><th>Alta dificultad</th><th>Multiplicador</th><th>Activo</th><th></th></tr></thead>
+      <thead class="table-light"><tr><th>Nombre</th><th>Abreviatura</th><th>Tipo</th><th>Alta dificultad</th><th>Multiplicador</th><th>Activo</th><th></th></tr></thead>
       <tbody>
         {% for g in groups %}
         <tr>
           <td>{{ g.name }}</td>
           <td><code class="text-secondary">{{ g.abbreviation or '—' }}</code></td>
+          <td>
+            {% if g.guard_type == 'guard' %}
+              <span class="badge bg-warning text-dark">Guardia</span>
+            {% elif g.guard_type == 'guard_55' %}
+              <span class="badge bg-info text-dark">Guardia +55</span>
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
           <td>{% if g.high_difficulty %}<i class="bi bi-star-fill text-warning"></i> Sí{% else %}No{% endif %}</td>
           <td>x{{ g.difficulty_multiplier }}</td>
           <td><span class="badge bg-{{ 'success' if g.active else 'danger' }}">{{ 'Sí' if g.active else 'No' }}</span></td>

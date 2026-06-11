@@ -74,17 +74,17 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
         .all()
     }
 
-    # Tramos de guardia de mayores de 55 (materia guard_55): no cuentan como
+    # Tramos de guardia de mayores de 55 (grupo guard_55): no cuentan como
     # ocupados — el profesor debe aparecer en el pool de libres a esa hora
-    from app.models.subject import Subject
+    from app.models.group import Group
     guard55_ids = {
         row[0] for row in TeacherSchedule.query
-        .join(Subject, TeacherSchedule.subject_id == Subject.id)
+        .join(Group, TeacherSchedule.group_id == Group.id)
         .filter(
             TeacherSchedule.day_of_week == day_idx,
             TeacherSchedule.slot_id == slot_id,
             TeacherSchedule.school_year_id == year_id,
-            Subject.guard_type == "guard_55",
+            Group.guard_type == "guard_55",
         )
         .with_entities(TeacherSchedule.teacher_id)
         .all()

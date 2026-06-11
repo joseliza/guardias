@@ -32,11 +32,7 @@
           <td>{{ s.name }}</td>
           <td><code class="text-secondary">{{ s.abbreviation or '—' }}</code></td>
           <td>
-            {% if s.guard_type == 'guard' %}
-              <span class="badge bg-warning text-dark">Guardia</span>
-            {% elif s.guard_type == 'guard_55' %}
-              <span class="badge bg-info text-dark">Guardia +55</span>
-            {% elif s.guard_type == 'desdoble_fp' %}
+            {% if s.guard_type == 'desdoble_fp' %}
               <span class="badge" style="background:#6f42c1">Desdoble FP</span>
             {% else %}
               <span class="text-muted small">—</span>
@@ -89,10 +85,9 @@
             <label class="form-label small fw-semibold mb-1">Tipo</label>
             <select name="guard_type" id="subject-guard-type" class="form-select form-select-sm">
               <option value="">Materia normal</option>
-              <option value="guard">Guardia (pool primario)</option>
-              <option value="guard_55">Guardia +55 (solo pool de libres, no se cubre)</option>
               <option value="desdoble_fp">Desdoble FP</option>
             </select>
+            <div class="form-text small">Las guardias se configuran como tipo de grupo, no de materia.</div>
           </div>
         </div>
         <div class="modal-footer py-2">

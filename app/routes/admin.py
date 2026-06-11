@@ -461,12 +461,14 @@ def group_create():
     from app.utils.school_year import get_current_school_year
     year = get_current_school_year()
     if request.method == "POST":
+        guard_type = request.form.get("guard_type") or None
         group = Group(
             school_year_id=year.id,
             name=request.form["name"].strip(),
             abbreviation=request.form.get("abbreviation", "").strip() or None,
             high_difficulty=request.form.get("high_difficulty") == "on",
             difficulty_multiplier=float(request.form.get("difficulty_multiplier", 1.0)),
+            guard_type=guard_type if guard_type in ("guard", "guard_55") else None,
         )
         db.session.add(group)
         db.session.commit()
@@ -487,6 +489,8 @@ def group_edit(gid):
         group.high_difficulty = request.form.get("high_difficulty") == "on"
         group.difficulty_multiplier = float(request.form.get("difficulty_multiplier", 1.0))
         group.active = request.form.get("active") == "on"
+        guard_type = request.form.get("guard_type") or None
+        group.guard_type = guard_type if guard_type in ("guard", "guard_55") else None
         db.session.commit()
         flash("Grupo actualizado.", "success")
         return redirect(url_for("admin.groups"))
@@ -510,6 +514,7 @@ def group_clone(gid):
         high_difficulty=original.high_difficulty,
         difficulty_multiplier=original.difficulty_multiplier,
         active=original.active,
+        guard_type=original.guard_type,
     )
     db.session.add(clone)
     db.session.commit()
@@ -564,7 +569,7 @@ def subject_create():
     name = request.form.get("name", "").strip()
     abbreviation = request.form.get("abbreviation", "").strip() or None
     guard_type = request.form.get("guard_type") or None
-    if guard_type not in ("guard", "guard_55", "desdoble_fp"):
+    if guard_type != "desdoble_fp":
         guard_type = None
     if name:
         db.session.add(Subject(school_year_id=year.id, name=name,
@@ -584,7 +589,7 @@ def subject_edit(sid):
     subject.name = request.form.get("name", "").strip() or subject.name
     subject.abbreviation = request.form.get("abbreviation", "").strip() or None
     guard_type = request.form.get("guard_type") or None
-    subject.guard_type = guard_type if guard_type in ("guard", "guard_55", "desdoble_fp") else None
+    subject.guard_type = guard_type if guard_type == "desdoble_fp" else None
     db.session.commit()
     flash("Materia actualizada.", "success")
     return redirect(url_for("admin.subjects"))
@@ -867,12 +872,11 @@ def schedule_set_cell():
             room_id=room_id, notes=notes,
         ))
     elif action == "group":
-        from app.models.subject import Subject
         group_id = request.form.get("group_id", type=int)
         subject_id = request.form.get("subject_id", type=int) or None
-        subject = Subject.query.get(subject_id) if subject_id else None
-        is_guard = bool(subject and subject.guard_type == "guard")
-        if group_id or is_guard:
+        group = Group.query.get(group_id) if group_id else None
+        is_guard = bool(group and group.guard_type == "guard")
+        if group_id:
             db.session.add(TeacherSchedule(
                 teacher_id=teacher_id, day_of_week=day, school_year_id=year_id,
                 slot_id=slot_id, is_guard_slot=is_guard, group_id=group_id,
@@ -1241,16 +1245,11 @@ def data_load_subjects():
             if nombre and subj.name != nombre:
                 subj.name = nombre
                 changed = True
-            detected = Subject.detect_guard_type(subj.abbreviation)
-            if detected and subj.guard_type != detected:
-                subj.guard_type = detected
-                changed = True
             updated += changed
             skipped += not changed
         else:
             db.session.add(Subject(school_year_id=year_id, name=nombre or abrev,
-                                   abbreviation=abrev or None,
-                                   guard_type=Subject.detect_guard_type(abrev)))
+                                   abbreviation=abrev or None))
             created += 1
 
     try:
@@ -1295,10 +1294,16 @@ def data_load_groups():
                 if nombre and grp.name != nombre:
                     grp.name = nombre
                     changed = True
+                detected = Group.detect_guard_type(grp.abbreviation)
+                if detected and grp.guard_type != detected:
+                    grp.guard_type = detected
+                    changed = True
                 updated += changed
                 skipped += not changed
             else:
-                db.session.add(Group(school_year_id=year_id, name=nombre or abrev, abbreviation=abrev or None))
+                db.session.add(Group(school_year_id=year_id, name=nombre or abrev,
+                                     abbreviation=abrev or None,
+                                     guard_type=Group.detect_guard_type(abrev)))
                 created += 1
 
     try:
@@ -1639,10 +1644,10 @@ def data_load_create_schedules():
                 room_id=room.id if room else None,
                 day_of_week=day_idx,
                 slot_id=raw.slot_number,
-                # Materia tipo guardia oficial → tramo de guardia.
+                # Grupo tipo guardia oficial → tramo de guardia.
                 # GUA-2 (guard_55) queda como tramo normal: no se cubre si falta
                 # y el profesor cae en el pool de libres a esa hora.
-                is_guard_slot=bool(subject and subject.guard_type == "guard"),
+                is_guard_slot=bool(group and group.guard_type == "guard"),
                 school_year_id=year.id,
             ))
             created += 1
@@ -1655,7 +1660,7 @@ def data_load_create_schedules():
                         ts.group_id = group.id if group else None
                         ts.subject_id = subject.id if subject else None
                         ts.room_id = room.id if room else None
-                        ts.is_guard_slot = bool(subject and subject.guard_type == "guard")
+                        ts.is_guard_slot = bool(group and group.guard_type == "guard")
                         updated += 1
 
     try:
@@ -2583,6 +2588,7 @@ def _copy_year_data(src_year, dst_year, copy_teachers=False, copy_groups=False, 
                 high_difficulty=g.high_difficulty,
                 difficulty_multiplier=g.difficulty_multiplier,
                 active=g.active,
+                guard_type=g.guard_type,
             ))
             counts["groups"] += 1
 

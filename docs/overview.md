@@ -30,9 +30,9 @@ App Flask para la gestión de guardias, ausencias, puntos, extraescolares y chat
 
 - `school_year.py` → `SchoolYear`: curso escolar activo (uno marcado `is_current`).
 - `user.py` → `User`: profesores/directivos/pantallas, credenciales, rol, puntos, sustituciones y preferencias de carga de datos.
-- `group.py` → `Group`: grupo de alumnos, con multiplicador de dificultad para los puntos de guardia.
+- `group.py` → `Group`: grupo de alumnos, con multiplicador de dificultad para los puntos de guardia y tipo de grupo (guardia oficial / guardia +55) detectado por abreviatura.
 - `room.py` → `Room`: aulas físicas del centro (1-40), asignadas por tramo en `TeacherSchedule`.
-- `subject.py` → `Subject`: asignaturas por curso escolar, con detección de tipos especiales de guardia.
+- `subject.py` → `Subject`: asignaturas por curso escolar; tipo opcional 'desdoble_fp' (los tipos de guardia viven en `Group`).
 - `schedule.py` → `TeacherSchedule`: horario semanal fijo de cada profesor (día, tramo, grupo, aula, materia).
 - `raw_schedule.py` → `RawScheduleRow`: filas en bruto del CSV de horarios antes de resolver abreviaturas.
 - `absence.py` → `Absence`: ausencia de un profesor en un tramo, con motivo, estado, justificación y penalización.
