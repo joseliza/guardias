@@ -94,7 +94,9 @@ def index():
 @absences_bp.route("/nueva", methods=["GET", "POST"])
 @login_required
 def create():
-    teachers = User.query.filter_by(active=True).order_by(User.surname).all()
+    teachers = (User.query.filter_by(active=True)
+                .filter(User.school_year_id == get_current_school_year().id)
+                .order_by(User.surname).all())
     slots = current_app.config["TIME_SLOTS"]
 
     if request.method == "POST":

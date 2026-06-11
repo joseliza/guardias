@@ -43,7 +43,9 @@ def create():
 
     from app.utils.school_year import get_current_school_year, get_year_groups
     year = get_current_school_year()
-    teachers = User.query.filter_by(active=True).order_by(User.surname).all()
+    teachers = (User.query.filter_by(active=True)
+                .filter(User.school_year_id == year.id)
+                .order_by(User.surname).all())
     groups = get_year_groups(year.id)
     slots = current_app.config["TIME_SLOTS"]
 
@@ -127,7 +129,10 @@ def edit(aid):
     activity = ExtraActivity.query.get_or_404(aid)
     from app.utils.school_year import get_year_groups
     year_id = activity.school_year_id
-    teachers = User.query.filter_by(active=True).order_by(User.surname).all()
+    teachers_q = User.query.filter_by(active=True)
+    if year_id:
+        teachers_q = teachers_q.filter(User.school_year_id == year_id)
+    teachers = teachers_q.order_by(User.surname).all()
     groups = get_year_groups(year_id) if year_id else Group.query.filter_by(active=True).order_by(Group.name).all()
     slots = current_app.config["TIME_SLOTS"]
 

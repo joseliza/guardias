@@ -63,7 +63,7 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
     }
 
     all_teachers = User.query.filter_by(active=True).filter(
-        User.role != "display"
+        User.school_year_id == year_id, User.role != "display"
     ).all()
 
     # IDs con entrada en ese tramo (clase o guardia)

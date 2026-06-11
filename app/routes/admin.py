@@ -9,6 +9,7 @@ import os
 import re
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify
 from flask_login import login_required, current_user
+from sqlalchemy.exc import IntegrityError
 from app.extensions import db, oauth
 from app.models.user import User
 from app.models.group import Group
@@ -23,6 +24,17 @@ def _require_management():
         flash("Acceso restringido al equipo directivo.", "danger")
         return False
     return True
+
+
+def _delete_task_attachments(filenames):
+    """Borra del disco los PDFs adjuntos de tareas cuyas filas se eliminan en bloque."""
+    upload_dir = os.path.join(current_app.root_path, "..", "uploads", "tasks")
+    for filename in filenames:
+        if not filename:
+            continue
+        path = os.path.join(upload_dir, filename)
+        if os.path.exists(path):
+            os.remove(path)
 
 
 def _is_placeholder_email(email):
@@ -252,6 +264,7 @@ def teacher_delete(tid):
     # Eliminar registros dependientes manualmente (sin cascade en modelo)
     from app.models.guard import GuardRecord
     from app.models.absence import Absence
+    from app.models.task import Task
     from app.models.schedule import TeacherSchedule
     from app.models.guard import Guard
     from app.models.presence import UserPresence
@@ -264,11 +277,19 @@ def teacher_delete(tid):
     # Guardias generadas por ausencias de este profesor
     absence_ids = [a.id for a in Absence.query.filter_by(teacher_id=tid).all()]
     if absence_ids:
+        # Tareas dejadas para el grupo en estas ausencias
+        task_attachments = [
+            t.attachment for t in Task.query.filter(Task.absence_id.in_(absence_ids))
+            .with_entities(Task.attachment).all()
+        ]
+        Task.query.filter(Task.absence_id.in_(absence_ids)).delete(synchronize_session=False)
         guard_ids = [g.id for g in Guard.query.filter(Guard.absence_id.in_(absence_ids)).all()]
         if guard_ids:
             # Registros de OTROS profesores que cubrieron estas guardias
             GuardRecord.query.filter(GuardRecord.guard_id.in_(guard_ids)).delete(synchronize_session=False)
         Guard.query.filter(Guard.absence_id.in_(absence_ids)).delete(synchronize_session=False)
+    else:
+        task_attachments = []
     Absence.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
     Absence.query.filter_by(reported_by_id=tid).update({"reported_by_id": None}, synchronize_session=False)
     TeacherSchedule.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
@@ -299,6 +320,7 @@ def teacher_delete(tid):
 
     db.session.delete(teacher)
     db.session.commit()
+    _delete_task_attachments(task_attachments)
     msg = f"Profesor {name} eliminado permanentemente."
     if transferred:
         from app.models.school_year import SchoolYear
@@ -315,6 +337,7 @@ def teacher_bulk_delete():
         return redirect(url_for("dashboard.index"))
     from app.models.guard import GuardRecord, Guard
     from app.models.absence import Absence
+    from app.models.task import Task
     from app.models.schedule import TeacherSchedule
     from app.models.presence import UserPresence
     from app.models.activity import ExtraActivity, ExtraActivityTeacher
@@ -334,6 +357,7 @@ def teacher_bulk_delete():
 
     deleted = 0
     transferred_count = 0
+    all_task_attachments = []
     for tid in ids:
         teacher = User.query.get(tid)
         if not teacher:
@@ -342,6 +366,13 @@ def teacher_bulk_delete():
         GuardRecord.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
         absence_ids = [a.id for a in Absence.query.filter_by(teacher_id=tid).all()]
         if absence_ids:
+            # Tareas dejadas para el grupo en estas ausencias
+            task_attachments = [
+                t.attachment for t in Task.query.filter(Task.absence_id.in_(absence_ids))
+                .with_entities(Task.attachment).all()
+            ]
+            Task.query.filter(Task.absence_id.in_(absence_ids)).delete(synchronize_session=False)
+            all_task_attachments.extend(task_attachments)
             guard_ids = [g.id for g in Guard.query.filter(Guard.absence_id.in_(absence_ids)).all()]
             if guard_ids:
                 # Registros de OTROS profesores que cubrieron estas guardias
@@ -378,6 +409,7 @@ def teacher_bulk_delete():
         deleted += 1
 
     db.session.commit()
+    _delete_task_attachments(all_task_attachments)
     msg = f"{deleted} profesor{'es' if deleted != 1 else ''} eliminado{'s' if deleted != 1 else ''} permanentemente."
     if transferred_count:
         msg += f" Se transfirió el email a su perfil del curso vigente en {transferred_count} caso{'s' if transferred_count != 1 else ''}."
@@ -494,8 +526,17 @@ def group_delete(gid):
     if group.schedule_entries.count() > 0:
         flash(f"No se puede borrar '{group.name}': tiene horarios asignados. Desactívalo en su lugar.", "danger")
         return redirect(url_for("admin.groups"))
-    db.session.delete(group)
-    db.session.commit()
+    try:
+        db.session.delete(group)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        flash(
+            f"No se puede borrar '{group.name}': está en uso (guardias, tareas, "
+            "actividades extraescolares o disponibilidades registradas). Desactívalo en su lugar.",
+            "danger",
+        )
+        return redirect(url_for("admin.groups"))
     flash(f"Grupo '{group.name}' eliminado.", "success")
     return redirect(url_for("admin.groups"))
 
@@ -675,7 +716,7 @@ def schedules():
 
     teachers = (User.query
                 .filter_by(active=True)
-                .filter(User.role != "display")
+                .filter(User.school_year_id == year_id, User.role != "display")
                 .order_by(User.surname, User.name)
                 .all())
 
@@ -695,7 +736,8 @@ def schedules():
             s["class"] = count
 
     teacher_id = request.args.get("teacher_id", type=int)
-    selected = User.query.get(teacher_id) if teacher_id else None
+    selected = (User.query.filter_by(id=teacher_id, school_year_id=year_id).first()
+                if teacher_id else None)
 
     slots_cfg = current_app.config["TIME_SLOTS"]
     days = current_app.config["DAYS_OF_WEEK"]
@@ -2815,12 +2857,22 @@ def school_year_delete(year_id):
 
     # Guardias y tareas que apuntan a los grupos del curso
     group_ids = [g.id for g in Group.query.filter_by(school_year_id=year_id).with_entities(Group.id).all()]
+    task_attachments = []
     if group_ids:
+        task_attachments = [
+            t.attachment for t in Task.query.filter(Task.group_id.in_(group_ids))
+            .with_entities(Task.attachment).all()
+        ]
         Task.query.filter(Task.group_id.in_(group_ids)).delete(synchronize_session=False)
         guard_ids = [g.id for g in Guard.query.filter(Guard.group_id.in_(group_ids)).with_entities(Guard.id).all()]
         if guard_ids:
             GuardRecord.query.filter(GuardRecord.guard_id.in_(guard_ids)).delete(synchronize_session=False)
             Guard.query.filter(Guard.id.in_(guard_ids)).delete(synchronize_session=False)
+        # Referencias a estos grupos desde actividades o disponibilidades de
+        # otros cursos (p. ej. actividades sin curso asignado): sin esto el
+        # DELETE de groups viola la FK extra_activity_groups/availability_period_groups
+        ExtraActivityGroup.query.filter(ExtraActivityGroup.group_id.in_(group_ids)).delete(synchronize_session=False)
+        AvailabilityPeriodGroup.query.filter(AvailabilityPeriodGroup.group_id.in_(group_ids)).delete(synchronize_session=False)
 
     Group.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
     Subject.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
@@ -2838,5 +2890,6 @@ def school_year_delete(year_id):
     name = year.name
     db.session.delete(year)
     db.session.commit()
+    _delete_task_attachments(task_attachments)
     flash(f"Curso {name} y todos sus datos eliminados.", "success")
     return redirect(url_for("admin.config") + "#section-school-years")
