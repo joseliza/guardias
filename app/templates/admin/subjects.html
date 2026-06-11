@@ -22,6 +22,7 @@
         <tr>
           <th>Nombre</th>
           <th>Abreviatura</th>
+          <th>Tipo</th>
           <th style="width:90px"></th>
         </tr>
       </thead>
@@ -30,11 +31,21 @@
         <tr>
           <td>{{ s.name }}</td>
           <td><code class="text-secondary">{{ s.abbreviation or '—' }}</code></td>
+          <td>
+            {% if s.guard_type == 'guard' %}
+              <span class="badge bg-warning text-dark">Guardia</span>
+            {% elif s.guard_type == 'guard_55' %}
+              <span class="badge bg-info text-dark">Guardia +55</span>
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
           <td class="d-flex gap-1">
             <button class="btn btn-sm btn-outline-primary btn-edit-subject" title="Editar"
                     data-id="{{ s.id }}"
                     data-name="{{ s.name }}"
-                    data-abbrev="{{ s.abbreviation or '' }}">
+                    data-abbrev="{{ s.abbreviation or '' }}"
+                    data-guard-type="{{ s.guard_type or '' }}">
               <i class="bi bi-pencil"></i>
             </button>
             <form method="POST" action="{{ url_for('admin.subject_clone', sid=s.id) }}">
@@ -47,7 +58,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="3" class="text-muted text-center py-3">Sin materias cargadas para este curso.</td></tr>
+        <tr><td colspan="4" class="text-muted text-center py-3">Sin materias cargadas para este curso.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -68,9 +79,17 @@
             <label class="form-label small fw-semibold mb-1">Nombre</label>
             <input type="text" name="name" id="subject-name" class="form-control form-control-sm" required>
           </div>
-          <div class="mb-1">
+          <div class="mb-2">
             <label class="form-label small fw-semibold mb-1">Abreviatura</label>
             <input type="text" name="abbreviation" id="subject-abbrev" class="form-control form-control-sm" maxlength="20" placeholder="MAT">
+          </div>
+          <div class="mb-1">
+            <label class="form-label small fw-semibold mb-1">Tipo</label>
+            <select name="guard_type" id="subject-guard-type" class="form-select form-select-sm">
+              <option value="">Materia normal</option>
+              <option value="guard">Guardia (pool primario)</option>
+              <option value="guard_55">Guardia +55 (solo pool de libres, no se cubre)</option>
+            </select>
           </div>
         </div>
         <div class="modal-footer py-2">
@@ -89,6 +108,7 @@ const modal      = new bootstrap.Modal(document.getElementById('subjectModal'));
 const form       = document.getElementById('subject-form');
 const nameInput  = document.getElementById('subject-name');
 const abbrevInput= document.getElementById('subject-abbrev');
+const guardTypeInput = document.getElementById('subject-guard-type');
 const titleEl    = document.getElementById('subject-modal-title');
 const submitBtn  = document.getElementById('subject-submit-btn');
 const createUrl  = {{ url_for('admin.subject_create')|tojson }};
@@ -99,6 +119,7 @@ document.getElementById('btn-nueva-materia').addEventListener('click', function(
   submitBtn.textContent = 'Crear';
   nameInput.value = '';
   abbrevInput.value = '';
+  guardTypeInput.value = '';
   form.action = createUrl;
   modal.show();
   setTimeout(() => nameInput.focus(), 300);
@@ -110,6 +131,7 @@ document.querySelectorAll('.btn-edit-subject').forEach(function(btn) {
     submitBtn.textContent = 'Guardar';
     nameInput.value  = btn.dataset.name;
     abbrevInput.value= btn.dataset.abbrev;
+    guardTypeInput.value = btn.dataset.guardType || '';
     form.action = editUrlTpl.replace('/0/editar', '/' + btn.dataset.id + '/editar');
     modal.show();
     setTimeout(() => nameInput.focus(), 300);

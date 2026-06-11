@@ -479,8 +479,12 @@ def subject_create():
     year = get_current_school_year()
     name = request.form.get("name", "").strip()
     abbreviation = request.form.get("abbreviation", "").strip() or None
+    guard_type = request.form.get("guard_type") or None
+    if guard_type not in ("guard", "guard_55"):
+        guard_type = None
     if name:
-        db.session.add(Subject(school_year_id=year.id, name=name, abbreviation=abbreviation))
+        db.session.add(Subject(school_year_id=year.id, name=name,
+                               abbreviation=abbreviation, guard_type=guard_type))
         db.session.commit()
         flash("Materia creada.", "success")
     return redirect(url_for("admin.subjects"))
@@ -495,6 +499,8 @@ def subject_edit(sid):
     subject = Subject.query.get_or_404(sid)
     subject.name = request.form.get("name", "").strip() or subject.name
     subject.abbreviation = request.form.get("abbreviation", "").strip() or None
+    guard_type = request.form.get("guard_type") or None
+    subject.guard_type = guard_type if guard_type in ("guard", "guard_55") else None
     db.session.commit()
     flash("Materia actualizada.", "success")
     return redirect(url_for("admin.subjects"))
@@ -511,6 +517,7 @@ def subject_clone(sid):
         school_year_id=original.school_year_id,
         name=f"{original.name} (copia)",
         abbreviation=None,
+        guard_type=original.guard_type,
     )
     db.session.add(clone)
     db.session.commit()
@@ -1139,10 +1146,16 @@ def data_load_subjects():
             if nombre and subj.name != nombre:
                 subj.name = nombre
                 changed = True
+            detected = Subject.detect_guard_type(subj.abbreviation)
+            if detected and subj.guard_type != detected:
+                subj.guard_type = detected
+                changed = True
             updated += changed
             skipped += not changed
         else:
-            db.session.add(Subject(school_year_id=year_id, name=nombre or abrev, abbreviation=abrev or None))
+            db.session.add(Subject(school_year_id=year_id, name=nombre or abrev,
+                                   abbreviation=abrev or None,
+                                   guard_type=Subject.detect_guard_type(abrev)))
             created += 1
 
     try:
@@ -1531,7 +1544,10 @@ def data_load_create_schedules():
                 room_id=room.id if room else None,
                 day_of_week=day_idx,
                 slot_id=raw.slot_number,
-                is_guard_slot=False,
+                # Materia tipo guardia oficial → tramo de guardia.
+                # GUA-2 (guard_55) queda como tramo normal: no se cubre si falta
+                # y el profesor cae en el pool de libres a esa hora.
+                is_guard_slot=bool(subject and subject.guard_type == "guard"),
                 school_year_id=year.id,
             ))
             created += 1
@@ -1544,6 +1560,7 @@ def data_load_create_schedules():
                         ts.group_id = group.id if group else None
                         ts.subject_id = subject.id if subject else None
                         ts.room_id = room.id if room else None
+                        ts.is_guard_slot = bool(subject and subject.guard_type == "guard")
                         updated += 1
 
     try:
