@@ -106,9 +106,9 @@
                 {% if entry.notes and (entry.is_guard_slot or entry.group) %}
                 <div class="small text-muted mt-1"><i class="bi bi-pencil"></i> {{ entry.notes }}</div>
                 {% endif %}
-                {% if cur_subject_type in ('desdoble', 'desdoble_fp') %}
+                {% if cur_subject_type == 'desdoble_fp' %}
                 <div class="small mt-1" style="color:#6f42c1">
-                  <i class="bi bi-people"></i> {{ 'Desdoble FP' if cur_subject_type == 'desdoble_fp' else 'Desdoble' }}
+                  <i class="bi bi-people"></i> Desdoble FP
                 </div>
                 {% endif %}
               {% else %}

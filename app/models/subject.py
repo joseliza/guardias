@@ -12,8 +12,8 @@ class Subject(db.Model):
     # None = materia normal; 'guard' = guardia oficial (pool primario);
     # 'guard_55' = guardia de mayores de 55: no se cubre si falta el profesor
     # y en ese tramo el profesor aparece solo en el pool de libres.
-    # 'desdoble' / 'desdoble_fp' = descriptivos: el apoyo entre profesores que
-    # comparten tramo, grupo y aula se detecta automáticamente para cualquier materia.
+    # 'desdoble_fp' = descriptivo: el apoyo entre profesores que comparten
+    # tramo, grupo y aula se detecta automáticamente para cualquier materia.
     guard_type = db.Column(db.String(20), nullable=True)
 
     school_year = db.relationship("SchoolYear", foreign_keys=[school_year_id])

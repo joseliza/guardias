@@ -480,7 +480,7 @@ def subject_create():
     name = request.form.get("name", "").strip()
     abbreviation = request.form.get("abbreviation", "").strip() or None
     guard_type = request.form.get("guard_type") or None
-    if guard_type not in ("guard", "guard_55", "desdoble", "desdoble_fp"):
+    if guard_type not in ("guard", "guard_55", "desdoble_fp"):
         guard_type = None
     if name:
         db.session.add(Subject(school_year_id=year.id, name=name,
@@ -500,7 +500,7 @@ def subject_edit(sid):
     subject.name = request.form.get("name", "").strip() or subject.name
     subject.abbreviation = request.form.get("abbreviation", "").strip() or None
     guard_type = request.form.get("guard_type") or None
-    subject.guard_type = guard_type if guard_type in ("guard", "guard_55", "desdoble", "desdoble_fp") else None
+    subject.guard_type = guard_type if guard_type in ("guard", "guard_55", "desdoble_fp") else None
     db.session.commit()
     flash("Materia actualizada.", "success")
     return redirect(url_for("admin.subjects"))
