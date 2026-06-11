@@ -7,6 +7,7 @@ services:
       MYSQL_DATABASE: guardias
       MYSQL_USER: guardias
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password}
+      TZ: Europe/Madrid
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -31,6 +32,7 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_DEFAULT_SENDER: ${MAIL_DEFAULT_SENDER:-}
       INSTITUTE_NAME: ${INSTITUTE_NAME:-IES}
+      TZ: Europe/Madrid
     ports:
       - "5050:5000"
     volumes:

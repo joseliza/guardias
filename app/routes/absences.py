@@ -46,7 +46,14 @@ def index():
         return redirect(url_for("absences.index", fecha=target_date.isoformat()))
 
     if current_user.is_management:
-        absences = Absence.query.filter_by(date=target_date).order_by(Absence.slot_id).all()
+        # Solo ausencias de profesores del curso vigente (las filas archivadas
+        # de cursos anteriores pueden conservar ausencias antiguas).
+        absences = (
+            Absence.query.join(User, Absence.teacher_id == User.id)
+            .filter(Absence.date == target_date,
+                    User.school_year_id == get_current_school_year().id)
+            .order_by(Absence.slot_id).all()
+        )
     else:
         absences = Absence.query.filter_by(teacher_id=current_user.id, date=target_date).order_by(Absence.slot_id).all()
 

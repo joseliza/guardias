@@ -35,7 +35,15 @@ def index():
     all_slots = current_app.config["TIME_SLOTS"]
 
     guards = Guard.query.filter_by(date=today).order_by(Guard.slot_id).all()
-    absences = Absence.query.filter_by(date=today).all()
+    # Solo ausencias de profesores del curso vigente (las filas archivadas de
+    # cursos anteriores pueden conservar ausencias antiguas).
+    from app.utils.school_year import get_current_school_year
+    year_id = get_current_school_year().id
+    absences = (
+        Absence.query.join(User, Absence.teacher_id == User.id)
+        .filter(Absence.date == today, User.school_year_id == year_id)
+        .all()
+    )
     available_by_slot = {
         s["id"]: get_available_teachers_for_slot(today, s["id"]) for s in slots
     }

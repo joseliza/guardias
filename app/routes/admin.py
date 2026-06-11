@@ -127,8 +127,12 @@ def _reclaim_emails_for_year(year):
         donor = max(donors, key=lambda d: (d.school_year_id is not None,
                                            starts.get(d.school_year_id, year.start_date)))
         email = donor.email
+        if donor.active:
+            # La fila del curso activado hereda el derecho a iniciar sesión
+            u.active = True
         donor.email = f"_archived_{donor.id}@pendiente.local"
         donor.receive_emails = False
+        donor.active = False
         # Flush para liberar el email único antes de reasignarlo.
         db.session.flush()
         if not u.password_hash:
@@ -1044,6 +1048,8 @@ def data_load_users():
                     "year": conflict_year.name if conflict_year else "—",
                 })
                 conflict.email = f"_archived_{conflict.id}@pendiente.local"
+                conflict.receive_emails = False
+                conflict.active = False
             else:
                 errors.append(f"{email} ya en uso por {conflict.full_name}")
                 skipped += 1
@@ -2633,6 +2639,8 @@ def _copy_year_data(src_year, dst_year, copy_teachers=False, copy_groups=False, 
             if dst_year.is_current and not _is_placeholder_email(t.email):
                 email = t.email
                 t.email = f"_archived_{t.id}@pendiente.local"
+                t.receive_emails = False
+                t.active = False
                 # Flush para liberar el email único antes de insertarlo en la
                 # fila nueva (los INSERT se ejecutan antes que los UPDATE).
                 db.session.flush()

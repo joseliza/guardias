@@ -71,7 +71,16 @@ def create_app():
 
     @login_manager.user_loader
     def load_user(user_id):
-        return User.query.get(int(user_id))
+        user = User.query.get(int(user_id))
+        # Invalida sesiones de filas desactivadas o archivadas (email marcador
+        # _..._@pendiente.local): una cookie antigua no debe seguir operando
+        # como la fila de un curso anterior.
+        if user is None or not user.active:
+            return None
+        email = user.email or ""
+        if email.startswith("_") and email.endswith("@pendiente.local"):
+            return None
+        return user
 
     @app.after_request
     def no_cache(response):

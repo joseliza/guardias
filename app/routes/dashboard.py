@@ -56,7 +56,14 @@ def index():
 
     from app.models.activity import ExtraActivity
 
-    day_absences = Absence.query.filter_by(date=target_date).all()
+    # Solo ausencias de profesores del curso vigente: las filas archivadas de
+    # cursos anteriores pueden conservar ausencias antiguas que duplicarían
+    # al profesor en el tramo.
+    day_absences = (
+        Absence.query.join(User, Absence.teacher_id == User.id)
+        .filter(Absence.date == target_date, User.school_year_id == year_id)
+        .all()
+    )
     day_guards = Guard.query.filter_by(date=target_date).all()
 
     _day_activities = ExtraActivity.query.filter_by(date=target_date).all()
