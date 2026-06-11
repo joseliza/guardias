@@ -208,10 +208,13 @@ def create():
             db.session.flush()
             created_ids.append(absence.id)
 
-            # Guardia de mayores de 55 (GUA-2): se registra la ausencia pero
-            # no hay nada que cubrir ni penalización
-            if (schedule_entry and schedule_entry.subject
-                    and schedule_entry.subject.guard_type == "guard_55"):
+            # No generan guardia que cubrir ni penalización:
+            # - guardia de mayores de 55 (GUA-2)
+            # - desdoble con titular vinculado (el titular sigue con el grupo)
+            entry_type = (schedule_entry.subject.guard_type
+                          if schedule_entry and schedule_entry.subject else None)
+            if entry_type == "guard_55" or (
+                    entry_type == "desdoble" and schedule_entry.companion_teacher_id):
                 continue
 
             db.session.add(Guard(

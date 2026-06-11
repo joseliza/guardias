@@ -480,7 +480,7 @@ def subject_create():
     name = request.form.get("name", "").strip()
     abbreviation = request.form.get("abbreviation", "").strip() or None
     guard_type = request.form.get("guard_type") or None
-    if guard_type not in ("guard", "guard_55"):
+    if guard_type not in ("guard", "guard_55", "desdoble"):
         guard_type = None
     if name:
         db.session.add(Subject(school_year_id=year.id, name=name,
@@ -500,7 +500,7 @@ def subject_edit(sid):
     subject.name = request.form.get("name", "").strip() or subject.name
     subject.abbreviation = request.form.get("abbreviation", "").strip() or None
     guard_type = request.form.get("guard_type") or None
-    subject.guard_type = guard_type if guard_type in ("guard", "guard_55") else None
+    subject.guard_type = guard_type if guard_type in ("guard", "guard_55", "desdoble") else None
     db.session.commit()
     flash("Materia actualizada.", "success")
     return redirect(url_for("admin.subjects"))
@@ -729,6 +729,8 @@ def schedule_clone_cell():
             existing.is_guard_slot = source.is_guard_slot
             existing.group_id      = source.group_id
             existing.room_id       = source.room_id
+            existing.subject_id    = source.subject_id
+            existing.companion_teacher_id = source.companion_teacher_id
             existing.notes         = source.notes
         else:
             db.session.add(TeacherSchedule(
@@ -737,6 +739,8 @@ def schedule_clone_cell():
                 is_guard_slot=source.is_guard_slot,
                 group_id=source.group_id,
                 room_id=source.room_id,
+                subject_id=source.subject_id,
+                companion_teacher_id=source.companion_teacher_id,
                 notes=source.notes,
             ))
         cloned += 1
@@ -764,6 +768,9 @@ def schedule_set_cell():
         teacher_id=teacher_id, day_of_week=day, slot_id=slot_id,
         school_year_id=year_id,
     ).first()
+    # Conservar materia y vínculo de desdoble si la celda sigue siendo una clase
+    prev_subject_id = existing.subject_id if existing else None
+    prev_companion_id = existing.companion_teacher_id if existing else None
     if existing:
         db.session.delete(existing)
         db.session.flush()
@@ -783,6 +790,8 @@ def schedule_set_cell():
                 teacher_id=teacher_id, day_of_week=day, school_year_id=year_id,
                 slot_id=slot_id, is_guard_slot=False, group_id=group_id,
                 room_id=room_id, notes=notes,
+                subject_id=prev_subject_id,
+                companion_teacher_id=prev_companion_id,
             ))
     elif action == "other":
         if notes:
@@ -793,6 +802,43 @@ def schedule_set_cell():
             ))
 
     db.session.commit()
+    return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+
+@admin_bp.route("/horarios/acompanante", methods=["POST"])
+@login_required
+def schedule_set_companion():
+    """Fija (o quita) el profesor titular al que acompaña un tramo de desdoble."""
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    from app.utils.school_year import get_current_school_year
+    year_id = get_current_school_year().id
+
+    teacher_id = int(request.form["teacher_id"])
+    day        = int(request.form["day"])
+    slot_id    = int(request.form["slot_id"])
+    companion_id = request.form.get("companion_id", type=int) or None
+
+    entry = TeacherSchedule.query.filter_by(
+        teacher_id=teacher_id, day_of_week=day, slot_id=slot_id,
+        school_year_id=year_id,
+    ).first()
+    if not entry:
+        flash("El tramo ya no existe.", "warning")
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+    if not (entry.subject and entry.subject.guard_type == "desdoble"):
+        flash("Este tramo no tiene una materia de tipo desdoble.", "warning")
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+    if companion_id == teacher_id:
+        companion_id = None
+
+    entry.companion_teacher_id = companion_id
+    db.session.commit()
+    if companion_id:
+        companion = User.query.get(companion_id)
+        flash(f"Desdoble vinculado: acompaña a {companion.full_name}.", "success")
+    else:
+        flash("Vínculo de desdoble eliminado: este tramo se cubrirá si el profesor falta.", "success")
     return redirect(url_for("admin.schedules", teacher_id=teacher_id))
 
 
