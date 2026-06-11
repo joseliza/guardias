@@ -45,7 +45,8 @@ class User(UserMixin, db.Model):
         lazy="select",
     )
 
-    schedule_entries = db.relationship("TeacherSchedule", backref="teacher", lazy="dynamic")
+    schedule_entries = db.relationship("TeacherSchedule", backref="teacher", lazy="dynamic",
+                                       foreign_keys="TeacherSchedule.teacher_id")
     absences = db.relationship("Absence", foreign_keys="Absence.teacher_id", backref="teacher", lazy="dynamic")
     guard_records = db.relationship("GuardRecord", backref="teacher", lazy="dynamic")
 
