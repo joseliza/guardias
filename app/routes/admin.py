@@ -84,6 +84,49 @@ def _transfer_email_to_active_year(teacher, exclude_ids=None):
     return target
 
 
+def _reclaim_emails_for_year(year):
+    """Al activar un curso, recupera los emails reales que quedaron en filas
+    de otros cursos: cada profesor del curso activado con email marcador
+    (_..._@pendiente.local) recibe el email real -y la contraseña, si no
+    tiene una propia- de su fila homónima (mismo nombre y apellidos) de otro
+    curso, que queda archivada. Así el email real siempre vive en el curso
+    vigente, se active el curso que se active.
+
+    Devuelve el número de emails transferidos. El llamador hace commit.
+    """
+    from app.models.school_year import SchoolYear
+
+    starts = {y.id: y.start_date for y in SchoolYear.query.all()}
+    moved = 0
+    pending = [u for u in User.query.filter(User.school_year_id == year.id,
+                                            User.role != "display").all()
+               if _is_placeholder_email(u.email)]
+    for u in pending:
+        donors = [d for d in User.query.filter(
+                      User.id != u.id,
+                      User.role != "display",
+                      User.surname.ilike(u.surname),
+                      User.name.ilike(u.name),
+                  ).all()
+                  if d.school_year_id != year.id and not _is_placeholder_email(d.email)]
+        if not donors:
+            continue
+        # Si hay varias filas con email real (no debería), la del curso más reciente
+        donor = max(donors, key=lambda d: (d.school_year_id is not None,
+                                           starts.get(d.school_year_id, year.start_date)))
+        email = donor.email
+        donor.email = f"_archived_{donor.id}@pendiente.local"
+        donor.receive_emails = False
+        # Flush para liberar el email único antes de reasignarlo.
+        db.session.flush()
+        if not u.password_hash:
+            u.password_hash = donor.password_hash
+        u.email = email
+        u.receive_emails = True
+        moved += 1
+    return moved
+
+
 # ── Profesores ───────────────────────────────────────────────────────────────
 
 @admin_bp.route("/profesores")
@@ -674,9 +717,11 @@ def schedules():
 
     from app.models.group import Group as GroupModel
     from app.models.room import Room as RoomModel
+    from app.models.subject import Subject
     from app.utils.school_year import get_year_groups
     groups = get_year_groups(year_id)
     rooms  = RoomModel.query.filter_by(active=True).order_by(RoomModel.name).all()
+    subjects = Subject.query.filter_by(school_year_id=year_id).order_by(Subject.name).all()
 
     from datetime import date as _date
     return render_template("admin/schedules.html",
@@ -688,6 +733,7 @@ def schedules():
                            slots=slots_cfg,
                            groups=groups,
                            rooms=rooms,
+                           subjects=subjects,
                            availability_periods=availability_periods,
                            today=_date.today(),
                            current_year=current_year,
@@ -766,8 +812,6 @@ def schedule_set_cell():
         teacher_id=teacher_id, day_of_week=day, slot_id=slot_id,
         school_year_id=year_id,
     ).first()
-    # Conservar la materia si la celda sigue siendo una clase
-    prev_subject_id = existing.subject_id if existing else None
     if existing:
         db.session.delete(existing)
         db.session.flush()
@@ -781,13 +825,17 @@ def schedule_set_cell():
             room_id=room_id, notes=notes,
         ))
     elif action == "group":
+        from app.models.subject import Subject
         group_id = request.form.get("group_id", type=int)
-        if group_id:
+        subject_id = request.form.get("subject_id", type=int) or None
+        subject = Subject.query.get(subject_id) if subject_id else None
+        is_guard = bool(subject and subject.guard_type == "guard")
+        if group_id or is_guard:
             db.session.add(TeacherSchedule(
                 teacher_id=teacher_id, day_of_week=day, school_year_id=year_id,
-                slot_id=slot_id, is_guard_slot=False, group_id=group_id,
+                slot_id=slot_id, is_guard_slot=is_guard, group_id=group_id,
                 room_id=room_id, notes=notes,
-                subject_id=prev_subject_id,
+                subject_id=subject_id,
             ))
     elif action == "other":
         if notes:
@@ -2317,6 +2365,48 @@ def _write_help_content(content: str):
         f.write(content)
 
 
+@admin_bp.route("/copia-seguridad")
+@login_required
+def backup_database():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    import gzip
+    import subprocess
+    from datetime import datetime
+    from sqlalchemy.engine import make_url
+    from flask import Response
+
+    url = make_url(current_app.config["SQLALCHEMY_DATABASE_URI"])
+    cmd = [
+        "mysqldump",
+        "-h", url.host or "localhost",
+        "-P", str(url.port or 3306),
+        "-u", url.username or "root",
+        "--single-transaction", "--routines", "--triggers",
+        "--databases", url.database,
+    ]
+    env = os.environ.copy()
+    if url.password:
+        env["MYSQL_PWD"] = url.password
+
+    try:
+        result = subprocess.run(cmd, env=env, capture_output=True, check=True, timeout=300)
+    except FileNotFoundError:
+        flash("No se encontró la herramienta mysqldump en el servidor.", "danger")
+        return redirect(url_for("admin.config") + "#section-backup")
+    except subprocess.CalledProcessError as e:
+        current_app.logger.error("Error en mysqldump: %s", e.stderr.decode(errors="replace"))
+        flash("Error al generar la copia de seguridad de la base de datos.", "danger")
+        return redirect(url_for("admin.config") + "#section-backup")
+
+    filename = f"guardias_backup_{datetime.now():%Y%m%d_%H%M%S}.sql.gz"
+    return Response(
+        gzip.compress(result.stdout),
+        mimetype="application/gzip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @admin_bp.route("/configuracion/ayuda", methods=["POST"])
 @login_required
 def config_help():
@@ -2562,11 +2652,11 @@ def school_year_create():
     name = request.form.get("name", "").strip()
     if not name or '/' not in name:
         flash("Nombre de curso inválido.", "danger")
-        return redirect(url_for("admin.config"))
+        return redirect(url_for("admin.config") + "#section-school-years")
 
     if SchoolYear.query.filter_by(name=name).first():
         flash(f"El curso {name} ya existe.", "warning")
-        return redirect(url_for("admin.config"))
+        return redirect(url_for("admin.config") + "#section-school-years")
 
     prev_year = get_current_school_year()
     start, end = year_dates(name)
@@ -2590,7 +2680,7 @@ def school_year_create():
 
     db.session.commit()
     flash(f"Curso {name} creado. {_copy_summary_msg(counts)}".strip(), "success")
-    return redirect(url_for("admin.config"))
+    return redirect(url_for("admin.config") + "#section-school-years")
 
 
 @admin_bp.route("/cursos/<int:year_id>/activar", methods=["POST"])
@@ -2604,12 +2694,19 @@ def school_year_activate(year_id):
     SchoolYear.query.update({"is_current": False})
     year.is_current = True
 
+    # Traer al curso activado los emails reales que quedaron en filas de
+    # otros cursos, para que el login siga funcionando tras el cambio.
+    moved = _reclaim_emails_for_year(year)
+
     from app.utils.points import recalculate_points_for_year
     recalculate_points_for_year(year)
 
     db.session.commit()
-    flash(f"Curso {year.name} activado. Puntos recalculados para este curso.", "success")
-    return redirect(url_for("admin.config"))
+    msg = f"Curso {year.name} activado. Puntos recalculados para este curso."
+    if moved:
+        msg += f" {moved} emails recuperados de otros cursos."
+    flash(msg, "success")
+    return redirect(url_for("admin.config") + "#section-school-years")
 
 
 @admin_bp.route("/cursos/<int:year_id>/editar", methods=["GET", "POST"])
@@ -2646,7 +2743,7 @@ def school_year_edit(year_id):
         year.name = name
         db.session.commit()
         flash(f"Curso {name} actualizado.", "success")
-        return redirect(url_for("admin.config"))
+        return redirect(url_for("admin.config") + "#section-school-years")
 
     return render_template("admin/school_year_form.html", year=year,
                            prev_year=_previous_school_year(year))
@@ -2692,12 +2789,14 @@ def school_year_delete(year_id):
     from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
     from app.models.activity import ExtraActivity, ExtraActivityGroup, ExtraActivityTeacher
     from app.models.subject import Subject
+    from app.models.guard import Guard, GuardRecord
+    from app.models.task import Task
 
     year = SchoolYear.query.get_or_404(year_id)
 
     if year.is_current:
         flash("No se puede borrar el curso activo.", "danger")
-        return redirect(url_for("admin.config"))
+        return redirect(url_for("admin.config") + "#section-school-years")
 
     # Borrar dependencias en orden para respetar FKs
     TeacherSchedule.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
@@ -2714,11 +2813,30 @@ def school_year_delete(year_id):
         ExtraActivityTeacher.query.filter(ExtraActivityTeacher.activity_id.in_(activity_ids)).delete(synchronize_session=False)
     ExtraActivity.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
 
+    # Guardias y tareas que apuntan a los grupos del curso
+    group_ids = [g.id for g in Group.query.filter_by(school_year_id=year_id).with_entities(Group.id).all()]
+    if group_ids:
+        Task.query.filter(Task.group_id.in_(group_ids)).delete(synchronize_session=False)
+        guard_ids = [g.id for g in Guard.query.filter(Guard.group_id.in_(group_ids)).with_entities(Guard.id).all()]
+        if guard_ids:
+            GuardRecord.query.filter(GuardRecord.guard_id.in_(guard_ids)).delete(synchronize_session=False)
+            Guard.query.filter(Guard.id.in_(guard_ids)).delete(synchronize_session=False)
+
     Group.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
     Subject.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
+
+    # Antes de desvincular a los profesores, devolver sus emails reales a sus
+    # filas homónimas con email marcador de otros cursos (priorizando el vigente),
+    # para que el login no quede atrapado en filas huérfanas.
+    for t in User.query.filter(User.school_year_id == year_id, User.role != "display").all():
+        _transfer_email_to_active_year(t)
+
+    # Los profesores del curso quedan sin curso asignado en lugar de borrarse,
+    # para no perder su historial (puntos, ausencias, chat, etc.)
+    User.query.filter_by(school_year_id=year_id).update({"school_year_id": None})
 
     name = year.name
     db.session.delete(year)
     db.session.commit()
     flash(f"Curso {name} y todos sus datos eliminados.", "success")
-    return redirect(url_for("admin.config"))
+    return redirect(url_for("admin.config") + "#section-school-years")

@@ -2,7 +2,9 @@
 Factoría de la aplicación Flask. Inicializa extensiones, registra blueprints
 y define el filtro Jinja2 `fecha_es` para formatear fechas en castellano.
 """
-from flask import Flask
+from urllib.parse import urlparse
+
+from flask import Flask, request, url_for
 from flask_login import current_user
 from app.config import Config
 from app.extensions import db, login_manager, migrate, mail, socketio, oauth, scheduler
@@ -37,6 +39,21 @@ def create_app():
     @app.template_filter("mins_to_hhmm")
     def mins_to_hhmm(m):
         return f"{m // 60:02d}:{m % 60:02d}"
+
+    @app.template_global("back_url")
+    def back_url(fallback_endpoint, anchor=None, **kwargs):
+        """URL para los botones 'Atrás': vuelve a la página que llamó (referrer)
+        si pertenece a esta app y no es la página actual; en caso contrario usa
+        el endpoint de respaldo. El ancla (#...) se aplica en ambos casos."""
+        ref = request.referrer
+        if ref:
+            parsed = urlparse(ref)
+            same_host = not parsed.netloc or parsed.netloc == request.host
+            if same_host and parsed.path != request.path:
+                return ref + (f"#{anchor}" if anchor else "")
+        if anchor:
+            kwargs["_anchor"] = anchor
+        return url_for(fallback_endpoint, **kwargs)
 
     @app.template_filter("fecha_es")
     def fecha_es(d, fmt="%A, %d de %B de %Y"):

@@ -53,7 +53,7 @@
               onclick="confirmBulkDelete()">
         <i class="bi bi-trash"></i> Borrar seleccionados
       </button>
-      <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+      <a href="{{ back_url('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
       <a href="{{ url_for('admin.teacher_create') }}" class="btn btn-primary"><i class="bi bi-person-plus"></i> Nuevo</a>
     </div>
   </div>

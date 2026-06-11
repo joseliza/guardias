@@ -8,7 +8,7 @@
     {% if current_year %}<span class="badge bg-primary ms-2" style="font-size:.75rem">{{ current_year.name }}</span>{% endif %}
   </h4>
   <div class="d-flex gap-2">
-    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+    <a href="{{ back_url('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
     {% if can_edit %}
     <a href="{{ url_for('admin.data_load') }}" class="btn btn-outline-secondary"><i class="bi bi-calendar3"></i> Importar horarios</a>
     {% endif %}
@@ -71,7 +71,10 @@
             {% set cur_room = entry.room if entry and entry.room else None %}
             {% set cur_room_id = cur_room.id if cur_room else 0 %}
             {% set cur_room_name = cur_room.name if cur_room else '' %}
-            {% set cur_subject_type = entry.subject.guard_type if entry and entry.subject else '' %}
+            {% set cur_subject = entry.subject if entry and entry.subject else None %}
+            {% set cur_subject_type = cur_subject.guard_type if cur_subject else '' %}
+            {% set cur_subject_id = cur_subject.id if cur_subject else 0 %}
+            {% set cur_subject_name = cur_subject.name if cur_subject else '' %}
             <td class="py-2 schedule-cell{% if entry %}{% if entry.is_guard_slot %} bg-success-subtle{% else %} bg-primary-subtle{% endif %}{% endif %}"
                 style="min-width:90px{% if can_edit %}; cursor:pointer{% endif %}"
                 {% if can_edit %}
@@ -81,10 +84,12 @@
                 data-slot-label="{{ s.label }}"
                 data-day-label="{{ days[d] }}"
                 data-type="{{ cur_type }}"
-                data-group-id="{{ cur_group_id }}"
+                data-group-id="{{ cur_group_id if cur_group_id else '' }}"
                 data-group-name="{{ cur_group_name }}"
                 data-room-id="{{ cur_room_id if cur_room_id else '' }}"
                 data-room-name="{{ cur_room_name }}"
+                data-subject-id="{{ cur_subject_id if cur_subject_id else '' }}"
+                data-subject-name="{{ cur_subject_name }}"
                 data-notes="{{ entry.notes if entry and entry.notes else '' }}"
                 onclick="openSlotModal(this)"
                 title="Clic para editar"
@@ -94,6 +99,9 @@
                 <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia</span>
                 {% elif entry.group %}
                 <span class="badge bg-primary">{{ entry.group.name }}</span>
+                {% if cur_subject %}
+                <div class="small text-muted mt-1"><i class="bi bi-book"></i> {{ cur_subject.name }}</div>
+                {% endif %}
                 {% set display_room = entry.room %}
                 {% if display_room %}
                 <div class="small text-muted mt-1"><i class="bi bi-door-open"></i> {{ display_room.name }}</div>
@@ -279,10 +287,29 @@
           <input type="hidden" name="action"     id="slot-action">
           <input type="hidden" name="group_id"   id="slot-group-id">
           <input type="hidden" name="room_id"    id="slot-room-id">
+          <input type="hidden" name="subject_id" id="slot-subject-id">
           <input type="hidden" name="notes"      id="slot-notes">
 
           {# Asignación actual #}
           <p id="slot-current" class="small text-muted mb-3"></p>
+
+          {# Buscador de materia #}
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Materia</label>
+            <div class="position-relative">
+              <input type="text" id="slot-subject-search" class="form-control form-control-sm"
+                     autocomplete="off" placeholder="Buscar materia...">
+              <div id="slot-subject-sugg" class="list-group position-absolute w-100 shadow-sm"
+                   style="z-index:1060;display:none;max-height:180px;overflow-y:auto"></div>
+            </div>
+            <div id="slot-subject-chip" class="mt-1" style="display:none">
+              <span class="badge bg-info text-dark d-inline-flex align-items-center gap-1 px-2 py-1">
+                <span id="slot-subject-chip-name"></span>
+                <button type="button" class="btn-close ms-1" style="font-size:.6rem"
+                        onclick="clearSlotSubject()"></button>
+              </span>
+            </div>
+          </div>
 
           {# Buscador de grupo #}
           <div class="mb-2">
@@ -338,9 +365,6 @@
             <button type="button" id="btn-save-group" class="btn btn-sm btn-primary" style="display:none"
                     onclick="submitSlot('group')">
               <i class="bi bi-check-lg"></i> Guardar clase
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-success" onclick="submitSlot('guard')">
-              <i class="bi bi-shield-check"></i> Marcar como guardia
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="submitSlot('clear')">
               <i class="bi bi-x-circle"></i> Dejar libre
@@ -412,8 +436,9 @@
 {% block scripts %}
 {% if selected %}
 <script>
-const groupData = [{% for g in groups %}{ id: {{ g.id }}, name: {{ g.name|tojson }} },{% endfor %}];
-const roomData  = [{% for r in rooms %}{ id: {{ r.id }}, name: {{ r.name|tojson }} },{% endfor %}];
+const groupData   = [{% for g in groups %}{ id: {{ g.id }}, name: {{ g.name|tojson }} },{% endfor %}];
+const roomData    = [{% for r in rooms %}{ id: {{ r.id }}, name: {{ r.name|tojson }} },{% endfor %}];
+const subjectData = [{% for sub in subjects %}{ id: {{ sub.id }}, name: {{ sub.name|tojson }}, guardType: {{ sub.guard_type|tojson }} },{% endfor %}];
 const slotsConf = [{% for s in slots %}{% if not s.is_break %}{ id: {{ s.id }}, label: {{ s.label|tojson }} },{% endif %}{% endfor %}];
 const daysConf  = [{% for d in days %}{{ d|tojson }},{% endfor %}];
 const slotModal = document.getElementById('slotModal') ? new bootstrap.Modal(document.getElementById('slotModal')) : null;
@@ -427,10 +452,13 @@ function openSlotModal(el) {
   document.getElementById('slot-action').value         = '';
   document.getElementById('slot-group-id').value       = d.groupId || '';
   document.getElementById('slot-room-id').value        = d.roomId  || '';
+  document.getElementById('slot-subject-id').value     = d.subjectId || '';
   document.getElementById('slot-group-search').value   = '';
   document.getElementById('slot-room-search').value    = '';
-  document.getElementById('slot-group-sugg').style.display = 'none';
-  document.getElementById('slot-room-sugg').style.display  = 'none';
+  document.getElementById('slot-subject-search').value = '';
+  document.getElementById('slot-group-sugg').style.display   = 'none';
+  document.getElementById('slot-room-sugg').style.display    = 'none';
+  document.getElementById('slot-subject-sugg').style.display = 'none';
   updateSaveGroupBtn();
   document.getElementById('slot-other-input').value = d.notes || '';
   document.getElementById('btn-save-other').style.display = d.notes ? '' : 'none';
@@ -463,13 +491,27 @@ function openSlotModal(el) {
     roomChip.style.display = 'none';
   }
 
+  const subjectChip = document.getElementById('slot-subject-chip');
+  if (d.subjectId && d.subjectId !== '0') {
+    document.getElementById('slot-subject-chip-name').textContent = d.subjectName;
+    subjectChip.style.display = '';
+  } else {
+    subjectChip.style.display = 'none';
+  }
+
   slotModal.show();
+}
+
+function getSubjectGuardType(id) {
+  const sub = subjectData.find(x => String(x.id) === String(id));
+  return sub ? sub.guardType : null;
 }
 
 function updateSaveGroupBtn() {
   const hasGroup = !!document.getElementById('slot-group-id').value;
-  const hasRoom  = !!document.getElementById('slot-room-id').value;
-  document.getElementById('btn-save-group').style.display = (hasGroup && hasRoom) ? '' : 'none';
+  const subjectId = document.getElementById('slot-subject-id').value;
+  const isGuardSubject = subjectId && getSubjectGuardType(subjectId) === 'guard';
+  document.getElementById('btn-save-group').style.display = (hasGroup || isGuardSubject) ? '' : 'none';
 }
 
 function clearSlotGroup() {
@@ -484,6 +526,12 @@ function clearSlotRoom() {
   updateSaveGroupBtn();
 }
 
+function clearSlotSubject() {
+  document.getElementById('slot-subject-id').value = '';
+  document.getElementById('slot-subject-chip').style.display = 'none';
+  updateSaveGroupBtn();
+}
+
 function submitSlotOther() {
   const val = document.getElementById('slot-other-input').value.trim();
   if (!val) return;
@@ -492,7 +540,12 @@ function submitSlotOther() {
 }
 
 function submitSlot(action) {
-  if (action === 'group' && !document.getElementById('slot-group-id').value) return;
+  if (action === 'group') {
+    const groupId = document.getElementById('slot-group-id').value;
+    const subjectId = document.getElementById('slot-subject-id').value;
+    const isGuardSubject = subjectId && getSubjectGuardType(subjectId) === 'guard';
+    if (!groupId && !isGuardSubject) return;
+  }
   document.getElementById('slot-action').value = action;
   document.getElementById('slot-form').submit();
 }
@@ -616,6 +669,13 @@ makeModalAutocomplete('slot-room-search', 'slot-room-sugg', roomData, (id, name)
   document.getElementById('slot-room-id').value = id;
   document.getElementById('slot-room-chip-name').textContent = name;
   document.getElementById('slot-room-chip').style.display = '';
+  updateSaveGroupBtn();
+});
+
+makeModalAutocomplete('slot-subject-search', 'slot-subject-sugg', subjectData, (id, name) => {
+  document.getElementById('slot-subject-id').value = id;
+  document.getElementById('slot-subject-chip-name').textContent = name;
+  document.getElementById('slot-subject-chip').style.display = '';
   updateSaveGroupBtn();
 });
 

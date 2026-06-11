@@ -17,7 +17,7 @@
     <a href="{{ url_for('guards.my_guard', fecha=next_date.isoformat()) }}" class="btn btn-outline-secondary btn-sm" title="Día siguiente"><i class="bi bi-chevron-right"></i></a>
     <a href="{{ url_for('guards.my_guard') }}" class="btn btn-outline-primary btn-sm"
        style="{{ 'visibility:hidden' if is_today }}">Hoy</a>
-    <a href="{{ url_for('dashboard.index', fecha=target_date.isoformat()) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+    <a href="{{ back_url('dashboard.index', fecha=target_date.isoformat()) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
   </div>
 </div>
 </div>

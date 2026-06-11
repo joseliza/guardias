@@ -1,0 +1,14 @@
+# Archivos de compilación de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# Carpetas
+memory/
+ficheros_carga/
+
+
+# Archivos
+README.md

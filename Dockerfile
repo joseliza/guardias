@@ -3,7 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    default-libmysqlclient-dev gcc pkg-config fonts-dejavu-core \
+    default-libmysqlclient-dev gcc pkg-config fonts-dejavu-core default-mysql-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

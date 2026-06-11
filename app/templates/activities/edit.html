@@ -12,7 +12,7 @@
       <i class="bi bi-trash"></i> Eliminar
     </button>
     {% endif %}
-    <a href="{{ url_for('activities.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+    <a href="{{ back_url('activities.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
   </div>
 </div>
 {% if is_past %}
@@ -93,7 +93,7 @@
       {% if not is_past %}
       <div class="mt-4">
         <button type="submit" class="btn btn-primary">Guardar cambios</button>
-        <a href="{{ url_for('activities.index') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
+        <a href="{{ back_url('activities.index') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
       </div>
       {% endif %}
     </form>

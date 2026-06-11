@@ -5,7 +5,7 @@
 <div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
 <div class="d-flex justify-content-between align-items-center mb-0">
   <h4 class="mb-0"><i class="bi bi-sliders"></i> Configuración</h4>
-  <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+  <a href="{{ back_url('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
 </div>
 </div>
 
@@ -13,6 +13,10 @@
 {% set excl = sched.get('excluded_ids', []) %}
 {% set sched_roles = sched.get('recipient_roles', ['teacher']) %}
 {% set sched_days = sched.get('days', [0,1,2,3,4]) %}
+
+<button type="button" id="config-back-btn" class="btn btn-outline-secondary btn-sm mt-3 mb-2 d-none">
+  <i class="bi bi-arrow-left"></i> Volver a todas las secciones
+</button>
 
 <div class="accordion mt-3" id="config-accordion">
 
@@ -613,6 +617,27 @@
     </div>
   </div>
 
+  <!-- ── Copia de seguridad ────────────────────────────────────────── -->
+  <div class="accordion-item">
+    <h2 class="accordion-header">
+      <button class="accordion-button collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#section-backup">
+        Copia de seguridad
+      </button>
+    </h2>
+    <div id="section-backup" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
+      <div class="accordion-body">
+        <p class="text-muted mb-3">
+          Descarga una copia completa de la base de datos (todos los cursos, profesores, horarios, etc.)
+          comprimida en formato <code>.sql.gz</code>.
+        </p>
+        <a href="{{ url_for('admin.backup_database') }}" class="btn btn-outline-primary">
+          <i class="bi bi-database-down"></i> Descargar copia de seguridad
+        </a>
+      </div>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
@@ -661,6 +686,30 @@ if (location.hash) {
     new bootstrap.Collapse(target, { toggle: false }).show();
   }
 }
+
+// Al abrir una sección, ocultar el resto y mostrar solo la activa
+const backBtn = document.getElementById('config-back-btn');
+let activeSection = null;
+
+accordion.addEventListener('show.bs.collapse', function(e) {
+  activeSection = e.target.id;
+  Array.from(accordion.children).forEach(item => {
+    item.classList.toggle('d-none', item !== e.target.closest('.accordion-item'));
+  });
+  backBtn.classList.remove('d-none');
+});
+
+accordion.addEventListener('hidden.bs.collapse', function(e) {
+  if (e.target.id !== activeSection) return;
+  activeSection = null;
+  Array.from(accordion.children).forEach(item => item.classList.remove('d-none'));
+  backBtn.classList.add('d-none');
+});
+
+backBtn.addEventListener('click', function() {
+  if (!activeSection) return;
+  bootstrap.Collapse.getOrCreateInstance(document.getElementById(activeSection)).hide();
+});
 
 const editor = document.getElementById('help-editor');
 const preview = document.getElementById('help-preview');
