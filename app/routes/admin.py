@@ -274,7 +274,7 @@ def teacher_delete(tid):
     from app.models.presence import UserPresence
     from app.models.activity import ExtraActivity, ExtraActivityTeacher
     from app.models.chat import ChatMessage, ChatClear
-    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup, AvailabilityPeriodSlot
 
     UserPresence.query.filter_by(user_id=tid).delete(synchronize_session=False)
     GuardRecord.query.filter_by(teacher_id=tid).delete(synchronize_session=False)
@@ -301,6 +301,7 @@ def teacher_delete(tid):
     period_ids = [p.id for p in AvailabilityPeriod.query.filter_by(teacher_id=tid).all()]
     if period_ids:
         AvailabilityPeriodGroup.query.filter(AvailabilityPeriodGroup.period_id.in_(period_ids)).delete(synchronize_session=False)
+        AvailabilityPeriodSlot.query.filter(AvailabilityPeriodSlot.period_id.in_(period_ids)).delete(synchronize_session=False)
         AvailabilityPeriod.query.filter(AvailabilityPeriod.id.in_(period_ids)).delete(synchronize_session=False)
     AvailabilityPeriod.query.filter_by(created_by_id=tid).update({"created_by_id": current_user.id}, synchronize_session=False)
     # Asignaciones a actividades extraescolares de este profesor; autoría se transfiere al admin que borra
@@ -346,7 +347,7 @@ def teacher_bulk_delete():
     from app.models.presence import UserPresence
     from app.models.activity import ExtraActivity, ExtraActivityTeacher
     from app.models.chat import ChatMessage, ChatClear
-    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup, AvailabilityPeriodSlot
 
     raw_ids = request.form.getlist("ids[]")
     try:
@@ -389,6 +390,7 @@ def teacher_bulk_delete():
         period_ids = [p.id for p in AvailabilityPeriod.query.filter_by(teacher_id=tid).all()]
         if period_ids:
             AvailabilityPeriodGroup.query.filter(AvailabilityPeriodGroup.period_id.in_(period_ids)).delete(synchronize_session=False)
+            AvailabilityPeriodSlot.query.filter(AvailabilityPeriodSlot.period_id.in_(period_ids)).delete(synchronize_session=False)
             AvailabilityPeriod.query.filter(AvailabilityPeriod.id.in_(period_ids)).delete(synchronize_session=False)
         AvailabilityPeriod.query.filter_by(created_by_id=tid).update({"created_by_id": current_user.id}, synchronize_session=False)
         # Asignaciones a actividades extraescolares de este profesor; autoría se transfiere al admin que borra
@@ -1685,7 +1687,7 @@ def availability_create():
         return redirect(url_for("dashboard.index"))
 
     from datetime import date as _date
-    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup, AvailabilityPeriodSlot
 
     teacher_id = int(request.form["teacher_id"])
     teacher = User.query.get(teacher_id)
@@ -1718,6 +1720,11 @@ def availability_create():
     for gid in request.form.getlist("group_ids"):
         db.session.add(AvailabilityPeriodGroup(period_id=period.id, group_id=int(gid)))
 
+    for sid in request.form.getlist("slot_ids"):
+        day_str, _, slot_str = sid.partition(":")
+        if day_str.isdigit() and slot_str.isdigit():
+            db.session.add(AvailabilityPeriodSlot(period_id=period.id, day_of_week=int(day_str), slot_id=int(slot_str)))
+
     db.session.commit()
     flash("Periodo de disponibilidad para guardia creado.", "success")
     return redirect(url_for("admin.schedules", teacher_id=teacher_id))
@@ -1730,7 +1737,7 @@ def availability_edit(period_id):
         return redirect(url_for("dashboard.index"))
 
     from datetime import date as _date
-    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup, AvailabilityPeriodSlot
 
     period = AvailabilityPeriod.query.get_or_404(period_id)
     teacher_id = period.teacher_id
@@ -1753,6 +1760,12 @@ def availability_edit(period_id):
     for gid in request.form.getlist("group_ids"):
         db.session.add(AvailabilityPeriodGroup(period_id=period.id, group_id=int(gid)))
 
+    AvailabilityPeriodSlot.query.filter_by(period_id=period.id).delete()
+    for sid in request.form.getlist("slot_ids"):
+        day_str, _, slot_str = sid.partition(":")
+        if day_str.isdigit() and slot_str.isdigit():
+            db.session.add(AvailabilityPeriodSlot(period_id=period.id, day_of_week=int(day_str), slot_id=int(slot_str)))
+
     db.session.commit()
     flash("Periodo de disponibilidad actualizado.", "success")
     return redirect(url_for("admin.schedules", teacher_id=teacher_id))
@@ -1764,11 +1777,12 @@ def availability_delete(period_id):
     if not _require_management():
         return redirect(url_for("dashboard.index"))
 
-    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup, AvailabilityPeriodSlot
 
     period = AvailabilityPeriod.query.get_or_404(period_id)
     teacher_id = period.teacher_id
     AvailabilityPeriodGroup.query.filter_by(period_id=period.id).delete()
+    AvailabilityPeriodSlot.query.filter_by(period_id=period.id).delete()
     db.session.delete(period)
     db.session.commit()
     flash("Periodo de disponibilidad eliminado.", "success")
@@ -2842,7 +2856,7 @@ def school_year_delete(year_id):
     from app.models.school_year import SchoolYear
     from app.models.schedule import TeacherSchedule
     from app.models.raw_schedule import RawScheduleRow
-    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup
+    from app.models.availability import AvailabilityPeriod, AvailabilityPeriodGroup, AvailabilityPeriodSlot
     from app.models.activity import ExtraActivity, ExtraActivityGroup, ExtraActivityTeacher
     from app.models.subject import Subject
     from app.models.guard import Guard, GuardRecord
@@ -2861,6 +2875,7 @@ def school_year_delete(year_id):
     period_ids = [p.id for p in AvailabilityPeriod.query.filter_by(school_year_id=year_id).with_entities(AvailabilityPeriod.id).all()]
     if period_ids:
         AvailabilityPeriodGroup.query.filter(AvailabilityPeriodGroup.period_id.in_(period_ids)).delete(synchronize_session=False)
+        AvailabilityPeriodSlot.query.filter(AvailabilityPeriodSlot.period_id.in_(period_ids)).delete(synchronize_session=False)
     AvailabilityPeriod.query.filter_by(school_year_id=year_id).delete(synchronize_session=False)
 
     activity_ids = [a.id for a in ExtraActivity.query.filter_by(school_year_id=year_id).with_entities(ExtraActivity.id).all()]

@@ -78,6 +78,8 @@
 
     /* ── Tasks panel header ── */
     #tasks-header { background: #fff; padding: .5rem 1rem; border-bottom: 1px solid #dee2e6; font-size: .88rem; font-weight: 600; color: #495057; flex-shrink: 0; }
+    #conn-status { font-size: 1rem; color: #dc3545; cursor: default; user-select: none; }
+    #conn-status.ok { color: #198754; }
   </style>
 </head>
 <body>
@@ -87,6 +89,7 @@
   <div id="topbar">
     <h1><i class="bi bi-shield-check text-primary"></i> {{ config.INSTITUTE_NAME }} — Panel de Guardia</h1>
     <div id="clock">--:--:--</div>
+    <span id="conn-status" title="Tiempo real: desconectado">&#9679;</span>
     <div id="topbar-actions">
       <button id="btn-toggle-tasks" class="btn btn-outline-secondary btn-sm" title="Mostrar/ocultar tareas">
         <i class="bi bi-list-task"></i> Tareas
@@ -514,10 +517,28 @@
 })();
 
 const socket = io();
-socket.emit('join', { channel: 'general' });
-socket.emit('join', { channel: 'display' });
 
-socket.on('connect', () => { socket.emit('load_messages', { channel: 'general' }); });
+// Las salas hay que pedirlas en CADA conexión: tras una reconexión (reinicio
+// del servidor, microcorte de red) el servidor crea una sesión nueva y olvida
+// las salas, por lo que un join hecho solo al cargar la página dejaría la
+// pantalla "conectada" pero sin recibir guard_updated ni mensajes de chat.
+socket.on('connect', () => {
+  socket.emit('join', { channel: 'general' });
+  socket.emit('join', { channel: 'display' });
+  socket.emit('load_messages', { channel: 'general' });
+  setConnStatus(true);
+});
+socket.on('disconnect', () => setConnStatus(false));
+socket.io.engine.on('upgrade', () => setConnStatus(true));
+
+function setConnStatus(ok) {
+  const dot = document.getElementById('conn-status');
+  if (!dot) return;
+  dot.classList.toggle('ok', ok);
+  dot.title = ok
+    ? 'Tiempo real: conectado (' + socket.io.engine.transport.name + ')'
+    : 'Tiempo real: desconectado';
+}
 
 socket.on('message_history', (data) => {
   const box = document.getElementById('chat-box');

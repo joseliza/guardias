@@ -64,7 +64,9 @@
 const channel = {{ channel | tojson }};
 const socket = io();
 
-socket.emit('join', { channel });
+// Reentrar en la sala en cada conexión: tras una reconexión el servidor
+// olvida las salas y un join único al cargar dejaría de recibir mensajes.
+socket.on('connect', () => { socket.emit('join', { channel }); });
 
 socket.on('new_message', (data) => {
   const box = document.getElementById('chat-box');

@@ -39,7 +39,8 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
     - primary:   profesores con tramo de guardia oficial, no ausentes, ordenados de forma
                  equitativa (ver fairness_sort_key).
     - ex_guard:  profesores cuyo grupo sale completo en actividad extraescolar ese tramo,
-                 o que tienen un periodo de disponibilidad para guardia activo y clase
+                 o que tienen un periodo de disponibilidad para guardia activo que incluye
+                 este tramo (o sin tramos seleccionados, para periodos antiguos) y clase
                  asignada en este tramo; no ausentes, no en primary, ordenados igual que
                  primary.
     - secondary: profesores sin ninguna entrada en ese tramo (libres totales), no ausentes,
@@ -127,6 +128,9 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
         tid = period.teacher_id
         if tid in absent_ids or tid in guard_slot_ids or tid in ex_guard_ids:
             continue
+        period_slots = {(ps.day_of_week, ps.slot_id) for ps in period.slots}
+        if period_slots and (day_idx, slot_id) not in period_slots:
+            continue
         has_class = TeacherSchedule.query.filter(
             TeacherSchedule.teacher_id == tid,
             TeacherSchedule.day_of_week == day_idx,
@@ -163,7 +167,9 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
 def get_support_teachers(group_id, slot_id: int, target_date: date, absent_teacher_id: int):
     """Devuelve la lista de profesores que pueden actuar como apoyo:
     comparten tramo, grupo y aula con el ausente (apoyo automático en ambos
-    sentidos, p. ej. desdobles) y no están ausentes ese día."""
+    sentidos, p. ej. desdobles), no están ausentes ese día y están activos
+    (un profesor sustituido queda inactivo y su horario copiado no debe
+    convertirlo en apoyo/desdoble de otro)."""
     if not group_id:
         return []
     day_idx = target_date.weekday()
@@ -186,8 +192,14 @@ def get_support_teachers(group_id, slot_id: int, target_date: date, absent_teach
         .filter_by(date=target_date, slot_id=slot_id)
         .with_entities(Absence.teacher_id).all()
     }
-    return [User.query.get(e.teacher_id) for e in others
-            if e.teacher_id not in absent_ids and User.query.get(e.teacher_id)]
+    result = []
+    for e in others:
+        if e.teacher_id in absent_ids:
+            continue
+        teacher = User.query.get(e.teacher_id)
+        if teacher and teacher.active:
+            result.append(teacher)
+    return result
 
 
 def auto_assign_pending_guards(target_date: date, slot_id: int) -> dict:

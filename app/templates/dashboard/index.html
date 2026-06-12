@@ -8,10 +8,11 @@
     <h4>
       <i class="bi bi-house"></i>
       Panel{% if is_today %} de hoy{% endif %} — {{ target_date | fecha_es }}
-      {% if is_today and not is_display_user %}
+      {% if is_today %}
       <span id="live-clock" class="ms-2 fw-bold text-primary" style="font-size:1.6rem;vertical-align:baseline;letter-spacing:.04em;line-height:1;"></span>
-      {% elif is_today %}
-      {# Hoy, en modo pantalla: sin badge — el título ya indica "de hoy" #}
+      {% if is_display_user %}
+      <span id="conn-status" title="Tiempo real: desconectado" style="font-size:1rem;color:#dc3545;cursor:default;user-select:none;vertical-align:middle;">&#9679;</span>
+      {% endif %}
       {% elif not is_editable %}
       <span class="badge bg-secondary ms-2" style="font-size:.65rem;vertical-align:middle;">Pasado</span>
       {% else %}
@@ -310,6 +311,10 @@
                 <span class="badge bg-warning text-dark" title="Ocupado — cubriendo una ausencia">
                   <i class="bi bi-person-fill-exclamation"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
+                {% elif t.id in absent_teacher_ids_today %}
+                <span class="badge bg-secondary" title="Ausente hoy">
+                  <i class="bi bi-person-dash"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                </span>
                 {% elif (current_user.is_management or is_display_user) and item.all_guards_info %}
                 <button type="button"
                         class="badge bg-success border-0 quick-assign-btn draggable-teacher"
@@ -562,7 +567,7 @@ document.getElementById('date-picker').addEventListener('change', function() {
   if (this.value) window.location.href = '/?fecha=' + this.value;
 });
 
-{% if is_today and not is_display_user %}
+{% if is_today %}
 (function liveClock() {
   function tick() {
     const now = new Date();
@@ -577,7 +582,36 @@ document.getElementById('date-picker').addEventListener('change', function() {
 
 const socket = io();
 const channel = "general";
-socket.emit('join', { channel });
+// Reentrar en las salas en CADA conexión: tras una reconexión (reinicio del
+// servidor, microcorte de red) el servidor crea una sesión nueva y olvida las
+// salas, por lo que un join hecho solo al cargar la página dejaría de recibir
+// mensajes y eventos.
+socket.on('connect', () => {
+  socket.emit('join', { channel });
+  {% if is_display_user %}
+  socket.emit('join', { channel: 'display' });
+  setConnStatus(true);
+  {% endif %}
+});
+
+{% if is_display_user %}
+// Modo pantalla de sala de profesores: recarga automática cuando cambian
+// guardias, asignaciones, ausencias o tareas (evento emitido por
+// app/utils/realtime.py a la sala "display").
+socket.on('guard_updated', () => location.reload());
+
+socket.on('disconnect', () => setConnStatus(false));
+socket.io.engine.on('upgrade', () => setConnStatus(true));
+
+function setConnStatus(ok) {
+  const dot = document.getElementById('conn-status');
+  if (!dot) return;
+  dot.style.color = ok ? '#198754' : '#dc3545';
+  dot.title = ok
+    ? 'Tiempo real: conectado (' + socket.io.engine.transport.name + ')'
+    : 'Tiempo real: desconectado';
+}
+{% endif %}
 
 socket.on('chat_cleared', () => {
   document.getElementById('chat-box').innerHTML = '';

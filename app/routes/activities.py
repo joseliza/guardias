@@ -12,6 +12,7 @@ from app.models.absence import Absence
 from app.models.guard import Guard
 from app.models.user import User
 from app.models.group import Group
+from app.models.schedule import TeacherSchedule
 from flask_mail import Message
 
 activities_bp = Blueprint("activities", __name__, url_prefix="/extraescolares")
@@ -54,6 +55,18 @@ def create():
         slot_ids = request.form.getlist("slot_ids")
         name = request.form["name"]
         description = request.form.get("description", "")
+        group_ids = request.form.getlist("group_ids")
+        teacher_ids = request.form.getlist("teacher_ids")
+
+        if activity_date < datetime.now().date():
+            flash("La fecha de la actividad no puede ser anterior a la fecha actual.", "danger")
+            return redirect(url_for("activities.create"))
+        if not group_ids:
+            flash("Debes seleccionar al menos un grupo participante.", "danger")
+            return redirect(url_for("activities.create"))
+        if not teacher_ids:
+            flash("Debes seleccionar al menos un profesor acompañante.", "danger")
+            return redirect(url_for("activities.create"))
 
         activity = ExtraActivity(
             school_year_id=year.id,
@@ -67,7 +80,6 @@ def create():
         db.session.flush()
 
         # Grupos afectados
-        group_ids = request.form.getlist("group_ids")
         for gid in group_ids:
             whole = request.form.get(f"whole_group_{gid}") == "on"
             ag = ExtraActivityGroup(activity_id=activity.id, group_id=int(gid), whole_group=whole)
@@ -78,11 +90,21 @@ def create():
         _gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
         auto_justify = _gcfg.get("auto_justify_extracurricular", False)
 
-        teacher_ids = request.form.getlist("teacher_ids")
+        day_idx = activity_date.weekday()
         for tid in teacher_ids:
             at = ExtraActivityTeacher(activity_id=activity.id, teacher_id=int(tid))
             db.session.add(at)
             for slot_id in slot_ids:
+                # Grupo que tiene el profesor en su horario para este tramo.
+                # Si coincide con un grupo que sale completo en la actividad,
+                # el mecanismo de "Grupo en actividad EX" del dashboard marcará
+                # la guardia como cubierta sin necesidad de asignar sustituto.
+                schedule_entry = TeacherSchedule.query.filter_by(
+                    teacher_id=int(tid), day_of_week=day_idx, slot_id=int(slot_id),
+                    is_guard_slot=False, school_year_id=year.id,
+                ).first()
+                group_id = schedule_entry.group_id if schedule_entry else None
+
                 existing = Absence.query.filter_by(
                     teacher_id=int(tid), date=activity_date, slot_id=int(slot_id)
                 ).filter(Absence.status != "returned").first()
@@ -103,6 +125,7 @@ def create():
                         absence_id=absence.id,
                         date=activity_date,
                         slot_id=int(slot_id),
+                        group_id=group_id,
                         status="pending",
                     )
                     db.session.add(guard)
@@ -117,7 +140,7 @@ def create():
         return redirect(url_for("activities.index"))
 
     return render_template("activities/create.html", teachers=teachers,
-                           groups=groups, slots=slots)
+                           groups=groups, slots=slots, today=datetime.now().date())
 
 
 @activities_bp.route("/<int:aid>/editar", methods=["GET", "POST"])
@@ -146,8 +169,21 @@ def edit(aid):
     if request.method == "POST":
         new_date = datetime.strptime(request.form["date"], "%Y-%m-%d").date()
         new_slot_ids = request.form.getlist("slot_ids")
+        new_group_ids = request.form.getlist("group_ids")
+        new_teacher_ids_list = request.form.getlist("teacher_ids")
+
+        if new_date < _date.today():
+            flash("La fecha de la actividad no puede ser anterior a la fecha actual.", "danger")
+            return redirect(url_for("activities.edit", aid=aid))
+        if not new_group_ids:
+            flash("Debes seleccionar al menos un grupo participante.", "danger")
+            return redirect(url_for("activities.edit", aid=aid))
+        if not new_teacher_ids_list:
+            flash("Debes seleccionar al menos un profesor acompañante.", "danger")
+            return redirect(url_for("activities.edit", aid=aid))
+
         old_teacher_ids = {at.teacher_id for at in activity.accompanying_teachers}
-        new_teacher_ids = {int(tid) for tid in request.form.getlist("teacher_ids")}
+        new_teacher_ids = {int(tid) for tid in new_teacher_ids_list}
 
         # Borrar ausencias anteriores de todos los acompañantes (se recrearán)
         from app.models.guard import Guard, GuardRecord
@@ -171,7 +207,7 @@ def edit(aid):
 
         # Grupos
         ExtraActivityGroup.query.filter_by(activity_id=aid).delete(synchronize_session=False)
-        for gid in request.form.getlist("group_ids"):
+        for gid in new_group_ids:
             whole = request.form.get(f"whole_group_{gid}") == "on"
             db.session.add(ExtraActivityGroup(activity_id=aid, group_id=int(gid), whole_group=whole))
 
@@ -180,10 +216,21 @@ def edit(aid):
         _gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
         auto_justify = _gcfg.get("auto_justify_extracurricular", False)
 
+        new_day_idx = new_date.weekday()
         ExtraActivityTeacher.query.filter_by(activity_id=aid).delete(synchronize_session=False)
         for tid in new_teacher_ids:
             db.session.add(ExtraActivityTeacher(activity_id=aid, teacher_id=tid))
             for slot_id in new_slot_ids:
+                # Grupo que tiene el profesor en su horario para este tramo.
+                # Si coincide con un grupo que sale completo en la actividad,
+                # el mecanismo de "Grupo en actividad EX" del dashboard marcará
+                # la guardia como cubierta sin necesidad de asignar sustituto.
+                schedule_entry = TeacherSchedule.query.filter_by(
+                    teacher_id=tid, day_of_week=new_day_idx, slot_id=int(slot_id),
+                    is_guard_slot=False, school_year_id=year_id,
+                ).first()
+                group_id = schedule_entry.group_id if schedule_entry else None
+
                 existing = Absence.query.filter_by(
                     teacher_id=tid, date=new_date, slot_id=int(slot_id)
                 ).filter(Absence.status != "returned").first()
@@ -200,7 +247,7 @@ def edit(aid):
                     db.session.flush()
                     db.session.add(Guard(
                         absence_id=absence.id, date=new_date,
-                        slot_id=int(slot_id), status="pending"
+                        slot_id=int(slot_id), group_id=group_id, status="pending"
                     ))
 
         db.session.commit()
@@ -209,7 +256,7 @@ def edit(aid):
 
     return render_template("activities/edit.html", activity=activity,
                            teachers=teachers, groups=groups, slots=slots,
-                           is_past=is_past)
+                           is_past=is_past, today=_date.today())
 
 
 @activities_bp.route("/<int:aid>/eliminar", methods=["POST"])

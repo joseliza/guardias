@@ -1,13 +1,14 @@
 """
 Blueprint de la pantalla de sala de profesores (rol `display`). Muestra en modo
 táctil las guardias del día con controles para asignar, reasignar, eliminar
-asignaciones, marcar incorporaciones y añadir tareas. Emite eventos Socket.IO
-`guard_updated` para refrescar la pantalla sin recargar en todos los clientes.
+asignaciones, marcar incorporaciones y añadir tareas. Los cambios se reflejan
+en tiempo real en todas las pantallas mediante el evento Socket.IO
+`guard_updated` (ver app/utils/realtime.py).
 """
 from datetime import date
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, abort
 from flask_login import login_required, current_user
-from app.extensions import db, socketio
+from app.extensions import db
 from app.models.guard import Guard, GuardRecord
 from app.models.absence import Absence
 from app.models.task import Task
@@ -15,7 +16,6 @@ from app.models.group import Group
 from app.models.user import User
 from app.utils.points import award_guard_points
 from app.utils.guards import get_available_teachers_for_slot
-from flask_socketio import emit
 
 display_bp = Blueprint("display", __name__, url_prefix="/pantalla")
 
@@ -98,15 +98,6 @@ def assign(guard_id):
     award_guard_points(teacher_id, points)
     db.session.commit()
 
-    # Notifica al panel en tiempo real
-    teacher = User.query.get(teacher_id)
-    socketio.emit("guard_updated", {
-        "guard_id": guard.id,
-        "slot_id": guard.slot_id,
-        "teacher": teacher.full_name,
-        "status": "covered",
-    }, room="display")
-
     return redirect(url_for("display.index"))
 
 
@@ -129,12 +120,6 @@ def remove_record(record_id):
 
     db.session.commit()
 
-    socketio.emit("guard_updated", {
-        "guard_id": guard.id,
-        "slot_id": guard.slot_id,
-        "status": guard.status,
-    }, room="display")
-
     return redirect(url_for("display.index"))
 
 
@@ -147,11 +132,6 @@ def incorporar(absence_id):
     if absence.guard:
         absence.guard.status = "returned"
     db.session.commit()
-
-    socketio.emit("guard_updated", {
-        "slot_id": absence.slot_id,
-        "status": "returned",
-    }, room="display")
 
     return redirect(url_for("display.index"))
 

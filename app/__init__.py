@@ -19,6 +19,9 @@ def create_app():
     migrate.init_app(app, db)
     mail.init_app(app)
     socketio.init_app(app, async_mode="eventlet", cors_allowed_origins="*")
+
+    from app.utils.realtime import register_display_notifications
+    register_display_notifications()
     oauth.init_app(app)
     oauth.register(
         name="google",

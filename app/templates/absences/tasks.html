@@ -147,7 +147,7 @@
 {% block scripts %}
 <script>
 const groupData = [
-  {% for g in groups %}{ id: {{ g.id }}, name: {{ g.name | tojson }} },{% endfor %}
+  {% for g in groups %}{ id: {{ g.id }}, name: {{ g.name | tojson }}, abbr: {{ g.abbreviation | tojson }} },{% endfor %}
 ];
 
 const defaultGroupId   = {{ default_group_id or 'null' }};
@@ -172,7 +172,7 @@ function initPicker(searchId, hiddenId, suggestionsId, initId, initName) {
     if (!matches.length) { sugg.style.display = 'none'; return; }
     sugg.innerHTML = matches.slice(0, 20).map(g =>
       `<button type="button" class="list-group-item list-group-item-action py-1 px-3"
-               data-id="${g.id}" data-name="${g.name.replace(/"/g,'&quot;')}">${g.name}</button>`
+               data-id="${g.id}" data-name="${g.name.replace(/"/g,'&quot;')}">${g.name}${g.abbr ? ` <small class="text-muted">${g.abbr}</small>` : ''}</button>`
     ).join('');
     sugg.style.display = 'block';
   }

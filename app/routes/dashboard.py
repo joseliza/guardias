@@ -76,6 +76,10 @@ def index():
                         ids.add(ag.group_id)
         return ids
 
+    # Profesores ausentes en algún tramo de hoy (aunque su ausencia no cubra
+    # el tramo de guardia oficial): se muestran en gris en el pool de guardia.
+    absent_teacher_ids_today = {a.teacher_id for a in day_absences if a.status != "returned"}
+
     absences_by_slot = {}
     guards_by_slot = {}
     for a in day_absences:
@@ -295,4 +299,5 @@ def index():
         blink_guard_alert=gcfg.get("blink_guard_alert", False),
         unmarkable_slot_ids=unmarkable_slot_ids,
         is_display_user=is_display_user,
+        absent_teacher_ids_today=absent_teacher_ids_today,
     )

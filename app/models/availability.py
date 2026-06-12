@@ -1,9 +1,13 @@
 """
-Modelos de periodos de disponibilidad para guardia: AvailabilityPeriod y AvailabilityPeriodGroup.
-AvailabilityPeriod: rango de fechas en que un profesor pone sus horas de clase
-  (con grupo asignado, sin tocar el horario) a disposición para cubrir guardias.
+Modelos de periodos de disponibilidad para guardia: AvailabilityPeriod,
+AvailabilityPeriodGroup y AvailabilityPeriodSlot.
+AvailabilityPeriod: rango de fechas en que un profesor pone algunas de sus horas
+  de clase (con grupo asignado, sin tocar el horario) a disposición para cubrir guardias.
 AvailabilityPeriodGroup: restricción opcional a grupos concretos que puede cubrir;
   sin restricciones registradas, puede cubrir cualquier grupo.
+AvailabilityPeriodSlot: tramo concreto (día de la semana + slot) en que la clase del
+  profesor queda disponible para guardia; sin registros, se asume disponible en
+  todos los tramos con clase y grupo asignado (compatibilidad con periodos antiguos).
 """
 from datetime import datetime
 from app.extensions import db
@@ -25,6 +29,7 @@ class AvailabilityPeriod(db.Model):
     teacher = db.relationship("User", foreign_keys=[teacher_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])
     groups = db.relationship("AvailabilityPeriodGroup", backref="period", lazy="dynamic")
+    slots = db.relationship("AvailabilityPeriodSlot", backref="period", lazy="dynamic")
 
 
 class AvailabilityPeriodGroup(db.Model):
@@ -36,3 +41,15 @@ class AvailabilityPeriodGroup(db.Model):
     group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
 
     group = db.relationship("Group")
+
+
+class AvailabilityPeriodSlot(db.Model):
+    """Tramo (día de la semana + slot) en que la clase del profesor está disponible para guardia."""
+    __tablename__ = "availability_period_slots"
+
+    id = db.Column(db.Integer, primary_key=True)
+    period_id = db.Column(db.Integer, db.ForeignKey("availability_periods.id"), nullable=False)
+    # 0=Lunes … 4=Viernes
+    day_of_week = db.Column(db.Integer, nullable=False)
+    # 1..7 según CONFIG TIME_SLOTS
+    slot_id = db.Column(db.Integer, nullable=False)

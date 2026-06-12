@@ -8,7 +8,7 @@ from .absence import Absence
 from .task import Task
 from .guard import Guard, GuardRecord
 from .activity import ExtraActivity, ExtraActivityGroup, ExtraActivityTeacher
-from .availability import AvailabilityPeriod, AvailabilityPeriodGroup
+from .availability import AvailabilityPeriod, AvailabilityPeriodGroup, AvailabilityPeriodSlot
 from .chat import ChatMessage
 from .subject import Subject
 from .raw_schedule import RawScheduleRow
@@ -28,6 +28,7 @@ __all__ = [
     "ExtraActivityTeacher",
     "AvailabilityPeriod",
     "AvailabilityPeriodGroup",
+    "AvailabilityPeriodSlot",
     "ChatMessage",
     "Subject",
     "RawScheduleRow",

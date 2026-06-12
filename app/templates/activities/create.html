@@ -18,7 +18,7 @@
         </div>
         <div class="col-md-4">
           <label class="form-label">Fecha</label>
-          <input type="date" name="date" class="form-control" required>
+          <input type="date" name="date" class="form-control" min="{{ today.isoformat() }}" required>
         </div>
         <div class="col-12">
           <label class="form-label">Descripción</label>
@@ -92,13 +92,13 @@ document.getElementById('all-day-toggle').addEventListener('change', function() 
 });
 
 // ── Datos ─────────────────────────────────────────────────────────────────────
-const groupData   = [{% for g in groups %}{ id: {{ g.id }}, name: {{ g.name|tojson }} },{% endfor %}];
+const groupData   = [{% for g in groups %}{ id: {{ g.id }}, name: {{ g.name|tojson }}, abbr: {{ g.abbreviation|tojson }} },{% endfor %}];
 const teacherData = [{% for t in teachers %}{ id: {{ t.id }}, name: {{ t.display_name|tojson }} },{% endfor %}];
 const selGroups   = new Set();
 const selTeachers = new Set();
 
 // ── Grupos ────────────────────────────────────────────────────────────────────
-function addGroup(id, name) {
+function addGroup(id, name, abbr) {
   if (selGroups.has(id)) return;
   selGroups.add(id);
   document.getElementById('no-groups-msg').style.display = 'none';
@@ -106,7 +106,7 @@ function addGroup(id, name) {
   chip.dataset.id = id;
   chip.className = 'badge bg-primary-subtle text-primary-emphasis border border-primary d-inline-flex align-items-center gap-1 px-2 py-1';
   chip.innerHTML =
-    `<span>${name}</span>` +
+    `<span>${name}${abbr ? ` <small class="text-muted">${abbr}</small>` : ''}</span>` +
     `<label class="d-flex align-items-center gap-1 mb-0 ms-1 small fw-normal" style="cursor:pointer">` +
       `<input type="checkbox" name="whole_group_${id}" class="form-check-input mt-0" checked> Completo` +
     `</label>` +
@@ -168,7 +168,7 @@ function makeAutocomplete(inputId, clearId, suggId, data, onSelect) {
     if (!matches.length) { sugg.style.display = 'none'; return; }
     sugg.innerHTML = matches.slice(0, 15).map(x =>
       `<button type="button" class="list-group-item list-group-item-action py-1 px-3"
-               data-id="${x.id}" data-name="${x.name.replace(/"/g,'&quot;')}">${x.name}</button>`
+               data-id="${x.id}" data-name="${x.name.replace(/"/g,'&quot;')}" data-abbr="${(x.abbr||'').replace(/"/g,'&quot;')}">${x.name}${x.abbr ? ` <small class="text-muted">${x.abbr}</small>` : ''}</button>`
     ).join('');
     sugg.style.display = 'block';
   }
@@ -183,7 +183,7 @@ function makeAutocomplete(inputId, clearId, suggId, data, onSelect) {
     const btn = e.target.closest('[data-id]');
     if (!btn) return;
     e.preventDefault();
-    onSelect(parseInt(btn.dataset.id), btn.dataset.name);
+    onSelect(parseInt(btn.dataset.id), btn.dataset.name, btn.dataset.abbr);
     input.value = '';
     clearBtn.style.display = 'none';
     sugg.style.display = 'none';
@@ -196,5 +196,18 @@ function makeAutocomplete(inputId, clearId, suggId, data, onSelect) {
 
 makeAutocomplete('group-search',   'group-search-clear',   'group-suggestions',   groupData,   addGroup);
 makeAutocomplete('teacher-search', 'teacher-search-clear', 'teacher-suggestions', teacherData, addTeacher);
+
+// ── Validación antes de enviar ────────────────────────────────────────────────
+document.querySelector('form').addEventListener('submit', function(e) {
+  if (!selGroups.size) {
+    e.preventDefault();
+    alert('Debes seleccionar al menos un grupo participante.');
+    return;
+  }
+  if (!selTeachers.size) {
+    e.preventDefault();
+    alert('Debes seleccionar al menos un profesor acompañante.');
+  }
+});
 </script>
 {% endblock %}

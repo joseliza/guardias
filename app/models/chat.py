@@ -17,7 +17,7 @@ class ChatMessage(db.Model):
     # Canal: "general" o "YYYY-MM-DD_slot_N" para un tramo concreto
     channel = db.Column(db.String(50), nullable=False, default="general")
     message = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
 
     author = db.relationship("User")
 
@@ -27,7 +27,7 @@ class ChatClear(db.Model):
     __tablename__ = "chat_clears"
 
     id = db.Column(db.Integer, primary_key=True)
-    cleared_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    cleared_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
     cleared_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
     cleared_by = db.relationship("User")
