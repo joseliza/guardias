@@ -54,6 +54,12 @@
               {% if not points_enabled %}<small class="text-warning d-block">No se aplica — la puntuación está desactivada</small>{% endif %}
             </label>
           </div>
+          <div class="form-check" id="dev-access-wrapper" style="display:none">
+            <input type="checkbox" class="form-check-input" name="dev_access" id="dev_access" {% if teacher and teacher.dev_access %}checked{% endif %}>
+            <label class="form-check-label" for="dev_access">
+              Acceso a sección Desarrollo
+            </label>
+          </div>
         </div>
         <div class="col-md-6">
           <label class="form-label">Contraseña <small class="text-muted">(opcional si usa Google Workspace{{ ' · dejar vacío para no cambiar' if teacher else '' }})</small></label>
@@ -161,8 +167,11 @@
 
   const roleSelect = document.querySelector('select[name="role"]');
   const trackWrapper = document.getElementById('track-points-wrapper');
+  const devAccessWrapper = document.getElementById('dev-access-wrapper');
   function toggleTrackPoints() {
-    trackWrapper.style.display = roleSelect.value === 'management' ? '' : 'none';
+    const isManagement = roleSelect.value === 'management';
+    trackWrapper.style.display = isManagement ? '' : 'none';
+    devAccessWrapper.style.display = isManagement ? '' : 'none';
   }
   roleSelect.addEventListener('change', toggleTrackPoints);
   toggleTrackPoints();

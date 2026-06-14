@@ -634,9 +634,114 @@
         <a href="{{ url_for('admin.backup_database') }}" class="btn btn-outline-primary">
           <i class="bi bi-database-down"></i> Descargar copia de seguridad
         </a>
+
+        {% if current_user.dev_access %}
+        <hr class="my-4">
+
+        <h6 class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-octagon me-1"></i> Restaurar copia de seguridad</h6>
+        <div class="alert alert-danger py-2 px-3 small">
+          <strong>⚠️ Acción irreversible.</strong> Sustituye <strong>todos</strong> los datos actuales de la
+          base de datos por los del fichero subido. Los cambios realizados desde esa copia se perderán.
+        </div>
+        <form method="POST" action="{{ url_for('admin.restore_database') }}" enctype="multipart/form-data"
+              onsubmit="return confirmRestoreDatabase()">
+          <div class="mb-2">
+            <label class="form-label">Fichero de copia de seguridad (<code>.sql.gz</code>)</label>
+            <input type="file" name="backup_file" id="restore-file" class="form-control"
+                   accept=".gz" style="max-width:400px" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Escribe <code>RESTAURAR</code> para confirmar</label><br>
+            <input type="text" name="confirm_text" id="restore-confirm" class="form-control"
+                   style="max-width:200px" autocomplete="off">
+          </div>
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-database-up"></i> Restaurar base de datos
+          </button>
+        </form>
+        {% endif %}
       </div>
     </div>
   </div>
+
+  <!-- ── Desarrollo ────────────────────────────────────────────────── -->
+  {% if current_user.dev_access %}
+  <div class="accordion-item">
+    <h2 class="accordion-header">
+      <button class="accordion-button collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#section-dev">
+        Desarrollo
+      </button>
+    </h2>
+    <div id="section-dev" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
+      <div class="accordion-body">
+
+        {# ── Información del sistema ── #}
+        <h6 class="fw-semibold mb-3"><i class="bi bi-info-circle me-1"></i> Información del sistema</h6>
+        <div class="row g-3 mb-2">
+          <div class="col-md-4">
+            <table class="table table-sm mb-0">
+              <tbody>
+                <tr><th>Versión (commit)</th><td>{{ dev_info.git_commit or '—' }}</td></tr>
+                <tr><th>Python</th><td>{{ dev_info.python_version }}</td></tr>
+                <tr><th>Flask</th><td>{{ dev_info.flask_version }}</td></tr>
+                <tr><th>SQLAlchemy</th><td>{{ dev_info.sqlalchemy_version }}</td></tr>
+                <tr><th>Tamaño BD</th><td>{{ '%.2f MB'|format(dev_info.db_size_mb) if dev_info.db_size_mb is not none else '—' }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="col-md-8">
+            <table class="table table-sm mb-0">
+              <thead><tr><th>Tabla</th><th class="text-end">Filas</th></tr></thead>
+              <tbody>
+                {% for label, count in dev_info.counts.items() %}
+                <tr><td>{{ label }}</td><td class="text-end">{{ count }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <hr class="my-4">
+
+        {# ── Cerrar todas las sesiones ── #}
+        <h6 class="fw-semibold mb-2"><i class="bi bi-door-closed me-1"></i> Cerrar todas las sesiones</h6>
+        <p class="text-muted small">
+          Invalida todas las sesiones activas (incluida la tuya). Todos los usuarios deberán iniciar sesión de nuevo.
+        </p>
+        <form method="POST" action="{{ url_for('admin.dev_force_logout') }}"
+              onsubmit="return confirm('¿Cerrar la sesión de todos los usuarios conectados?')">
+          <button type="submit" class="btn btn-outline-warning">
+            <i class="bi bi-door-closed"></i> Cerrar todas las sesiones
+          </button>
+        </form>
+
+        <hr class="my-4">
+
+        {# ── Reset completo de la base de datos ── #}
+        <h6 class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-octagon me-1"></i> Reset completo de la base de datos</h6>
+        <div class="alert alert-danger py-2 px-3 small">
+          <strong>⚠️ Acción irreversible.</strong> Borra <strong>todos</strong> los datos de la base de datos
+          (profesores, grupos, horarios, ausencias, guardias, actividades, chat, cursos escolares, etc.)
+          sin tocar el código ni la configuración de la aplicación.
+          Al terminar, la única cuenta disponible será <code>admin@ies.es</code> / <code>admin1234</code>.
+          <strong>Descarga una copia de seguridad antes de continuar.</strong>
+        </div>
+        <form method="POST" action="{{ url_for('admin.dev_reset_database') }}" onsubmit="return confirmResetDatabase()">
+          <div class="mb-2">
+            <label class="form-label">Escribe <code>BORRAR</code> para confirmar</label><br>
+            <input type="text" name="confirm_text" id="dev-reset-confirm" class="form-control"
+                   style="max-width:200px" autocomplete="off">
+          </div>
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-trash3"></i> Borrar toda la base de datos
+          </button>
+        </form>
+
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
 </div>
 {% endblock %}
@@ -751,6 +856,29 @@ function confirmResetTeacher() {
   if (!confirm(`¿Resetear los puntos de ${name} a 0?\n\nEsta acción no se puede deshacer.`)) return false;
   document.getElementById('reset-teacher-form').action = sel.value;
   return true;
+}
+
+function confirmResetDatabase() {
+  const input = document.getElementById('dev-reset-confirm');
+  if (input.value.trim() !== 'BORRAR') {
+    alert('Debes escribir BORRAR para confirmar.');
+    return false;
+  }
+  return confirm('⚠️ ATENCIÓN: esta acción es IRREVERSIBLE.\n\nSe borrarán TODOS los datos de la base de datos.\nSolo quedará el usuario admin@ies.es / admin1234.\n\n¿Has descargado una copia de seguridad?\n\n¿Seguro que quieres continuar?');
+}
+
+function confirmRestoreDatabase() {
+  const fileInput = document.getElementById('restore-file');
+  if (!fileInput.files.length) {
+    alert('Selecciona un fichero .sql.gz.');
+    return false;
+  }
+  const input = document.getElementById('restore-confirm');
+  if (input.value.trim() !== 'RESTAURAR') {
+    alert('Debes escribir RESTAURAR para confirmar.');
+    return false;
+  }
+  return confirm('⚠️ ATENCIÓN: esta acción es IRREVERSIBLE.\n\nSe sustituirán TODOS los datos actuales de la base de datos por los del fichero subido.\n\n¿Seguro que quieres continuar?');
 }
 
 (function() {

@@ -5,7 +5,7 @@ para el grupo que queda sin clase, marcar reincorporaciones y generar PDFs
 """
 import os
 from datetime import date, datetime
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify, session
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify, session, abort
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.absence import Absence
@@ -276,6 +276,8 @@ def create():
 @login_required
 def schedule_json(tid, day_idx):
     """Devuelve los tramos que tiene el profesor en ese día de la semana."""
+    if tid != current_user.id and not current_user.is_management and current_user.role != "display":
+        abort(403)
     slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
     year_id = get_current_school_year().id
     entries = TeacherSchedule.query.filter_by(

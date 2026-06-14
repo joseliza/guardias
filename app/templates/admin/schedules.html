@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Horarios del profesorado{% endblock %}
+{% block title %}{{ 'Mi horario' if is_self_view else 'Horarios del profesorado' }}{% endblock %}
 {% block main_class %}container-fluid pb-4{% endblock %}
 {% block content %}
 <div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
 <div class="d-flex justify-content-between align-items-center mb-{% if not selected %}1{% else %}0{% endif %}">
-  <h4 class="mb-0"><i class="bi bi-calendar3"></i> Horarios del profesorado
+  <h4 class="mb-0"><i class="bi bi-calendar3"></i> {{ 'Mi horario' if is_self_view else 'Horarios del profesorado' }}
     {% if current_year %}<span class="badge bg-primary ms-2" style="font-size:.75rem">{{ current_year.name }}</span>{% endif %}
   </h4>
   <div class="d-flex gap-2">
@@ -23,11 +23,32 @@
 <div class="card mb-3">
   <div class="card-body p-0">
     <div class="px-3 pt-3 pb-2 border-bottom d-flex align-items-center gap-2 flex-wrap">
+      {% if not is_self_view %}
+      <div class="btn-group btn-group-sm" role="group">
+        {% if prev_teacher %}
+        <a href="{{ url_for('admin.schedules', teacher_id=prev_teacher.id) }}"
+           class="btn btn-outline-secondary" title="{{ prev_teacher.full_name }}">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        {% else %}
+        <span class="btn btn-outline-secondary disabled"><i class="bi bi-arrow-left"></i></span>
+        {% endif %}
+        {% if next_teacher %}
+        <a href="{{ url_for('admin.schedules', teacher_id=next_teacher.id) }}"
+           class="btn btn-outline-secondary" title="{{ next_teacher.full_name }}">
+          <i class="bi bi-arrow-right"></i>
+        </a>
+        {% else %}
+        <span class="btn btn-outline-secondary disabled"><i class="bi bi-arrow-right"></i></span>
+        {% endif %}
+      </div>
+      {% endif %}
       <i class="bi bi-person"></i>
       <strong>{{ selected.surname }}, {{ selected.name }}</strong>
-      <small class="text-muted">{{ selected.email }}</small>
       {% if points_enabled %}<span class="badge bg-secondary ms-1">{{ selected.points }} pts</span>{% endif %}
+      {% if not is_self_view %}
       <a href="{{ url_for('admin.schedules') }}" class="btn btn-sm btn-outline-secondary ms-auto"><i class="bi bi-x-lg"></i></a>
+      {% endif %}
     </div>
 
     <div class="table-responsive js-internal-scroll">
@@ -419,7 +440,6 @@
       <thead class="table-light">
         <tr>
           <th>Apellidos, Nombre</th>
-          <th>Email</th>
           <th>Rol</th>
           <th class="text-center"><i class="bi bi-shield-check text-success"></i> Guardias/sem</th>
           <th class="text-center"><i class="bi bi-people text-primary"></i> Clases/sem</th>
@@ -431,7 +451,6 @@
         <tr style="cursor:pointer"
             onclick="window.location='{{ url_for('admin.schedules', teacher_id=t.id) }}'">
           <td>{{ t.full_name }}</td>
-          <td class="text-muted small">{{ t.email }}</td>
           <td><span class="badge bg-secondary">{{ t.role }}</span></td>
           <td class="text-center">
             {% if s.guard %}<span class="badge bg-success">{{ s.guard }}</span>{% else %}<span class="text-muted">—</span>{% endif %}

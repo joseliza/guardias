@@ -26,6 +26,13 @@ def _require_management():
     return True
 
 
+def _require_developer():
+    if not (current_user.is_management and current_user.dev_access):
+        flash("Acceso restringido.", "danger")
+        return False
+    return True
+
+
 def _delete_task_attachments(filenames):
     """Borra del disco los PDFs adjuntos de tareas cuyas filas se eliminan en bloque."""
     upload_dir = os.path.join(current_app.root_path, "..", "uploads", "tasks")
@@ -181,6 +188,7 @@ def teacher_create():
             abbreviation=request.form.get("abbreviation", "").strip() or None,
             role=role,
             track_points=request.form.get("track_points") == "on" and role == "management",
+            dev_access=request.form.get("dev_access") == "on" and role == "management",
             receive_emails=True,
             school_year_id=_get_year().id,
         )
@@ -211,6 +219,7 @@ def teacher_edit(tid):
         teacher.role = request.form.get("role", "teacher")
         teacher.active = request.form.get("active") == "on"
         teacher.track_points = request.form.get("track_points") == "on" and teacher.role == "management"
+        teacher.dev_access = request.form.get("dev_access") == "on" and teacher.role == "management"
         teacher.receive_emails = request.form.get("receive_emails") == "on"
         teacher.show_substitute_public = request.form.get("show_substitute_public") == "on"
         if request.form.get("password"):
@@ -716,7 +725,8 @@ def room_delete(rid):
 @admin_bp.route("/horarios")
 @login_required
 def schedules():
-    if not current_user.is_management and current_user.role != "display":
+    is_self_view = current_user.role == "teacher"
+    if not current_user.is_management and current_user.role != "display" and not is_self_view:
         return redirect(url_for("dashboard.index"))
     from flask import current_app
     from sqlalchemy import func
@@ -746,9 +756,21 @@ def schedules():
         else:
             s["class"] = count
 
-    teacher_id = request.args.get("teacher_id", type=int)
-    selected = (User.query.filter_by(id=teacher_id, school_year_id=year_id).first()
-                if teacher_id else None)
+    if is_self_view:
+        selected = current_user
+    else:
+        teacher_id = request.args.get("teacher_id", type=int)
+        selected = (User.query.filter_by(id=teacher_id, school_year_id=year_id).first()
+                    if teacher_id else None)
+
+    prev_teacher = next_teacher = None
+    if selected and not is_self_view:
+        idx = next((i for i, t in enumerate(teachers) if t.id == selected.id), None)
+        if idx is not None:
+            if idx > 0:
+                prev_teacher = teachers[idx - 1]
+            if idx < len(teachers) - 1:
+                next_teacher = teachers[idx + 1]
 
     slots_cfg = current_app.config["TIME_SLOTS"]
     days = current_app.config["DAYS_OF_WEEK"]
@@ -788,8 +810,11 @@ def schedules():
                            rooms=rooms,
                            subjects=subjects,
                            availability_periods=availability_periods,
+                           prev_teacher=prev_teacher,
+                           next_teacher=next_teacher,
                            today=_date.today(),
                            current_year=current_year,
+                           is_self_view=is_self_view,
                            can_edit=current_user.is_management)
 
 
@@ -1944,7 +1969,8 @@ def config():
                            next_year_name=_next_year_name,
                            next_year_start=_next_year_start,
                            next_year_end=_next_year_end,
-                           today=_date.today())
+                           today=_date.today(),
+                           dev_info=_dev_system_info() if current_user.dev_access else None)
 
 
 @admin_bp.route("/configuracion/general", methods=["POST"])
@@ -2474,6 +2500,59 @@ def backup_database():
     )
 
 
+@admin_bp.route("/copia-seguridad/restaurar", methods=["POST"])
+@login_required
+def restore_database():
+    if not _require_developer():
+        return redirect(url_for("dashboard.index"))
+
+    if request.form.get("confirm_text", "").strip() != "RESTAURAR":
+        flash("Confirmación incorrecta: escribe RESTAURAR para continuar. La base de datos no se ha modificado.", "danger")
+        return redirect(url_for("admin.config") + "#section-backup")
+
+    backup_file = request.files.get("backup_file")
+    if not backup_file or not backup_file.filename:
+        flash("Selecciona un fichero de copia de seguridad (.sql.gz).", "danger")
+        return redirect(url_for("admin.config") + "#section-backup")
+    if not backup_file.filename.lower().endswith(".sql.gz"):
+        flash("El fichero debe tener extensión .sql.gz.", "danger")
+        return redirect(url_for("admin.config") + "#section-backup")
+
+    import gzip
+    import subprocess
+    from sqlalchemy.engine import make_url
+
+    try:
+        sql_data = gzip.decompress(backup_file.read())
+    except OSError:
+        flash("El fichero no es un .gz válido.", "danger")
+        return redirect(url_for("admin.config") + "#section-backup")
+
+    url = make_url(current_app.config["SQLALCHEMY_DATABASE_URI"])
+    cmd = [
+        "mysql",
+        "-h", url.host or "localhost",
+        "-P", str(url.port or 3306),
+        "-u", url.username or "root",
+    ]
+    env = os.environ.copy()
+    if url.password:
+        env["MYSQL_PWD"] = url.password
+
+    try:
+        subprocess.run(cmd, input=sql_data, env=env, capture_output=True, check=True, timeout=300)
+    except FileNotFoundError:
+        flash("No se encontró la herramienta mysql en el servidor.", "danger")
+        return redirect(url_for("admin.config") + "#section-backup")
+    except subprocess.CalledProcessError as e:
+        current_app.logger.error("Error al restaurar la base de datos: %s", e.stderr.decode(errors="replace"))
+        flash("Error al restaurar la base de datos. Puede haber quedado en un estado inconsistente.", "danger")
+        return redirect(url_for("admin.config") + "#section-backup")
+
+    flash("Base de datos restaurada. Inicia sesión de nuevo.", "success")
+    return redirect(url_for("auth.logout"))
+
+
 @admin_bp.route("/configuracion/ayuda", methods=["POST"])
 @login_required
 def config_help():
@@ -2922,3 +3001,108 @@ def school_year_delete(year_id):
     _delete_task_attachments(task_attachments)
     flash(f"Curso {name} y todos sus datos eliminados.", "success")
     return redirect(url_for("admin.config") + "#section-school-years")
+
+
+# ── Desarrollo ──────────────────────────────────────────────────────────────
+
+def _dev_system_info():
+    """Recopila datos de diagnóstico para la sección Desarrollo de configuración."""
+    import platform
+    import subprocess
+    import sqlalchemy
+    import flask
+    from sqlalchemy.engine import make_url
+    from app.models.absence import Absence
+    from app.models.guard import Guard, GuardRecord
+    from app.models.activity import ExtraActivity
+    from app.models.chat import ChatMessage
+    from app.models.schedule import TeacherSchedule
+    from app.models.school_year import SchoolYear
+
+    counts = {
+        "Usuarios":                     User.query.count(),
+        "Grupos":                       Group.query.count(),
+        "Aulas":                        Room.query.count(),
+        "Cursos escolares":             SchoolYear.query.count(),
+        "Horarios":                     TeacherSchedule.query.count(),
+        "Ausencias":                    Absence.query.count(),
+        "Guardias":                     Guard.query.count(),
+        "Registros de guardia":         GuardRecord.query.count(),
+        "Actividades extraescolares":   ExtraActivity.query.count(),
+        "Mensajes de chat":             ChatMessage.query.count(),
+    }
+
+    db_size_mb = None
+    try:
+        url = make_url(current_app.config["SQLALCHEMY_DATABASE_URI"])
+        db_size_mb = db.session.execute(db.text(
+            "SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) "
+            "FROM information_schema.tables WHERE table_schema = :db"
+        ), {"db": url.database}).scalar()
+    except Exception:
+        pass
+
+    git_commit = None
+    try:
+        git_commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=current_app.root_path, stderr=subprocess.DEVNULL, timeout=5,
+        ).decode().strip()
+    except Exception:
+        pass
+
+    return {
+        "counts": counts,
+        "db_size_mb": db_size_mb,
+        "git_commit": git_commit,
+        "python_version": platform.python_version(),
+        "flask_version": flask.__version__,
+        "sqlalchemy_version": sqlalchemy.__version__,
+    }
+
+
+@admin_bp.route("/desarrollo/cerrar-sesiones", methods=["POST"])
+@login_required
+def dev_force_logout():
+    if not _require_developer():
+        return redirect(url_for("dashboard.index"))
+    import secrets
+    current_app.config["SECRET_KEY"] = secrets.token_hex(32)
+    flash("Sesiones invalidadas. Todos los usuarios deberán iniciar sesión de nuevo.", "success")
+    return redirect(url_for("auth.logout"))
+
+
+@admin_bp.route("/desarrollo/reset-bd", methods=["POST"])
+@login_required
+def dev_reset_database():
+    if not _require_developer():
+        return redirect(url_for("dashboard.index"))
+
+    if request.form.get("confirm_text", "").strip() != "BORRAR":
+        flash("Confirmación incorrecta: escribe BORRAR para continuar. La base de datos no se ha modificado.", "danger")
+        return redirect(url_for("admin.config") + "#section-dev")
+
+    # Importa todos los modelos para asegurar que sus tablas están registradas en db.metadata.
+    import app.models  # noqa: F401
+    from app.models.room import Room as _Room  # noqa: F401
+    from app.models.presence import UserPresence  # noqa: F401
+    from app.models.chat import ChatClear  # noqa: F401
+
+    try:
+        with db.engine.begin() as conn:
+            conn.execute(db.text("SET FOREIGN_KEY_CHECKS=0"))
+            for table in db.metadata.sorted_tables:
+                conn.execute(db.text(f"TRUNCATE TABLE `{table.name}`"))
+            conn.execute(db.text("SET FOREIGN_KEY_CHECKS=1"))
+    except Exception as e:
+        current_app.logger.error("Error al resetear la base de datos: %s", e)
+        flash("Error al resetear la base de datos.", "danger")
+        return redirect(url_for("admin.config") + "#section-dev")
+
+    admin = User(email="admin@ies.es", name="Admin", surname="Sistema", role="management")
+    admin.set_password("admin1234")
+    db.session.add(admin)
+    db.session.commit()
+
+    flash("Base de datos reseteada. Inicia sesión con admin@ies.es / admin1234.", "success")
+    return redirect(url_for("auth.logout"))

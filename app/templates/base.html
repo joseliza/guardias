@@ -75,6 +75,11 @@
           <a class="nav-link" href="{{ url_for('absences.index') }}"><i class="bi bi-calendar-x"></i> Ausencias</a>
         </li>
         {% endif %}
+        {% if current_user.role == 'teacher' %}
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('admin.schedules') }}"><i class="bi bi-calendar3"></i> Mi horario</a>
+        </li>
+        {% endif %}
         {% if current_user.is_extracurricular %}
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('activities.index') }}"><i class="bi bi-backpack"></i> Extraescolares</a>

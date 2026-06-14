@@ -23,6 +23,8 @@ class User(UserMixin, db.Model):
     points = db.Column(db.Float, default=0.0, nullable=False)
     # Solo relevante para management: si True, acumula puntos como profesor normal
     track_points = db.Column(db.Boolean, default=False, nullable=False)
+    # Solo relevante para management: si True, ve la sección "Desarrollo" en Configuración
+    dev_access = db.Column(db.Boolean, default=False, nullable=False)
     # Si False, el usuario no recibe correos del sistema (resúmenes, notificaciones)
     receive_emails = db.Column(db.Boolean, default=True, nullable=False)
     # Abreviatura usada en los ficheros de horarios (ej: "EncLo")
