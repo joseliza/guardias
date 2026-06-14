@@ -634,32 +634,6 @@
         <a href="{{ url_for('admin.backup_database') }}" class="btn btn-outline-primary">
           <i class="bi bi-database-down"></i> Descargar copia de seguridad
         </a>
-
-        {% if current_user.dev_access %}
-        <hr class="my-4">
-
-        <h6 class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-octagon me-1"></i> Restaurar copia de seguridad</h6>
-        <div class="alert alert-danger py-2 px-3 small">
-          <strong>⚠️ Acción irreversible.</strong> Sustituye <strong>todos</strong> los datos actuales de la
-          base de datos por los del fichero subido. Los cambios realizados desde esa copia se perderán.
-        </div>
-        <form method="POST" action="{{ url_for('admin.restore_database') }}" enctype="multipart/form-data"
-              onsubmit="return confirmRestoreDatabase()">
-          <div class="mb-2">
-            <label class="form-label">Fichero de copia de seguridad (<code>.sql.gz</code>)</label>
-            <input type="file" name="backup_file" id="restore-file" class="form-control"
-                   accept=".gz" style="max-width:400px" required>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Escribe <code>RESTAURAR</code> para confirmar</label><br>
-            <input type="text" name="confirm_text" id="restore-confirm" class="form-control"
-                   style="max-width:200px" autocomplete="off">
-          </div>
-          <button type="submit" class="btn btn-danger">
-            <i class="bi bi-database-up"></i> Restaurar base de datos
-          </button>
-        </form>
-        {% endif %}
       </div>
     </div>
   </div>
@@ -713,6 +687,31 @@
               onsubmit="return confirm('¿Cerrar la sesión de todos los usuarios conectados?')">
           <button type="submit" class="btn btn-outline-warning">
             <i class="bi bi-door-closed"></i> Cerrar todas las sesiones
+          </button>
+        </form>
+
+        <hr class="my-4">
+
+        {# ── Restaurar copia de seguridad ── #}
+        <h6 class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-octagon me-1"></i> Restaurar copia de seguridad</h6>
+        <div class="alert alert-danger py-2 px-3 small">
+          <strong>⚠️ Acción irreversible.</strong> Sustituye <strong>todos</strong> los datos actuales de la
+          base de datos por los del fichero subido. Los cambios realizados desde esa copia se perderán.
+        </div>
+        <form method="POST" action="{{ url_for('admin.restore_database') }}" enctype="multipart/form-data"
+              onsubmit="return confirmRestoreDatabase()">
+          <div class="mb-2">
+            <label class="form-label">Fichero de copia de seguridad (<code>.sql.gz</code>)</label>
+            <input type="file" name="backup_file" id="restore-file" class="form-control"
+                   accept=".gz" style="max-width:400px" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Escribe <code>RESTAURAR</code> para confirmar</label><br>
+            <input type="text" name="confirm_text" id="restore-confirm" class="form-control"
+                   style="max-width:200px" autocomplete="off">
+          </div>
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-database-up"></i> Restaurar base de datos
           </button>
         </form>
 
