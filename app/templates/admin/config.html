@@ -523,12 +523,15 @@
                     <i class="bi bi-pencil"></i>
                   </a>
                   {% if not y.is_current %}
-                  <form method="POST" action="{{ url_for('admin.school_year_activate', year_id=y.id) }}"
-                        onsubmit="return confirm('¿Activar el curso {{ y.name }}? El curso activo actual quedará inactivo.')">
-                    <button type="submit" class="btn btn-sm btn-outline-primary">
-                      <i class="bi bi-check2-circle"></i> Activar
-                    </button>
-                  </form>
+                  <a href="{{ url_for('guards.report', year_id=y.id) }}" class="btn btn-sm btn-outline-secondary" title="Informe de guardias">
+                    <i class="bi bi-bar-chart"></i>
+                  </a>
+                  <a href="{{ url_for('chat.report', year_id=y.id) }}" class="btn btn-sm btn-outline-secondary" title="Informe de chat">
+                    <i class="bi bi-chat-square-text"></i>
+                  </a>
+                  <a href="{{ url_for('admin.justification_report', year_id=y.id) }}" class="btn btn-sm btn-outline-secondary" title="Informe de justificación">
+                    <i class="bi bi-file-earmark-text"></i>
+                  </a>
                   {% endif %}
                 </div>
               </td>
@@ -538,13 +541,15 @@
         </table>
 
         <h6 class="fw-semibold mb-2"><i class="bi bi-plus-circle me-1"></i> Iniciar nuevo curso</h6>
-        <div class="alert alert-warning small py-2 mb-3">
+        <div class="alert alert-danger small py-2 mb-3">
           <i class="bi bi-exclamation-triangle"></i>
-          Al crear un nuevo curso se <strong>resetearán los puntos</strong> de todos los profesores a 0
-          y el curso actual quedará inactivo. Los horarios del nuevo curso empezarán vacíos.
+          Al crear un nuevo curso, el curso actual pasará a ser <strong>histórico de forma definitiva</strong>:
+          dejará de poder usarse para registrar ausencias, tareas o extraescolares, y solo podrá consultarse
+          desde los informes (guardias, chat, justificación). Los puntos de los profesores se resetean a 0
+          en el nuevo curso. <strong>Esta acción no se puede deshacer.</strong>
         </div>
         <form method="POST" action="{{ url_for('admin.school_year_create') }}"
-              onsubmit="return confirm('¿Iniciar el curso ' + document.getElementById('new-year-name').value + '? Se resetearán los puntos de todos los profesores.')">
+              onsubmit="return confirm('¿Iniciar el curso ' + document.getElementById('new-year-name').value + '? El curso actual quedará histórico de forma irreversible y se resetearán los puntos de todos los profesores.')">
           <div class="row g-2 align-items-end">
             <div class="col-auto">
               <label class="form-label fw-semibold mb-1">Nombre del curso</label>
@@ -564,7 +569,7 @@
                      value="{{ next_year_end | fecha_es('%d/%m/%Y') }}" style="width:110px">
             </div>
             <div class="col-auto">
-              <button type="submit" class="btn btn-primary btn-sm mb-3">
+              <button type="submit" class="btn btn-primary btn-sm mb-3" id="create-year-btn-cfg" disabled>
                 <i class="bi bi-arrow-right-circle"></i> Crear e iniciar curso
               </button>
             </div>
@@ -592,6 +597,12 @@
           <div class="form-text mb-2">
             Los profesores conservan su email y contraseña (sus puntos empiezan a 0).
             Las aulas no necesitan copiarse: son comunes a todos los cursos.
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" name="confirm_irreversible" id="confirm-irreversible-cfg" required>
+            <label class="form-check-label small fw-semibold" for="confirm-irreversible-cfg">
+              Entiendo que esta acción es irreversible: el curso actual pasará a histórico y no podrá reactivarse.
+            </label>
           </div>
         </form>
 
@@ -814,6 +825,12 @@ backBtn.addEventListener('click', function() {
   if (!activeSection) return;
   bootstrap.Collapse.getOrCreateInstance(document.getElementById(activeSection)).hide();
 });
+
+const confirmYearCb = document.getElementById('confirm-irreversible-cfg');
+const createYearBtn = document.getElementById('create-year-btn-cfg');
+if (confirmYearCb && createYearBtn) {
+  confirmYearCb.addEventListener('change', function() { createYearBtn.disabled = !confirmYearCb.checked; });
+}
 
 const editor = document.getElementById('help-editor');
 const preview = document.getElementById('help-preview');

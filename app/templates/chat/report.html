@@ -11,14 +11,26 @@
 <div class="card mt-3" style="max-width:500px;">
   <div class="card-body">
     <form method="GET" class="row g-3">
+      {% if years %}
+      <div class="col-12">
+        <label class="form-label">Curso</label>
+        <select id="year-select" class="form-select">
+          <option value="">— Rango manual —</option>
+          {% for y in years %}
+          <option value="{{ y.id }}" data-start="{{ y.start_date.isoformat() }}" data-end="{{ y.end_date.isoformat() }}"
+                  {% if request.args.get('year_id', type=int) == y.id %}selected{% endif %}>{{ y.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
       <div class="col-6">
         <label class="form-label">Desde</label>
-        <input type="date" name="desde" class="form-control"
+        <input type="date" id="desde-input" name="desde" class="form-control"
                value="{{ request.args.get('desde', '') }}">
       </div>
       <div class="col-6">
         <label class="form-label">Hasta</label>
-        <input type="date" name="hasta" class="form-control"
+        <input type="date" id="hasta-input" name="hasta" class="form-control"
                value="{{ request.args.get('hasta', today) }}">
       </div>
       <div class="col-12 d-flex gap-2">
@@ -40,4 +52,24 @@
     </p>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var sel = document.getElementById('year-select');
+  var desde = document.getElementById('desde-input');
+  var hasta = document.getElementById('hasta-input');
+  if (!sel) return;
+  function applyYear() {
+    var opt = sel.options[sel.selectedIndex];
+    if (opt && opt.value) {
+      desde.value = opt.dataset.start;
+      hasta.value = opt.dataset.end;
+    }
+  }
+  sel.addEventListener('change', applyYear);
+  if (sel.value) applyYear();
+})();
+</script>
 {% endblock %}

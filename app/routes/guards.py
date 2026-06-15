@@ -570,15 +570,28 @@ def report():
         return redirect(url_for("dashboard.index"))
 
     from sqlalchemy import func
+    from app.models.school_year import SchoolYear
+    from app.utils.school_year import get_current_school_year
+
+    years = SchoolYear.query.order_by(SchoolYear.start_date.desc()).all()
+    selected_year = get_current_school_year()
+    year_id = request.args.get("year_id", type=int)
+    if year_id:
+        selected_year = next((y for y in years if y.id == year_id), selected_year)
+
     records = (
         db.session.query(User.id, User.name, User.surname,
                          func.sum(GuardRecord.points_awarded),
                          func.sum(GuardRecord.effective_minutes))
         .join(GuardRecord, GuardRecord.teacher_id == User.id)
+        .join(Guard, GuardRecord.guard_id == Guard.id)
         .filter(db.or_(User.role != "management", User.track_points == True))
         .filter(User.role != "display")
+        .filter(User.school_year_id == selected_year.id)
+        .filter(Guard.date >= selected_year.start_date, Guard.date <= selected_year.end_date)
         .group_by(User.id)
         .order_by(func.sum(GuardRecord.points_awarded).desc())
         .all()
     )
-    return render_template("guards/report.html", records=records)
+    return render_template("guards/report.html", records=records,
+                           years=years, selected_year=selected_year)

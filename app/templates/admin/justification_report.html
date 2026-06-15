@@ -10,15 +10,29 @@
       <i class="bi bi-arrow-left"></i> Atrás
     </a>
   </div>
+  {% if years %}
+  <div class="row g-2 align-items-end mb-1">
+    <div class="col-auto">
+      <label class="form-label small mb-1">Curso</label>
+      <select id="year-select" class="form-select form-select-sm">
+        <option value="">— Rango manual —</option>
+        {% for y in years %}
+        <option value="{{ y.id }}" data-start="{{ y.start_date.isoformat() }}" data-end="{{ y.end_date.isoformat() }}"
+                {% if request.args.get('year_id', type=int) == y.id %}selected{% endif %}>{{ y.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  {% endif %}
   <form method="GET" action="{{ url_for('admin.justification_report_pdf') }}" target="_blank"
         class="row g-2 align-items-end mb-1">
     <div class="col-auto">
       <label class="form-label small mb-1">Desde</label>
-      <input type="date" name="desde" class="form-control form-control-sm" value="{{ desde }}" required>
+      <input type="date" id="desde-input" name="desde" class="form-control form-control-sm" value="{{ desde }}" required>
     </div>
     <div class="col-auto">
       <label class="form-label small mb-1">Hasta</label>
-      <input type="date" name="hasta" class="form-control form-control-sm" value="{{ hasta }}" required>
+      <input type="date" id="hasta-input" name="hasta" class="form-control form-control-sm" value="{{ hasta }}" required>
     </div>
     <div class="col-auto">
       <button type="submit" class="btn btn-primary btn-sm">
@@ -71,4 +85,22 @@
   </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var sel = document.getElementById('year-select');
+  if (!sel) return;
+  sel.addEventListener('change', function() {
+    var opt = sel.options[sel.selectedIndex];
+    if (!opt.value) return;
+    var url = new URL(window.location.href);
+    url.searchParams.set('desde', opt.dataset.start);
+    url.searchParams.set('hasta', opt.dataset.end);
+    url.searchParams.set('year_id', opt.value);
+    window.location.href = url.toString();
+  });
+})();
+</script>
 {% endblock %}

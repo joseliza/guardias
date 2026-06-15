@@ -130,8 +130,14 @@ def create():
             flash("No se pueden registrar ausencias para fechas pasadas.", "danger")
             return redirect(url_for("absences.create"))
 
+        year = get_current_school_year()
+        if not (year.start_date <= absence_date <= year.end_date):
+            flash(f"La fecha debe estar dentro del curso {year.name} "
+                  f"({year.start_date.strftime('%d/%m/%Y')} - {year.end_date.strftime('%d/%m/%Y')}).", "danger")
+            return redirect(url_for("absences.create"))
+
         day_idx = absence_date.weekday()
-        year_id = get_current_school_year().id
+        year_id = year.id
         configured_penalty = current_app.config.get("ABSENCE_PENALTY", -1.0)
         slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
         skipped_free = []

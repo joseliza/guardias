@@ -55,7 +55,9 @@ def report():
     if not current_user.is_management:
         flash("Sin permiso.", "danger")
         return redirect(url_for("dashboard.index"))
-    return render_template("chat/report.html", today=date.today().isoformat())
+    from app.models.school_year import SchoolYear
+    years = SchoolYear.query.order_by(SchoolYear.start_date.desc()).all()
+    return render_template("chat/report.html", today=date.today().isoformat(), years=years)
 
 
 @chat_bp.route("/informe/csv")

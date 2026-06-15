@@ -103,53 +103,6 @@ def _transfer_email_to_active_year(teacher, exclude_ids=None):
     return target
 
 
-def _reclaim_emails_for_year(year):
-    """Al activar un curso, recupera los emails reales que quedaron en filas
-    de otros cursos: cada profesor del curso activado con email marcador
-    (_..._@pendiente.local) recibe el email real -y la contraseña, si no
-    tiene una propia- de su fila homónima (mismo nombre y apellidos) de otro
-    curso, que queda archivada. Así el email real siempre vive en el curso
-    vigente, se active el curso que se active.
-
-    Devuelve el número de emails transferidos. El llamador hace commit.
-    """
-    from app.models.school_year import SchoolYear
-
-    starts = {y.id: y.start_date for y in SchoolYear.query.all()}
-    moved = 0
-    pending = [u for u in User.query.filter(User.school_year_id == year.id,
-                                            User.role != "display").all()
-               if _is_placeholder_email(u.email)]
-    for u in pending:
-        donors = [d for d in User.query.filter(
-                      User.id != u.id,
-                      User.role != "display",
-                      User.surname.ilike(u.surname),
-                      User.name.ilike(u.name),
-                  ).all()
-                  if d.school_year_id != year.id and not _is_placeholder_email(d.email)]
-        if not donors:
-            continue
-        # Si hay varias filas con email real (no debería), la del curso más reciente
-        donor = max(donors, key=lambda d: (d.school_year_id is not None,
-                                           starts.get(d.school_year_id, year.start_date)))
-        email = donor.email
-        if donor.active:
-            # La fila del curso activado hereda el derecho a iniciar sesión
-            u.active = True
-        donor.email = f"_archived_{donor.id}@pendiente.local"
-        donor.receive_emails = False
-        donor.active = False
-        # Flush para liberar el email único antes de reasignarlo.
-        db.session.flush()
-        if not u.password_hash:
-            u.password_hash = donor.password_hash
-        u.email = email
-        u.receive_emails = True
-        moved += 1
-    return moved
-
-
 # ── Profesores ───────────────────────────────────────────────────────────────
 
 @admin_bp.route("/profesores")
@@ -2407,6 +2360,7 @@ def justification_report():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     from datetime import date as _date, timedelta
+    from app.models.school_year import SchoolYear
 
     # Por defecto: primer día del mes actual → hoy
     today = _date.today()
@@ -2415,6 +2369,13 @@ def justification_report():
 
     desde_str = request.args.get("desde", default_desde)
     hasta_str = request.args.get("hasta", default_hasta)
+
+    year_id = request.args.get("year_id", type=int)
+    if year_id and "desde" not in request.args and "hasta" not in request.args:
+        selected = SchoolYear.query.get(year_id)
+        if selected:
+            desde_str = selected.start_date.isoformat()
+            hasta_str = selected.end_date.isoformat()
 
     summary = None
     try:
@@ -2430,8 +2391,9 @@ def justification_report():
     except (ValueError, TypeError):
         desde_str, hasta_str = default_desde, default_hasta
 
+    years = SchoolYear.query.order_by(SchoolYear.start_date.desc()).all()
     return render_template("admin/justification_report.html",
-                           desde=desde_str, hasta=hasta_str, summary=summary)
+                           desde=desde_str, hasta=hasta_str, summary=summary, years=years)
 
 
 @admin_bp.route("/informe-justificacion/imprimir")
@@ -2828,6 +2790,10 @@ def school_year_create():
         flash("Nombre de curso inválido.", "danger")
         return redirect(url_for("admin.config") + "#section-school-years")
 
+    if request.form.get("confirm_irreversible") != "on":
+        flash("Debes confirmar que entiendes que esta acción es irreversible.", "danger")
+        return redirect(url_for("admin.config") + "#section-school-years")
+
     if SchoolYear.query.filter_by(name=name).first():
         flash(f"El curso {name} ya existe.", "warning")
         return redirect(url_for("admin.config") + "#section-school-years")
@@ -2853,32 +2819,9 @@ def school_year_create():
     recalculate_points_for_year(new_year)
 
     db.session.commit()
-    flash(f"Curso {name} creado. {_copy_summary_msg(counts)}".strip(), "success")
-    return redirect(url_for("admin.config") + "#section-school-years")
-
-
-@admin_bp.route("/cursos/<int:year_id>/activar", methods=["POST"])
-@login_required
-def school_year_activate(year_id):
-    if not _require_management():
-        return redirect(url_for("dashboard.index"))
-    from app.models.school_year import SchoolYear
-
-    year = SchoolYear.query.get_or_404(year_id)
-    SchoolYear.query.update({"is_current": False})
-    year.is_current = True
-
-    # Traer al curso activado los emails reales que quedaron en filas de
-    # otros cursos, para que el login siga funcionando tras el cambio.
-    moved = _reclaim_emails_for_year(year)
-
-    from app.utils.points import recalculate_points_for_year
-    recalculate_points_for_year(year)
-
-    db.session.commit()
-    msg = f"Curso {year.name} activado. Puntos recalculados para este curso."
-    if moved:
-        msg += f" {moved} emails recuperados de otros cursos."
+    msg = f"Curso {name} creado y activado. {_copy_summary_msg(counts)}".strip()
+    if prev_year:
+        msg += f" El curso {prev_year.name} ha pasado a histórico: solo es consultable desde los informes."
     flash(msg, "success")
     return redirect(url_for("admin.config") + "#section-school-years")
 

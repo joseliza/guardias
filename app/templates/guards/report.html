@@ -5,7 +5,16 @@
 <div id="report-header" class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
 <div class="d-flex justify-content-between align-items-center mb-1">
   <h4 class="mb-0"><i class="bi bi-bar-chart"></i> Informe de guardias — Carnet de puntos</h4>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 align-items-center">
+    {% if years and years|length > 1 %}
+    <form method="GET" class="d-flex">
+      <select name="year_id" class="form-select form-select-sm" onchange="this.form.submit()">
+        {% for y in years %}
+        <option value="{{ y.id }}" {% if y.id == selected_year.id %}selected{% endif %}>{{ y.name }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    {% endif %}
     <a href="{{ back_url('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
     <a href="{{ url_for('guards.my_points_csv') }}" class="btn btn-success btn-sm">
       <i class="bi bi-filetype-csv"></i> Descargar CSV completo

@@ -37,12 +37,17 @@
               </td>
               <td class="text-end">
                 {% if not y.is_current %}
-                <form method="POST" action="{{ url_for('admin.school_year_activate', year_id=y.id) }}"
-                      onsubmit="return confirm('¿Activar el curso {{ y.name }}? El curso activo actual quedará inactivo.')">
-                  <button type="submit" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-check2-circle"></i> Activar
-                  </button>
-                </form>
+                <div class="d-flex gap-1 justify-content-end">
+                  <a href="{{ url_for('guards.report', year_id=y.id) }}" class="btn btn-sm btn-outline-secondary" title="Informe de guardias">
+                    <i class="bi bi-bar-chart"></i>
+                  </a>
+                  <a href="{{ url_for('chat.report', year_id=y.id) }}" class="btn btn-sm btn-outline-secondary" title="Informe de chat">
+                    <i class="bi bi-chat-square-text"></i>
+                  </a>
+                  <a href="{{ url_for('admin.justification_report', year_id=y.id) }}" class="btn btn-sm btn-outline-secondary" title="Informe de justificación">
+                    <i class="bi bi-file-earmark-text"></i>
+                  </a>
+                </div>
                 {% endif %}
               </td>
             </tr>
@@ -59,13 +64,15 @@
         <i class="bi bi-plus-circle"></i> Iniciar nuevo curso
       </div>
       <div class="card-body">
-        <div class="alert alert-warning small py-2 mb-3">
+        <div class="alert alert-danger small py-2 mb-3">
           <i class="bi bi-exclamation-triangle"></i>
-          Al crear un nuevo curso se <strong>resetearán los puntos</strong> de todos los profesores a 0
-          y el curso actual quedará inactivo. Los horarios del nuevo curso empezarán vacíos.
+          Al crear un nuevo curso, el curso actual pasará a ser <strong>histórico de forma definitiva</strong>:
+          dejará de poder usarse para registrar ausencias, tareas o extraescolares, y solo podrá consultarse
+          desde los informes (guardias, chat, justificación). Los puntos de los profesores se resetean a 0
+          en el nuevo curso. <strong>Esta acción no se puede deshacer.</strong>
         </div>
         <form method="POST" action="{{ url_for('admin.school_year_create') }}"
-              onsubmit="return confirm('¿Iniciar el curso ' + document.getElementById('new-year-name').value + '? Se resetearán los puntos de todos los profesores.')">
+              onsubmit="return confirm('¿Iniciar el curso ' + document.getElementById('new-year-name').value + '? El curso actual quedará histórico de forma irreversible y se resetearán los puntos de todos los profesores.')">
           <div class="mb-3">
             <label class="form-label fw-semibold">Nombre del curso</label>
             <input type="text" name="name" id="new-year-name" class="form-control"
@@ -101,7 +108,13 @@
             Los profesores conservan su email y contraseña (sus puntos empiezan a 0).
             Las aulas no necesitan copiarse: son comunes a todos los cursos.
           </div>
-          <button type="submit" class="btn btn-primary w-100">
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="confirm_irreversible" id="confirm-irreversible" required>
+            <label class="form-check-label small fw-semibold" for="confirm-irreversible">
+              Entiendo que esta acción es irreversible: el curso actual pasará a histórico y no podrá reactivarse.
+            </label>
+          </div>
+          <button type="submit" class="btn btn-primary w-100" id="create-year-btn" disabled>
             <i class="bi bi-arrow-right-circle"></i> Crear e iniciar curso
           </button>
         </form>
@@ -109,4 +122,15 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var cb = document.getElementById('confirm-irreversible');
+  var btn = document.getElementById('create-year-btn');
+  if (!cb || !btn) return;
+  cb.addEventListener('change', function() { btn.disabled = !cb.checked; });
+})();
+</script>
 {% endblock %}

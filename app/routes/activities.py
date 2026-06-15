@@ -61,6 +61,10 @@ def create():
         if activity_date < datetime.now().date():
             flash("La fecha de la actividad no puede ser anterior a la fecha actual.", "danger")
             return redirect(url_for("activities.create"))
+        if not (year.start_date <= activity_date <= year.end_date):
+            flash(f"La fecha debe estar dentro del curso {year.name} "
+                  f"({year.start_date.strftime('%d/%m/%Y')} - {year.end_date.strftime('%d/%m/%Y')}).", "danger")
+            return redirect(url_for("activities.create"))
         if not group_ids:
             flash("Debes seleccionar al menos un grupo participante.", "danger")
             return redirect(url_for("activities.create"))
@@ -174,6 +178,12 @@ def edit(aid):
 
         if new_date < _date.today():
             flash("La fecha de la actividad no puede ser anterior a la fecha actual.", "danger")
+            return redirect(url_for("activities.edit", aid=aid))
+        from app.utils.school_year import get_current_school_year as _get_year
+        _year = _get_year()
+        if not (_year.start_date <= new_date <= _year.end_date):
+            flash(f"La fecha debe estar dentro del curso {_year.name} "
+                  f"({_year.start_date.strftime('%d/%m/%Y')} - {_year.end_date.strftime('%d/%m/%Y')}).", "danger")
             return redirect(url_for("activities.edit", aid=aid))
         if not new_group_ids:
             flash("Debes seleccionar al menos un grupo participante.", "danger")
