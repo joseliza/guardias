@@ -235,7 +235,7 @@ document.getElementById('add-task-form').addEventListener('submit', function(e) 
     document.getElementById('group-search').focus();
   }
 });
-initPicker('group-search', 'group-select', 'group-suggestions', null, '');
+initPicker('group-search', 'group-select', 'group-suggestions', defaultGroupId, defaultGroupName);
 
 // Modales de edición
 {% for t in absence.tasks %}
