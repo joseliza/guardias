@@ -43,8 +43,10 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
                  este tramo (o sin tramos seleccionados, para periodos antiguos) y clase
                  asignada en este tramo; no ausentes, no en primary, ordenados igual que
                  primary.
-    - secondary: profesores sin ninguna entrada en ese tramo (libres totales), no ausentes,
-                 ordenados igual que primary.
+    - secondary: profesores con una entrada en ese tramo de materia "permanencia sin
+                 docencia" o de grupo "guardia +55" (presentes en el centro sin clase),
+                 no ausentes, no en primary ni ex_guard, ordenados igual que primary. Un
+                 tramo sin ninguna entrada (hueco) nunca cuenta como libre.
     - availability_restrictions: {teacher_id: set(group_id) | None} — grupos que un
                  profesor con periodo de disponibilidad puede cubrir; None si no hay
                  restricción (puede cubrir cualquier grupo). Solo incluye profesores con
@@ -67,35 +69,31 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
         User.school_year_id == year_id, User.role != "display"
     ).all()
 
-    # IDs con entrada en ese tramo (clase o guardia)
-    scheduled_ids = {
-        row[0] for row in TeacherSchedule.query
-        .filter_by(day_of_week=day_idx, slot_id=slot_id, school_year_id=year_id)
-        .with_entities(TeacherSchedule.teacher_id)
-        .all()
-    }
-
-    # Tramos de guardia de mayores de 55 (grupo guard_55): no cuentan como
-    # ocupados — el profesor debe aparecer en el pool de libres a esa hora
-    from app.models.group import Group
-    guard55_ids = {
-        row[0] for row in TeacherSchedule.query
-        .join(Group, TeacherSchedule.group_id == Group.id)
-        .filter(
-            TeacherSchedule.day_of_week == day_idx,
-            TeacherSchedule.slot_id == slot_id,
-            TeacherSchedule.school_year_id == year_id,
-            Group.guard_type == "guard_55",
-        )
-        .with_entities(TeacherSchedule.teacher_id)
-        .all()
-    }
-    scheduled_ids -= guard55_ids
-
     # IDs con tramo de guardia oficial asignado
     guard_slot_ids = {
         row[0] for row in TeacherSchedule.query
         .filter_by(day_of_week=day_idx, slot_id=slot_id, is_guard_slot=True, school_year_id=year_id)
+        .with_entities(TeacherSchedule.teacher_id)
+        .all()
+    }
+
+    # IDs con entrada de materia "permanencia sin docencia" o de grupo
+    # "guardia +55" en ese tramo: cuentan en el pool de libres aunque tengan
+    # una entrada en el horario. Un tramo sin ninguna entrada (hueco) nunca
+    # cuenta como libre.
+    from app.models.group import Group
+    from app.models.subject import Subject
+    from sqlalchemy import or_
+    libre_ids = {
+        row[0] for row in TeacherSchedule.query
+        .outerjoin(Subject, TeacherSchedule.subject_id == Subject.id)
+        .outerjoin(Group, TeacherSchedule.group_id == Group.id)
+        .filter(
+            TeacherSchedule.day_of_week == day_idx,
+            TeacherSchedule.slot_id == slot_id,
+            TeacherSchedule.school_year_id == year_id,
+            or_(Subject.guard_type == "permanencia", Group.guard_type == "guard_55"),
+        )
         .with_entities(TeacherSchedule.teacher_id)
         .all()
     }
@@ -146,7 +144,7 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
         availability_restrictions[tid] = allowed or None
 
     primary_ids   = guard_slot_ids - absent_ids
-    secondary_ids = {t.id for t in all_teachers} - scheduled_ids - absent_ids - guard_slot_ids
+    secondary_ids = libre_ids - absent_ids - guard_slot_ids - ex_guard_ids
 
     sort_key = fairness_sort_key(all_teachers)
     primary = sorted(

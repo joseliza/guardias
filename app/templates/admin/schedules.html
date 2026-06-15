@@ -86,13 +86,13 @@
             </td>
             {% for d in range(5) %}
             {% set entry = row.days[d] %}
-            {% set cur_type = 'guard' if entry and entry.is_guard_slot else ('group' if entry and entry.group else 'free') %}
+            {% set cur_subject = entry.subject if entry and entry.subject else None %}
+            {% set cur_type = 'guard' if entry and entry.is_guard_slot else ('group' if entry and entry.group else ('subject' if cur_subject else 'free')) %}
             {% set cur_group_id = entry.group_id if entry and entry.group_id else 0 %}
             {% set cur_group_name = entry.group.name if entry and entry.group else '' %}
             {% set cur_room = entry.room if entry and entry.room else None %}
             {% set cur_room_id = cur_room.id if cur_room else 0 %}
             {% set cur_room_name = cur_room.name if cur_room else '' %}
-            {% set cur_subject = entry.subject if entry and entry.subject else None %}
             {% set cur_subject_type = cur_subject.guard_type if cur_subject else '' %}
             {% set cur_subject_id = cur_subject.id if cur_subject else 0 %}
             {% set cur_subject_name = cur_subject.name if cur_subject else '' %}
@@ -127,12 +127,14 @@
                 {% if display_room %}
                 <div class="small text-muted mt-1"><i class="bi bi-door-open"></i> {{ display_room.name }}</div>
                 {% endif %}
+                {% elif cur_subject %}
+                <span class="badge" style="background:#0d9488">{{ cur_subject.name }}</span>
                 {% elif entry.notes %}
                 <span class="badge bg-warning text-dark"><i class="bi bi-pencil"></i> {{ entry.notes }}</span>
                 {% else %}
                 <span class="text-muted small">—</span>
                 {% endif %}
-                {% if entry.notes and (entry.is_guard_slot or entry.group) %}
+                {% if entry.notes and (entry.is_guard_slot or entry.group or cur_subject) %}
                 <div class="small text-muted mt-1"><i class="bi bi-pencil"></i> {{ entry.notes }}</div>
                 {% endif %}
                 {% if cur_subject_type == 'desdoble_fp' %}
@@ -400,7 +402,7 @@
           <div class="d-grid gap-2">
             <button type="button" id="btn-save-group" class="btn btn-sm btn-primary" style="display:none"
                     onclick="submitSlot('group')">
-              <i class="bi bi-check-lg"></i> Guardar clase
+              <i class="bi bi-check-lg"></i> Guardar
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="submitSlot('clear')">
               <i class="bi bi-x-circle"></i> Dejar libre
@@ -510,7 +512,7 @@ function openSlotModal(el) {
   if (hasContent) buildCloneGrid(_srcDay, _srcSlot);
 
   document.getElementById('modal-slot-title').textContent = d.dayLabel + ' — ' + d.slotLabel;
-  const curLabels = { guard: '🛡️ Guardia', free: 'Libre', group: '📚 ' + d.groupName };
+  const curLabels = { guard: '🛡️ Guardia', free: 'Libre', group: '📚 ' + d.groupName, subject: '📖 ' + d.subjectName };
   document.getElementById('slot-current').textContent = 'Actual: ' + (curLabels[d.type] || 'Libre');
 
   const groupChip = document.getElementById('slot-group-chip');
@@ -544,7 +546,8 @@ function openSlotModal(el) {
 
 function updateSaveGroupBtn() {
   const hasGroup = !!document.getElementById('slot-group-id').value;
-  document.getElementById('btn-save-group').style.display = hasGroup ? '' : 'none';
+  const hasSubject = !!document.getElementById('slot-subject-id').value;
+  document.getElementById('btn-save-group').style.display = (hasGroup || hasSubject) ? '' : 'none';
 }
 
 function clearSlotGroup() {
@@ -575,7 +578,8 @@ function submitSlotOther() {
 function submitSlot(action) {
   if (action === 'group') {
     const groupId = document.getElementById('slot-group-id').value;
-    if (!groupId) return;
+    const subjectId = document.getElementById('slot-subject-id').value;
+    if (!groupId && !subjectId) return;
   }
   document.getElementById('slot-action').value = action;
   document.getElementById('slot-form').submit();

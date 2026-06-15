@@ -12,6 +12,8 @@ class Subject(db.Model):
     # None = materia normal.
     # 'desdoble_fp' = descriptivo: el apoyo entre profesores que comparten
     # tramo, grupo y aula se detecta automáticamente para cualquier materia.
+    # 'permanencia' = permanencia sin docencia: el profesor está en el centro
+    # pero sin clase asignada; cuenta en el pool de libres para guardias.
     # Los tipos de guardia ('guard', 'guard_55') viven en Group.guard_type:
     # las horas de guardia se asignan como grupo, no como materia.
     guard_type = db.Column(db.String(20), nullable=True)

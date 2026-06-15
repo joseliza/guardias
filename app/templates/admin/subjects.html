@@ -34,6 +34,8 @@
           <td>
             {% if s.guard_type == 'desdoble_fp' %}
               <span class="badge" style="background:#6f42c1">Desdoble FP</span>
+            {% elif s.guard_type == 'permanencia' %}
+              <span class="badge" style="background:#0d9488">Permanencia sin docencia</span>
             {% else %}
               <span class="text-muted small">—</span>
             {% endif %}
@@ -86,8 +88,9 @@
             <select name="guard_type" id="subject-guard-type" class="form-select form-select-sm">
               <option value="">Materia normal</option>
               <option value="desdoble_fp">Desdoble FP</option>
+              <option value="permanencia">Permanencia sin docencia</option>
             </select>
-            <div class="form-text small">Las guardias se configuran como tipo de grupo, no de materia.</div>
+            <div class="form-text small">Las guardias se configuran como tipo de grupo, no de materia. "Permanencia sin docencia" marca al profesor como libre para guardias en ese tramo.</div>
           </div>
         </div>
         <div class="modal-footer py-2">

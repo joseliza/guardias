@@ -609,7 +609,7 @@ def subject_create():
     name = request.form.get("name", "").strip()
     abbreviation = request.form.get("abbreviation", "").strip() or None
     guard_type = request.form.get("guard_type") or None
-    if guard_type != "desdoble_fp":
+    if guard_type not in ("desdoble_fp", "permanencia"):
         guard_type = None
     if name:
         db.session.add(Subject(school_year_id=year.id, name=name,
@@ -629,7 +629,7 @@ def subject_edit(sid):
     subject.name = request.form.get("name", "").strip() or subject.name
     subject.abbreviation = request.form.get("abbreviation", "").strip() or None
     guard_type = request.form.get("guard_type") or None
-    subject.guard_type = guard_type if guard_type == "desdoble_fp" else None
+    subject.guard_type = guard_type if guard_type in ("desdoble_fp", "permanencia") else None
     db.session.commit()
     flash("Materia actualizada.", "success")
     return redirect(url_for("admin.subjects"))
@@ -928,11 +928,11 @@ def schedule_set_cell():
             room_id=room_id, notes=notes,
         ))
     elif action == "group":
-        group_id = request.form.get("group_id", type=int)
+        group_id = request.form.get("group_id", type=int) or None
         subject_id = request.form.get("subject_id", type=int) or None
         group = Group.query.get(group_id) if group_id else None
         is_guard = bool(group and group.guard_type == "guard")
-        if group_id:
+        if group_id or subject_id:
             db.session.add(TeacherSchedule(
                 teacher_id=teacher_id, day_of_week=day, school_year_id=year_id,
                 slot_id=slot_id, is_guard_slot=is_guard, group_id=group_id,
