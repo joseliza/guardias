@@ -171,7 +171,7 @@ def self_register(guard_id):
 @guards_bp.route("/asignar-rapido", methods=["POST"])
 @login_required
 def quick_assign():
-    if not current_user.is_management:
+    if current_user.role not in ("management", "display"):
         flash("Sin permiso.", "danger")
         return redirect(url_for("dashboard.index"))
 
@@ -303,7 +303,7 @@ def reorder_records(guard_id):
 @guards_bp.route("/auto-asignar/<date_str>/<int:slot_id>", methods=["POST"])
 @login_required
 def auto_assign_slot(date_str, slot_id):
-    if not current_user.is_management:
+    if current_user.role not in ("management", "display"):
         flash("Sin permiso.", "danger")
         return redirect(url_for("dashboard.index"))
     target_date = date.fromisoformat(date_str)

@@ -769,8 +769,8 @@ def unmark_returned(absence_id):
                 pass
     # Fecha futura: siempre permitido (el tramo aún no ha ocurrido)
 
-    # Permitido a: directivos, y profesor con guardia en ese tramo
-    if not current_user.is_management:
+    # Permitido a: directivos, pantalla, y profesor con guardia en ese tramo
+    if not current_user.is_management and current_user.role != "display":
         has_guard = TeacherSchedule.query.filter_by(
             teacher_id=current_user.id,
             day_of_week=today.weekday(),
