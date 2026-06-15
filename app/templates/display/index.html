@@ -394,7 +394,7 @@
     <!-- Panel de chat -->
     <div id="chat-panel">
       <div id="chat-header">
-        <span><i class="bi bi-chat-dots text-primary"></i> Canal de incidencias</span>
+        <span><i class="bi bi-chat-dots text-primary"></i> Chat</span>
         {% if current_user.is_management %}
         <button class="btn btn-sm btn-outline-danger py-0 px-2" id="btn-clear-chat" title="Limpiar chat">
           <i class="bi bi-trash"></i>
@@ -404,7 +404,7 @@
       <div id="chat-box"></div>
       <div id="chat-footer">
         <div class="input-group input-group-sm">
-          <input type="text" id="msg-input" class="form-control" placeholder="Escribe una incidencia..." autocomplete="off">
+          <input type="text" id="msg-input" class="form-control" placeholder="Escribe un mensaje..." autocomplete="off">
           <button class="btn btn-primary btn-sm" id="send-btn"><i class="bi bi-send"></i></button>
         </div>
       </div>

@@ -417,10 +417,10 @@
   {% if has_side_panel %}
   <div class="col-md-4 d-flex flex-column" id="side-panel-col" style="overflow:hidden;padding:0 0 0 8px;height:100%;">
 
-      <!-- Chat / Incidencias -->
+      <!-- Chat -->
       <div class="card" style="flex-shrink:0;">
         <div class="card-header d-flex justify-content-between align-items-center py-2">
-          <span><i class="bi bi-chat-dots"></i> Incidencias</span>
+          <span><i class="bi bi-chat-dots"></i> Chat</span>
           <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
                   data-bs-toggle="collapse" data-bs-target="#chat-panel-body">
             <i class="bi bi-chevron-up"></i>
@@ -436,14 +436,14 @@
                 <div>{{ msg.message }}</div>
               </div>
               {% else %}
-              <p class="text-muted small mb-0">Sin incidencias registradas.</p>
+              <p class="text-muted small mb-0">Sin mensajes registrados.</p>
               {% endfor %}
             </div>
           </div>
           {% if is_today %}
           <div class="card-footer p-2">
             <form id="chat-form" class="d-flex gap-2">
-              <input type="text" id="msg-input" class="form-control form-control-sm" placeholder="Escribe una incidencia..." autocomplete="off">
+              <input type="text" id="msg-input" class="form-control form-control-sm" placeholder="Escribe un mensaje..." autocomplete="off">
               <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-send"></i></button>
             </form>
           </div>
