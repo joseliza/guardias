@@ -42,6 +42,7 @@ with app.app_context():
             name="Admin",
             surname="Sistema",
             role="management",
+            dev_access=True,
         )
         admin.set_password("admin1234")
         db.session.add(admin)

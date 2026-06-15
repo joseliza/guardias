@@ -54,16 +54,22 @@
               {% if not points_enabled %}<small class="text-warning d-block">No se aplica — la puntuación está desactivada</small>{% endif %}
             </label>
           </div>
+          {% if current_user.dev_access %}
           <div class="form-check" id="dev-access-wrapper" style="display:none">
             <input type="checkbox" class="form-check-input" name="dev_access" id="dev_access" {% if teacher and teacher.dev_access %}checked{% endif %}>
             <label class="form-check-label" for="dev_access">
               Acceso a sección Desarrollo
             </label>
           </div>
+          {% endif %}
         </div>
         <div class="col-md-6">
           <label class="form-label">Contraseña <small class="text-muted">(opcional si usa Google Workspace{{ ' · dejar vacío para no cambiar' if teacher else '' }})</small></label>
-          <input type="password" name="password" class="form-control">
+          <input type="password" name="password" id="password" class="form-control">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Confirmar contraseña</label>
+          <input type="password" name="password_confirm" id="password_confirm" class="form-control">
         </div>
         {% if teacher %}
         <div class="col-12">
@@ -165,13 +171,24 @@
     window.location.href = "{{ url_for('admin.teachers') }}";
   });
 
+  const passwordInput = document.getElementById('password');
+  const passwordConfirmInput = document.getElementById('password_confirm');
+  passwordInput.closest('form').addEventListener('submit', function(e) {
+    if (passwordInput.value !== passwordConfirmInput.value) {
+      e.preventDefault();
+      alert('Las contraseñas no coinciden.');
+    }
+  });
+
   const roleSelect = document.querySelector('select[name="role"]');
   const trackWrapper = document.getElementById('track-points-wrapper');
   const devAccessWrapper = document.getElementById('dev-access-wrapper');
   function toggleTrackPoints() {
     const isManagement = roleSelect.value === 'management';
     trackWrapper.style.display = isManagement ? '' : 'none';
-    devAccessWrapper.style.display = isManagement ? '' : 'none';
+    if (devAccessWrapper) {
+      devAccessWrapper.style.display = isManagement ? '' : 'none';
+    }
   }
   roleSelect.addEventListener('change', toggleTrackPoints);
   toggleTrackPoints();

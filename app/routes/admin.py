@@ -179,25 +179,37 @@ def teacher_create():
         return redirect(url_for("dashboard.index"))
     if request.method == "POST":
         import secrets
+        email = request.form["email"].strip().lower()
+        password = request.form.get("password", "")
+        password_confirm = request.form.get("password_confirm", "")
+        if password != password_confirm:
+            flash("Las contraseñas no coinciden.", "danger")
+            return redirect(request.url)
+        if User.query.filter_by(email=email).first():
+            flash("Ya existe un usuario con ese correo electrónico.", "danger")
+            return redirect(request.url)
         role = request.form.get("role", "teacher")
         from app.utils.school_year import get_current_school_year as _get_year
         user = User(
-            email=request.form["email"].strip().lower(),
+            email=email,
             name=request.form["name"].strip(),
             surname=request.form["surname"].strip(),
             abbreviation=request.form.get("abbreviation", "").strip() or None,
             role=role,
             track_points=request.form.get("track_points") == "on" and role == "management",
-            dev_access=request.form.get("dev_access") == "on" and role == "management",
+            dev_access=(current_user.dev_access and request.form.get("dev_access") == "on"
+                        and role == "management"),
             receive_emails=True,
             school_year_id=_get_year().id,
         )
-        password = request.form.get("password") or secrets.token_hex(24)
+        sent_password = password
+        if not password:
+            password = secrets.token_hex(24)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
         try:
-            _send_welcome_email(user, password if request.form.get("password") else None)
+            _send_welcome_email(user, sent_password or None)
         except Exception as e:
             current_app.logger.error("Error enviando bienvenida a %s: %s", user.email, e)
         flash("Profesor creado.", "success")
@@ -212,18 +224,31 @@ def teacher_edit(tid):
         return redirect(url_for("dashboard.index"))
     teacher = User.query.get_or_404(tid)
     if request.method == "POST":
+        email = request.form["email"].strip().lower()
+        password = request.form.get("password", "")
+        password_confirm = request.form.get("password_confirm", "")
+        if password != password_confirm:
+            flash("Las contraseñas no coinciden.", "danger")
+            return redirect(request.url)
+        existing = User.query.filter_by(email=email).first()
+        if existing and existing.id != teacher.id:
+            flash("Ya existe un usuario con ese correo electrónico.", "danger")
+            return redirect(request.url)
         teacher.name = request.form["name"].strip()
         teacher.surname = request.form["surname"].strip()
-        teacher.email = request.form["email"].strip().lower()
+        teacher.email = email
         teacher.abbreviation = request.form.get("abbreviation", "").strip() or None
         teacher.role = request.form.get("role", "teacher")
         teacher.active = request.form.get("active") == "on"
         teacher.track_points = request.form.get("track_points") == "on" and teacher.role == "management"
-        teacher.dev_access = request.form.get("dev_access") == "on" and teacher.role == "management"
+        if current_user.dev_access:
+            teacher.dev_access = request.form.get("dev_access") == "on" and teacher.role == "management"
+        elif teacher.role != "management":
+            teacher.dev_access = False
         teacher.receive_emails = request.form.get("receive_emails") == "on"
         teacher.show_substitute_public = request.form.get("show_substitute_public") == "on"
-        if request.form.get("password"):
-            teacher.set_password(request.form["password"])
+        if password:
+            teacher.set_password(password)
         # Gestión de sustitución
         from app.utils.school_year import get_current_school_year as _get_year
         _year_id = _get_year().id
@@ -3099,7 +3124,7 @@ def dev_reset_database():
         flash("Error al resetear la base de datos.", "danger")
         return redirect(url_for("admin.config") + "#section-dev")
 
-    admin = User(email="admin@ies.es", name="Admin", surname="Sistema", role="management")
+    admin = User(email="admin@ies.es", name="Admin", surname="Sistema", role="management", dev_access=True)
     admin.set_password("admin1234")
     db.session.add(admin)
     db.session.commit()
