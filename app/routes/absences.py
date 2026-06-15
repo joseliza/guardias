@@ -80,12 +80,17 @@ def index():
 
     now_t = datetime.now().time()
     active_slot_ids = set()
+    past_slot_ids = set()
     for s in slots_cfg:
         if s.get("is_break"):
             continue
         try:
-            if datetime.strptime(s["start"], "%H:%M").time() <= now_t <= datetime.strptime(s["end"], "%H:%M").time():
+            s_start = datetime.strptime(s["start"], "%H:%M").time()
+            s_end = datetime.strptime(s["end"], "%H:%M").time()
+            if s_start <= now_t <= s_end:
                 active_slot_ids.add(s["id"])
+            if now_t >= s_end:
+                past_slot_ids.add(s["id"])
         except (KeyError, ValueError):
             pass
 
@@ -94,6 +99,7 @@ def index():
                            slot_map=slot_map, today=today,
                            target_date=target_date, prev_date=prev_date,
                            next_date=next_date, is_today=is_today, is_editable=is_editable,
+                           past_slot_ids=past_slot_ids,
                            prompt_absences=prompt_absences,
                            active_slot_ids=active_slot_ids)
 
@@ -133,6 +139,7 @@ def create():
         skipped_duplicate = []
         normal_slot_ids = []  # tramos normales para auto-asignar después
         created_ids = []
+        task_ids = []  # subconjunto de created_ids para los que tiene sentido pedir tareas
 
         for slot_id in slot_ids:
             slot_id = int(slot_id)
@@ -180,6 +187,7 @@ def create():
                 db.session.add(ab)
                 db.session.flush()
                 created_ids.append(ab.id)
+                task_ids.append(ab.id)
                 continue
 
             # Tramo normal: verificar que el profesor tiene algo asignado
@@ -217,10 +225,23 @@ def create():
             db.session.flush()
             created_ids.append(absence.id)
 
-            # Guardia de mayores de 55 (grupo GUA-2): se registra la ausencia
-            # pero no hay nada que cubrir ni penalización
-            if (schedule_entry and schedule_entry.group
-                    and schedule_entry.group.guard_type == "guard_55"):
+            is_guard_55 = (schedule_entry and schedule_entry.group
+                           and schedule_entry.group.guard_type == "guard_55")
+            is_guard_duty = (not schedule_entry and has_guard_slot and has_guard_slot.group
+                             and has_guard_slot.group.guard_type == "guard")
+            is_permanencia = (schedule_entry and schedule_entry.subject
+                              and schedule_entry.subject.guard_type == "permanencia")
+
+            # Sin grupo que cubrir: no tiene sentido pedir tareas para el tramo
+            # (permanencia sin docencia, guardia GUA-2 o guardia oficial GUARD).
+            if not (is_guard_55 or is_guard_duty or is_permanencia):
+                task_ids.append(absence.id)
+
+            # Guardia de mayores de 55 (grupo GUA-2) o tramo de guardia oficial
+            # (grupo GUARD): se registra la ausencia pero no hay nada que
+            # cubrir ni penalización, porque el profesor no tenía clase
+            # asignada en ese tramo.
+            if is_guard_55 or is_guard_duty:
                 continue
 
             db.session.add(Guard(
@@ -250,8 +271,8 @@ def create():
             normal_slot_ids.append(slot_id)
 
         db.session.commit()
-        if created_ids:
-            session["task_prompt_ids"] = created_ids
+        if task_ids:
+            session["task_prompt_ids"] = task_ids
 
         # Auto-asignación solo en tramos normales (no recreo)
         for slot_id in normal_slot_ids:
@@ -708,6 +729,35 @@ def mark_returned(absence_id):
 
     absence = Absence.query.get_or_404(absence_id)
 
+    def _redirect_back():
+        back = request.form.get("back", "dashboard")
+        if back == "my_guard":
+            return redirect(url_for("guards.my_guard") + f"#slot-{absence.slot_id}")
+        if back == "display":
+            return redirect(url_for("display.index"))
+        if back == "absences":
+            return redirect(url_for("absences.index"))
+        fecha = request.form.get("back_fecha") or absence.date.isoformat()
+        slot  = request.form.get("back_slot") or absence.slot_id
+        return redirect(url_for("dashboard.index", fecha=fecha) + f"#slot-{slot}")
+
+    # Nunca se puede reincorporar un tramo ya pasado
+    today = _date.today()
+    if absence.date < today:
+        flash("No se puede registrar una reincorporación en un tramo pasado.", "danger")
+        return _redirect_back()
+    if absence.date == today:
+        slots_cfg = current_app.config["TIME_SLOTS"]
+        slot = next((s for s in slots_cfg if s["id"] == absence.slot_id), None)
+        if slot:
+            try:
+                slot_end = datetime.strptime(slot["end"], "%H:%M").time()
+                if datetime.now().time() >= slot_end:
+                    flash("No se puede registrar una reincorporación en un tramo pasado.", "danger")
+                    return _redirect_back()
+            except (KeyError, ValueError):
+                pass
+
     # Permitido a: directivos, pantalla, y profesor con guardia en ese tramo hoy
     if not current_user.is_management and current_user.role != "display":
         has_guard = TeacherSchedule.query.filter_by(
@@ -719,25 +769,30 @@ def mark_returned(absence_id):
         ).first()
         if not has_guard:
             flash("Sin permiso.", "danger")
-            return redirect(url_for("dashboard.index", fecha=absence.date.isoformat()))
+            return _redirect_back()
 
     absence.status = "returned"
     absence.returned_at = datetime.now()
     if absence.guard:
         absence.guard.status = "returned"
+
+    # La reincorporación afecta a todos los tramos siguientes del mismo día
+    later_absences = Absence.query.filter(
+        Absence.teacher_id == absence.teacher_id,
+        Absence.date == absence.date,
+        Absence.slot_id > absence.slot_id,
+        Absence.status != "returned",
+    ).all()
+    for later in later_absences:
+        later.status = "returned"
+        later.returned_at = absence.returned_at
+        if later.guard:
+            later.guard.status = "returned"
+
     db.session.commit()
     flash("Reincorporación registrada.", "success")
 
-    back = request.form.get("back", "dashboard")
-    if back == "my_guard":
-        return redirect(url_for("guards.my_guard") + f"#slot-{absence.slot_id}")
-    if back == "display":
-        return redirect(url_for("display.index"))
-    if back == "absences":
-        return redirect(url_for("absences.index"))
-    fecha = request.form.get("back_fecha") or absence.date.isoformat()
-    slot  = request.form.get("back_slot") or absence.slot_id
-    return redirect(url_for("dashboard.index", fecha=fecha) + f"#slot-{slot}")
+    return _redirect_back()
 
 
 @absences_bp.route("/<int:absence_id>/deshacer-reincorporacion", methods=["POST"])

@@ -36,17 +36,18 @@ def fairness_sort_key(teachers):
 
 def get_available_teachers_for_slot(target_date: date, slot_id: int):
     """Devuelve (primary, ex_guard, secondary, availability_restrictions):
-    - primary:   profesores con tramo de guardia oficial, no ausentes, ordenados de forma
+    - primary:   profesores con tramo de guardia oficial, sin ausencia activa ese día
+                 (en ningún tramo, hasta que se reincorporen), ordenados de forma
                  equitativa (ver fairness_sort_key).
     - ex_guard:  profesores cuyo grupo sale completo en actividad extraescolar ese tramo,
                  o que tienen un periodo de disponibilidad para guardia activo que incluye
                  este tramo (o sin tramos seleccionados, para periodos antiguos) y clase
-                 asignada en este tramo; no ausentes, no en primary, ordenados igual que
-                 primary.
+                 asignada en este tramo; sin ausencia activa ese día, no en primary,
+                 ordenados igual que primary.
     - secondary: profesores con una entrada en ese tramo de materia "permanencia sin
                  docencia" o de grupo "guardia +55" (presentes en el centro sin clase),
-                 no ausentes, no en primary ni ex_guard, ordenados igual que primary. Un
-                 tramo sin ninguna entrada (hueco) nunca cuenta como libre.
+                 sin ausencia activa ese día, no en primary ni ex_guard, ordenados igual
+                 que primary. Un tramo sin ninguna entrada (hueco) nunca cuenta como libre.
     - availability_restrictions: {teacher_id: set(group_id) | None} — grupos que un
                  profesor con periodo de disponibilidad puede cubrir; None si no hay
                  restricción (puede cubrir cualquier grupo). Solo incluye profesores con
@@ -58,9 +59,12 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
     day_idx = target_date.weekday()
     year_id = get_current_school_year().id
 
+    # Profesores con alguna ausencia activa (no reincorporada) ese día, en
+    # cualquier tramo: no se consideran disponibles para guardia en ningún
+    # tramo hasta que se registre su reincorporación.
     absent_ids = {
         row[0] for row in Absence.query
-        .filter_by(date=target_date, slot_id=slot_id)
+        .filter(Absence.date == target_date, Absence.status != "returned")
         .with_entities(Absence.teacher_id)
         .all()
     }

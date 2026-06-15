@@ -128,8 +128,6 @@ def index():
                 school_year_id=year_id,
             ).all()
         }
-        absent_ids = {a.teacher_id for a in absences_by_slot.get(sid, [])}
-
         primary_teachers, ex_guard_teachers, secondary_teachers, _avail_restrictions = get_available_teachers_for_slot(target_date, sid)
 
         guard_ids_slot = [g.id for g in guards_by_slot.get(sid, []) if g.status != "returned"]
@@ -154,6 +152,16 @@ def index():
                             if User.query.get(tid)]
         extra_teachers = sorted(extra_candidates, key=fairness_sort_key(extra_candidates))
 
+        # Profesores con guardia oficial en este tramo pero con alguna
+        # ausencia activa hoy (p. ej. ausencia en su propio tramo de guardia
+        # GUARD, o en cualquier otro tramo del día sin reincorporación): se
+        # muestran en gris en el pool de guardia, no como disponibles.
+        absent_duty_teachers = sorted(
+            [User.query.get(tid) for tid in (guard_entry_ids & absent_teacher_ids_today)
+             if User.query.get(tid)],
+            key=lambda t: t.surname,
+        )
+
         guard_info_by_slot[sid] = {
             "primary": primary_teachers,
             "ex_guard": ex_guard_teachers,
@@ -161,6 +169,7 @@ def index():
             "assigned_ids": assigned_teacher_ids,
             "multi_assigned": multi_assigned,
             "extra": extra_teachers,
+            "absent_duty": absent_duty_teachers,
         }
 
     slots_data = []
@@ -168,7 +177,7 @@ def index():
         sid = s["id"]
         absences = absences_by_slot.get(sid, [])
         guards = guards_by_slot.get(sid, [])
-        gi = guard_info_by_slot.get(sid, {"primary": [], "ex_guard": [], "secondary": [], "assigned_ids": set(), "extra": [], "multi_assigned": []})
+        gi = guard_info_by_slot.get(sid, {"primary": [], "ex_guard": [], "secondary": [], "assigned_ids": set(), "extra": [], "multi_assigned": [], "absent_duty": []})
         n_guard_teachers = len(gi["primary"])
 
         activity_gids = _activity_group_ids(sid)
@@ -211,6 +220,7 @@ def index():
             "guards": guards,
             "real_pending": real_pending,
             "guard_teachers": gi["primary"],
+            "absent_duty_teachers": gi["absent_duty"],
             "ex_guard_teachers": gi["ex_guard"],
             "secondary_teachers": gi["secondary"],
             "extra_teachers": gi["extra"],
@@ -267,6 +277,7 @@ def index():
 
     from datetime import datetime as _dt
     unmarkable_slot_ids = set()
+    past_slot_ids = set()
     if target_date > today:
         unmarkable_slot_ids = {s["id"] for s in slots_cfg if not s.get("is_break")}
     elif is_today:
@@ -275,11 +286,15 @@ def index():
             if s.get("is_break"):
                 continue
             try:
-                if _dt.strptime(s["start"], "%H:%M").time() <= now_t <= _dt.strptime(s["end"], "%H:%M").time():
+                s_start = _dt.strptime(s["start"], "%H:%M").time()
+                s_end = _dt.strptime(s["end"], "%H:%M").time()
+                if s_start <= now_t <= s_end:
                     unmarkable_slot_ids.add(s["id"])
+                if now_t >= s_end:
+                    past_slot_ids.add(s["id"])
             except (KeyError, ValueError):
                 pass
-    # target_date < today → unmarkable_slot_ids queda vacío
+    # target_date < today → unmarkable_slot_ids y past_slot_ids quedan vacíos
 
     return render_template(
         "dashboard/index.html",
@@ -298,6 +313,7 @@ def index():
         tasks_by_slot=tasks_by_slot,
         blink_guard_alert=gcfg.get("blink_guard_alert", False),
         unmarkable_slot_ids=unmarkable_slot_ids,
+        past_slot_ids=past_slot_ids,
         is_display_user=is_display_user,
         absent_teacher_ids_today=absent_teacher_ids_today,
     )

@@ -409,13 +409,27 @@ def my_guard():
                 "activity_group_ids": _activity_gids(entry.slot_id),
             })
 
+    past_slot_ids = set()
+    if is_today:
+        from datetime import datetime as _dt
+        now_t = _dt.now().time()
+        for s in slots_cfg:
+            if s.get("is_break"):
+                continue
+            try:
+                if now_t >= _dt.strptime(s["end"], "%H:%M").time():
+                    past_slot_ids.add(s["id"])
+            except (KeyError, ValueError):
+                pass
+
     return render_template("guards/my_guard.html",
                            guard_slots=guard_slots,
                            today=today,
                            target_date=target_date,
                            prev_date=prev_date,
                            next_date=next_date,
-                           is_today=is_today)
+                           is_today=is_today,
+                           past_slot_ids=past_slot_ids)
 
 
 def _build_events(teacher_id, slot_map):

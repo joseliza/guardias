@@ -103,7 +103,7 @@
         </a>
         {% endif %}
 
-        {% if absence and absence.status not in ('returned',) %}
+        {% if absence and absence.status not in ('returned',) and (not is_today or slot.id not in past_slot_ids) %}
         <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=absence.id) }}" class="d-inline">
           <input type="hidden" name="back" value="my_guard">
           <button type="submit" class="btn btn-sm btn-outline-success">

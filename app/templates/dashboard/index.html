@@ -259,7 +259,7 @@
                     <i class="bi bi-person-plus"></i> {% if guard.status == 'covered' %}Reasignar{% else %}Asignar{% endif %}
                   </a>
                   {% endif %}
-                  {% if absence.status != 'returned' %}
+                  {% if absence.status != 'returned' and s.id not in past_slot_ids %}
                   <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=absence.id) }}"
                         onsubmit="return confirm('¿Confirmas que {{ absence.teacher.display_name }} se ha reincorporado?')">
                     <input type="hidden" name="back_fecha" value="{{ target_date.isoformat() }}">
@@ -306,13 +306,13 @@
             {# Pool primario: profesores con guardia oficial #}
             <div class="d-flex flex-wrap gap-1 align-items-center">
               <span class="text-muted me-1">Guardia:</span>
-              {% for t in item.guard_teachers %}
+              {% for t in item.guard_teachers + item.absent_duty_teachers %}
                 {% if t.id in item.assigned_teacher_ids %}
                 <span class="badge bg-warning text-dark" title="Ocupado — cubriendo una ausencia">
                   <i class="bi bi-person-fill-exclamation"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% elif t.id in absent_teacher_ids_today %}
-                <span class="badge bg-secondary" title="Ausente hoy">
+                <span class="badge bg-secondary" title="Ausente — no disponible en el centro">
                   <i class="bi bi-person-dash"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% elif (current_user.is_management or is_display_user) and item.all_guards_info %}
