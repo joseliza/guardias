@@ -52,6 +52,12 @@
   background-color: rgba(13, 110, 253, .14);
   border-radius: .25rem;
 }
+.task-item {
+  background: #f8f9fa;
+}
+.task-item.current-time-slot {
+  background-color: rgba(13, 110, 253, .14);
+}
 </style>
 
 {% if blink_guard_alert %}
@@ -460,7 +466,7 @@
             <a href="{{ url_for('absences.day_download', date_str=target_date.isoformat(), inline=1) }}"
                onclick="return openPdfPopup(this.href)" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;"
                title="Ver PDF de todas las tareas del día">
-              <i class="bi bi-file-earmark-pdf"></i> Día
+              <i class="bi bi-file-earmark-pdf text-danger"></i> Día
             </a>
             <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
                     data-bs-toggle="collapse" data-bs-target="#tasks-panel-dash">
@@ -483,11 +489,11 @@
                   <a href="{{ url_for('absences.slot_download', date_str=target_date.isoformat(), slot_id=sd.slot.id, inline=1) }}"
                      onclick="return openPdfPopup(this.href)" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;"
                      title="Ver PDF del tramo">
-                    <i class="bi bi-file-earmark-pdf"></i> Tramo
+                    <i class="bi bi-file-earmark-pdf text-danger"></i> Tramo
                   </a>
                 </div>
                 {% for ab in slot_absences %}
-                <div class="mb-2 p-2 rounded" style="background:#f8f9fa;font-size:.83rem;">
+                <div class="mb-2 p-2 rounded task-item" data-tasks-slot="{{ sd.slot.id }}" style="font-size:.83rem;">
                   <div class="d-flex justify-content-between align-items-start mb-1">
                     <span class="text-muted" style="font-size:.75rem;">
                       <i class="bi bi-person"></i> {{ ab.teacher }} — <strong>{{ ab.group }}</strong>
@@ -495,7 +501,7 @@
                     <a href="{{ url_for('absences.tasks_download', absence_id=ab.absence_id, inline=1) }}"
                        onclick="return openPdfPopup(this.href)" class="btn btn-outline-secondary btn-sm py-0 px-1 ms-1" style="font-size:.7rem;"
                        title="Ver PDF de este grupo">
-                      <i class="bi bi-file-earmark-pdf"></i> Grupo
+                      <i class="bi bi-file-earmark-pdf text-danger"></i> Grupo
                     </a>
                   </div>
                   {% for t in ab.tasks %}
