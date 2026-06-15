@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Canal de incidencias{% endblock %}
+{% block title %}Chat{% endblock %}
 {% block content %}
 <div class="row">
   <div class="col-md-8 offset-md-2">
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-chat-dots"></i> Incidencias — {{ channel }}</span>
+        <span><i class="bi bi-chat-dots"></i> Mensajes — {{ channel }}</span>
         <div class="d-flex gap-2">
           {% if current_user.is_management %}
           <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalLimpiar">
@@ -28,7 +28,7 @@
       </div>
       <div class="card-footer">
         <form id="chat-form" class="d-flex gap-2">
-          <input type="text" id="msg-input" class="form-control" placeholder="Escribe una incidencia..." autocomplete="off">
+          <input type="text" id="msg-input" class="form-control" placeholder="Escribe un mensaje..." autocomplete="off">
           <button class="btn btn-primary" type="submit"><i class="bi bi-send"></i></button>
         </form>
       </div>

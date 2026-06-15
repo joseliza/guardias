@@ -318,6 +318,76 @@ def schedule_json(tid, day_idx):
 
 
 
+def _pdf_response(buf, filename):
+    """Construye la respuesta de un PDF generado, inline si se pide ?inline=1
+    (para verlo en una ventana emergente) o como descarga en caso contrario."""
+    from flask import make_response
+    response = make_response(buf.getvalue())
+    response.headers["Content-Type"] = "application/pdf"
+    disposition = "inline" if request.args.get("inline") else "attachment"
+    response.headers["Content-Disposition"] = f"{disposition}; filename={filename}"
+    return response
+
+
+def _append_absence_pdf_page(writer, absence, slot_label, group_name, room_name, upload_dir, no_tasks_msg):
+    """Genera la página de tareas de una ausencia y la añade (con sus adjuntos PDF) al writer."""
+    import io
+    from fpdf import FPDF
+    from pypdf import PdfReader
+
+    FONT   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    tasks = absence.tasks.all()
+
+    pdf = FPDF()
+    pdf.add_font("dv", "", FONT)
+    pdf.add_font("dv", "B", FONT_B)
+    pdf.add_page()
+
+    pdf.set_font("dv", "B", 16)
+    pdf.cell(0, 10, current_app.config.get("INSTITUTE_NAME", ""), ln=True, align="C")
+    pdf.set_font("dv", "", 11)
+    pdf.cell(0, 7, "Tareas para guardia", ln=True, align="C")
+    pdf.ln(4)
+    pdf.set_draw_color(180, 180, 180)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(4)
+
+    for label, value in [
+        ("Fecha:",      absence.date.strftime("%d/%m/%Y")),
+        ("Tramo:",      slot_label),
+        ("Profesor/a:", absence.teacher.full_name),
+        ("Grupo:",      group_name),
+        ("Aula:",       room_name),
+    ]:
+        pdf.set_font("dv", "B", 11)
+        pdf.cell(42, 7, label)
+        pdf.set_font("dv", "", 11)
+        pdf.cell(0, 7, value, ln=True)
+
+    pdf.ln(4)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(4)
+    pdf.set_font("dv", "B", 12)
+    pdf.cell(0, 8, "Tareas:", ln=True)
+    pdf.set_font("dv", "", 11)
+
+    if tasks:
+        for i, task in enumerate(tasks, 1):
+            suffix = " [adjunto PDF]" if task.attachment else ""
+            pdf.multi_cell(0, 7, f"{i}. {task.description}{suffix}")
+            pdf.ln(1)
+    else:
+        pdf.cell(0, 7, no_tasks_msg, ln=True)
+
+    writer.append(PdfReader(io.BytesIO(bytes(pdf.output()))))
+    for task in tasks:
+        if task.attachment:
+            path = os.path.join(upload_dir, task.attachment)
+            if os.path.exists(path):
+                writer.append(PdfReader(path))
+
+
 def _save_task_pdf(file):
     """Guarda el PDF adjunto en uploads/tasks/ y devuelve el nombre de fichero almacenado."""
     import uuid
@@ -544,12 +614,9 @@ def slot_pdf(date_str, slot_id):
 def tasks_download(absence_id):
     """Descarga PDF fusionado con adjuntos (solo cuando hay archivos adjuntos)."""
     import io
-    from fpdf import FPDF
-    from flask import make_response
-    from pypdf import PdfWriter, PdfReader
+    from pypdf import PdfWriter
 
     absence = Absence.query.get_or_404(absence_id)
-    tasks = absence.tasks.all()
 
     slots = current_app.config["TIME_SLOTS"]
     slot = next((s for s in slots if s["id"] == absence.slot_id), None)
@@ -566,66 +633,14 @@ def tasks_download(absence_id):
     group_name = group.name if group else "-"
     room_name = schedule_entry.room.name if schedule_entry and schedule_entry.room else "-"
 
-    FONT   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-
-    pdf = FPDF()
-    pdf.add_font("dv", "", FONT)
-    pdf.add_font("dv", "B", FONT_B)
-    pdf.add_page()
-
-    pdf.set_font("dv", "B", 16)
-    pdf.cell(0, 10, current_app.config.get("INSTITUTE_NAME", ""), ln=True, align="C")
-    pdf.set_font("dv", "", 11)
-    pdf.cell(0, 7, "Tareas para guardia", ln=True, align="C")
-    pdf.ln(4)
-    pdf.set_draw_color(180, 180, 180)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(4)
-
-    for label, value in [
-        ("Fecha:",      absence.date.strftime("%d/%m/%Y")),
-        ("Tramo:",      slot_label),
-        ("Profesor/a:", absence.teacher.full_name),
-        ("Grupo:",      group_name),
-        ("Aula:",       room_name),
-    ]:
-        pdf.set_font("dv", "B", 11)
-        pdf.cell(42, 7, label)
-        pdf.set_font("dv", "", 11)
-        pdf.cell(0, 7, value, ln=True)
-
-    pdf.ln(4)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(4)
-    pdf.set_font("dv", "B", 12)
-    pdf.cell(0, 8, "Tareas:", ln=True)
-    pdf.set_font("dv", "", 11)
-
-    if tasks:
-        for i, task in enumerate(tasks, 1):
-            suffix = " [adjunto PDF]" if task.attachment else ""
-            pdf.multi_cell(0, 7, f"{i}. {task.description}{suffix}")
-            pdf.ln(1)
-    else:
-        pdf.cell(0, 7, "Sin tareas registradas.", ln=True)
-
     upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
     writer = PdfWriter()
-    writer.append(PdfReader(io.BytesIO(bytes(pdf.output()))))
-    for task in tasks:
-        if task.attachment:
-            path = os.path.join(upload_dir, task.attachment)
-            if os.path.exists(path):
-                writer.append(PdfReader(path))
+    _append_absence_pdf_page(writer, absence, slot_label, group_name, room_name, upload_dir, "Sin tareas registradas.")
 
     buf = io.BytesIO()
     writer.write(buf)
-    response = make_response(buf.getvalue())
     filename = f"tareas_{absence.date.isoformat()}_tramo{absence.slot_id}.pdf"
-    response.headers["Content-Type"] = "application/pdf"
-    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-    return response
+    return _pdf_response(buf, filename)
 
 
 @absences_bp.route("/descargar-tramo/<date_str>/<int:slot_id>")
@@ -633,9 +648,7 @@ def tasks_download(absence_id):
 def slot_download(date_str, slot_id):
     """Descarga PDF fusionado de todas las ausencias del tramo, con adjuntos."""
     import io
-    from fpdf import FPDF
-    from flask import make_response
-    from pypdf import PdfWriter, PdfReader
+    from pypdf import PdfWriter
     from datetime import date as date_type
 
     target_date = date_type.fromisoformat(date_str)
@@ -648,13 +661,10 @@ def slot_download(date_str, slot_id):
     slot = next((s for s in slots if s["id"] == slot_id), None)
     slot_label = f"{slot['label']} ({slot['start']}-{slot['end']})" if slot else str(slot_id)
 
-    FONT   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
     upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
     writer = PdfWriter()
 
     for absence in absences:
-        tasks = absence.tasks.all()
         entry = TeacherSchedule.query.filter_by(
             teacher_id=absence.teacher_id,
             day_of_week=target_date.weekday(),
@@ -663,62 +673,53 @@ def slot_download(date_str, slot_id):
             school_year_id=get_current_school_year().id,
         ).first()
         group = entry.group if entry else None
-
-        pdf = FPDF()
-        pdf.add_font("dv", "",  FONT)
-        pdf.add_font("dv", "B", FONT_B)
-        pdf.add_page()
-
-        pdf.set_font("dv", "B", 16)
-        pdf.cell(0, 10, current_app.config.get("INSTITUTE_NAME", ""), ln=True, align="C")
-        pdf.set_font("dv", "", 11)
-        pdf.cell(0, 7, "Tareas para guardia", ln=True, align="C")
-        pdf.ln(4)
-        pdf.set_draw_color(180, 180, 180)
-        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-        pdf.ln(4)
-
-        for label, value in [
-            ("Fecha:",      target_date.strftime("%d/%m/%Y")),
-            ("Tramo:",      slot_label),
-            ("Profesor/a:", absence.teacher.full_name),
-            ("Grupo:",      group.name if group else "-"),
-            ("Aula:",       entry.room.name if entry and entry.room else "-"),
-        ]:
-            pdf.set_font("dv", "B", 11)
-            pdf.cell(42, 7, label)
-            pdf.set_font("dv", "", 11)
-            pdf.cell(0, 7, value, ln=True)
-
-        pdf.ln(4)
-        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-        pdf.ln(4)
-        pdf.set_font("dv", "B", 12)
-        pdf.cell(0, 8, "Tareas:", ln=True)
-        pdf.set_font("dv", "", 11)
-
-        if tasks:
-            for i, task in enumerate(tasks, 1):
-                suffix = " [adjunto PDF]" if task.attachment else ""
-                pdf.multi_cell(0, 7, f"{i}. {task.description}{suffix}")
-                pdf.ln(1)
-        else:
-            pdf.cell(0, 7, "El profesor/a no ha dejado tareas.", ln=True)
-
-        writer.append(PdfReader(io.BytesIO(bytes(pdf.output()))))
-        for task in tasks:
-            if task.attachment:
-                path = os.path.join(upload_dir, task.attachment)
-                if os.path.exists(path):
-                    writer.append(PdfReader(path))
+        group_name = group.name if group else "-"
+        room_name = entry.room.name if entry and entry.room else "-"
+        _append_absence_pdf_page(writer, absence, slot_label, group_name, room_name, upload_dir, "El profesor/a no ha dejado tareas.")
 
     buf = io.BytesIO()
     writer.write(buf)
-    response = make_response(buf.getvalue())
     filename = f"tareas_{date_str}_tramo{slot_id}.pdf"
-    response.headers["Content-Type"] = "application/pdf"
-    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-    return response
+    return _pdf_response(buf, filename)
+
+
+@absences_bp.route("/descargar-dia/<date_str>")
+@login_required
+def day_download(date_str):
+    """Descarga PDF fusionado de todas las ausencias del día (todos los tramos), con adjuntos."""
+    import io
+    from pypdf import PdfWriter
+    from datetime import date as date_type
+
+    target_date = date_type.fromisoformat(date_str)
+    absences = Absence.query.filter_by(date=target_date).order_by(Absence.slot_id, Absence.id).all()
+    if not absences:
+        flash("No hay ausencias registradas para ese día.", "warning")
+        return redirect(url_for("dashboard.index"))
+
+    slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
+    upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
+    writer = PdfWriter()
+
+    for absence in absences:
+        slot = slots_cfg.get(absence.slot_id)
+        slot_label = f"{slot['label']} ({slot['start']}-{slot['end']})" if slot else str(absence.slot_id)
+        entry = TeacherSchedule.query.filter_by(
+            teacher_id=absence.teacher_id,
+            day_of_week=target_date.weekday(),
+            slot_id=absence.slot_id,
+            is_guard_slot=False,
+            school_year_id=get_current_school_year().id,
+        ).first()
+        group = entry.group if entry else None
+        group_name = group.name if group else "-"
+        room_name = entry.room.name if entry and entry.room else "-"
+        _append_absence_pdf_page(writer, absence, slot_label, group_name, room_name, upload_dir, "El profesor/a no ha dejado tareas.")
+
+    buf = io.BytesIO()
+    writer.write(buf)
+    filename = f"tareas_{date_str}.pdf"
+    return _pdf_response(buf, filename)
 
 
 @absences_bp.route("/<int:absence_id>/reincorporar", methods=["POST"])

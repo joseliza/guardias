@@ -47,6 +47,13 @@
 {% endif %}
 </div>{# /dash-header #}
 
+<style>
+.tasks-slot-header.current-time-slot {
+  background-color: rgba(13, 110, 253, .14);
+  border-radius: .25rem;
+}
+</style>
+
 {% if blink_guard_alert %}
 <style>
 @keyframes guardBlink {
@@ -449,10 +456,17 @@
       <div class="card d-flex flex-column" id="tasks-card" style="flex:1;min-height:0;overflow:hidden;">
         <div class="card-header d-flex justify-content-between align-items-center py-2" style="flex-shrink:0;">
           <span><i class="bi bi-list-task"></i> Tareas del día</span>
-          <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
-                  data-bs-toggle="collapse" data-bs-target="#tasks-panel-dash">
-            <i class="bi bi-chevron-up"></i>
-          </button>
+          <div class="d-flex align-items-center gap-1">
+            <a href="{{ url_for('absences.day_download', date_str=target_date.isoformat(), inline=1) }}"
+               onclick="return openPdfPopup(this.href)" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;"
+               title="Ver PDF de todas las tareas del día">
+              <i class="bi bi-file-earmark-pdf"></i> Día
+            </a>
+            <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#tasks-panel-dash">
+              <i class="bi bi-chevron-up"></i>
+            </button>
+          </div>
         </div>
         <div class="collapse show" id="tasks-panel-dash" style="flex:1;min-height:0;overflow:hidden;">
           <div class="card-body p-2" id="tasks-body" style="height:100%;overflow-y:auto;">
@@ -462,14 +476,14 @@
               {% set slot_absences = tasks_by_slot.get(sd.slot.id, []) %}
               {% if slot_absences %}
                 {% set ns.has_tasks = true %}
-                <div class="d-flex justify-content-between align-items-center mt-2 mb-1">
+                <div class="d-flex justify-content-between align-items-center mt-2 mb-1 tasks-slot-header" data-tasks-slot="{{ sd.slot.id }}">
                   <span class="text-uppercase fw-bold small text-primary" style="font-size:.72rem;letter-spacing:.05em;">
                     <i class="bi bi-clock"></i> {{ sd.slot.label }} · {{ sd.slot.start }}–{{ sd.slot.end }}
                   </span>
-                  <a href="{{ url_for('absences.slot_pdf', date_str=target_date.isoformat(), slot_id=sd.slot.id) }}"
-                     target="_blank" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;"
-                     title="Imprimir tareas del tramo">
-                    <i class="bi bi-printer"></i> Tramo
+                  <a href="{{ url_for('absences.slot_download', date_str=target_date.isoformat(), slot_id=sd.slot.id, inline=1) }}"
+                     onclick="return openPdfPopup(this.href)" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;"
+                     title="Ver PDF del tramo">
+                    <i class="bi bi-file-earmark-pdf"></i> Tramo
                   </a>
                 </div>
                 {% for ab in slot_absences %}
@@ -478,10 +492,10 @@
                     <span class="text-muted" style="font-size:.75rem;">
                       <i class="bi bi-person"></i> {{ ab.teacher }} — <strong>{{ ab.group }}</strong>
                     </span>
-                    <a href="{{ url_for('absences.tasks_pdf', absence_id=ab.absence_id) }}"
-                       target="_blank" class="btn btn-outline-secondary btn-sm py-0 px-1 ms-1" style="font-size:.7rem;"
-                       title="Imprimir tareas de este grupo">
-                      <i class="bi bi-printer"></i> Grupo
+                    <a href="{{ url_for('absences.tasks_download', absence_id=ab.absence_id, inline=1) }}"
+                       onclick="return openPdfPopup(this.href)" class="btn btn-outline-secondary btn-sm py-0 px-1 ms-1" style="font-size:.7rem;"
+                       title="Ver PDF de este grupo">
+                      <i class="bi bi-file-earmark-pdf"></i> Grupo
                     </a>
                   </div>
                   {% for t in ab.tasks %}
@@ -543,6 +557,12 @@
 
 {% block scripts %}
 <script>
+// Abre un PDF (tramo/grupo/día) en una ventana emergente en lugar de navegar a él
+function openPdfPopup(url) {
+  window.open(url, '_blank', 'width=850,height=900,resizable,scrollbars');
+  return false;
+}
+
 // Layout: fija la altura del área principal al espacio restante y bloquea el scroll de página
 (function() {
   function setLayout() {
@@ -874,6 +894,7 @@ function getRelevantSlotId() {
   }
   return next;
 }
+let lastTasksSlotId = null;
 function markCurrentSlot() {
   const now = new Date();
   const nowMins = now.getHours() * 60 + now.getMinutes();
@@ -889,6 +910,21 @@ function markCurrentSlot() {
     const card = document.querySelector(`.slot-card[data-slot-id="${tab.dataset.slotTab}"]`);
     if (card) card.classList.toggle('past-time-slot', isPast);
   });
+
+  // Resalta el bloque de tareas del tramo actual y, al cambiar de tramo,
+  // lo desplaza a la parte superior del panel (sin impedir el scroll manual).
+  document.querySelectorAll('[data-tasks-slot]').forEach(header => {
+    header.classList.toggle('current-time-slot', currentId !== null && header.dataset.tasksSlot === currentId);
+  });
+  if (currentId !== null && currentId !== lastTasksSlotId) {
+    const tasksBody = document.getElementById('tasks-body');
+    const header = document.querySelector(`[data-tasks-slot="${currentId}"]`);
+    if (tasksBody && header) {
+      const top = header.getBoundingClientRect().top - tasksBody.getBoundingClientRect().top + tasksBody.scrollTop;
+      tasksBody.scrollTo({ top, behavior: 'smooth' });
+    }
+    lastTasksSlotId = currentId;
+  }
 }
 markCurrentSlot();
 setInterval(markCurrentSlot, 60000);

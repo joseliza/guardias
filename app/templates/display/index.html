@@ -63,6 +63,7 @@
 
     /* ── Tasks panel ── */
     .tasks-slot-header { font-size: .75rem; font-weight: 700; color: #0d6efd; text-transform: uppercase; letter-spacing: .06em; margin: .6rem 0 .3rem; padding-bottom: .2rem; border-bottom: 1px solid #dee2e6; }
+    .tasks-slot-header.current-time-slot { background-color: rgba(13, 110, 253, .14); border-radius: .25rem; }
     .task-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: .3rem; padding: .45rem .65rem; margin-bottom: .4rem; font-size: .82rem; }
     .task-card .tc-meta { color: #6c757d; font-size: .73rem; margin-bottom: .15rem; }
 
@@ -362,13 +363,13 @@
     <!-- Panel de tareas -->
     <div id="tasks-panel">
       <div id="tasks-header"><i class="bi bi-list-task text-primary"></i> Tareas del día</div>
-      <div style="overflow-y:auto;flex:1;padding:.4rem 0;">
+      <div id="tasks-list" style="overflow-y:auto;flex:1;padding:.4rem 0;">
         {% set has_tasks = namespace(value=false) %}
         {% for slot in slots %}
           {% set slot_tasks = tasks_by_slot.get(slot.id, []) %}
           {% if slot_tasks %}
             {% set has_tasks.value = true %}
-            <div class="tasks-slot-header"><i class="bi bi-clock"></i> {{ slot.label }} · {{ slot.start }}–{{ slot.end }}</div>
+            <div class="tasks-slot-header" data-tasks-slot="{{ slot.id }}"><i class="bi bi-clock"></i> {{ slot.label }} · {{ slot.start }}–{{ slot.end }}</div>
             {% for t in slot_tasks %}
             <div class="task-card">
               <div class="tc-meta"><i class="bi bi-person"></i> {{ t.teacher }} — {{ t.group }}</div>
@@ -490,6 +491,7 @@
 
   // Marca la solapa del tramo actual y la hace parpadear sin parar mientras el
   // usuario esté consultando una solapa distinta de la actual.
+  let lastTasksSlotId = null;
   function refreshCurrentSlotIndicator() {
     const now = new Date();
     const nowMins = now.getHours() * 60 + now.getMinutes();
@@ -504,6 +506,21 @@
       const card = document.getElementById('slot-' + tab.dataset.slotTab);
       if (card) card.classList.toggle('past-time-slot', isPast);
     });
+
+    // Resalta el bloque de tareas del tramo actual y, al cambiar de tramo,
+    // lo desplaza a la parte superior del panel (sin impedir el scroll manual).
+    document.querySelectorAll('[data-tasks-slot]').forEach(header => {
+      header.classList.toggle('current-time-slot', currentId !== null && header.dataset.tasksSlot === currentId);
+    });
+    if (currentId !== null && currentId !== lastTasksSlotId) {
+      const tasksList = document.getElementById('tasks-list');
+      const header = document.querySelector(`[data-tasks-slot="${currentId}"]`);
+      if (tasksList && header) {
+        const top = header.getBoundingClientRect().top - tasksList.getBoundingClientRect().top + tasksList.scrollTop;
+        tasksList.scrollTo({ top, behavior: 'smooth' });
+      }
+      lastTasksSlotId = currentId;
+    }
   }
   refreshCurrentSlotIndicator();
   setInterval(refreshCurrentSlotIndicator, 60000);
