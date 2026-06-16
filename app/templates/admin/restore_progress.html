@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Restaurando base de datos{% endblock %}
+{% block content %}
+<div class="container mt-5" style="max-width:640px">
+  <div class="card shadow-sm">
+    <div class="card-header bg-warning text-dark fw-semibold">
+      <i class="bi bi-database-gear me-1"></i> Restaurando base de datos…
+    </div>
+    <div class="card-body">
+      <p class="text-muted mb-3">No cierres esta ventana. Serás redirigido al inicio de sesión cuando termine.</p>
+
+      <div id="progress-list"
+           class="font-monospace small border rounded p-2 bg-light"
+           style="min-height:4rem;max-height:320px;overflow-y:auto;">
+        <div id="connecting" class="text-secondary">
+          <span class="spinner-border spinner-border-sm me-1"></span> Conectando…
+        </div>
+      </div>
+
+      <div id="result-box" class="mt-3 d-none"></div>
+
+      <div id="error-actions" class="mt-2 d-none">
+        <a href="{{ url_for('admin.config') }}#section-backup" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-arrow-left"></i> Volver a configuración
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const list = document.getElementById('progress-list');
+  const connecting = document.getElementById('connecting');
+  const resultBox = document.getElementById('result-box');
+  const errorActions = document.getElementById('error-actions');
+  const logoutUrl = {{ url_for('auth.logout') | tojson }};
+
+  const socket = io();
+
+  socket.on('connect', function () {
+    connecting.innerHTML =
+      '<span class="spinner-border spinner-border-sm me-1 text-warning"></span> Esperando progreso…';
+  });
+
+  socket.on('restore_progress', function (data) {
+    if (data.done) {
+      connecting.remove();
+      if (data.error) {
+        resultBox.innerHTML =
+          '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill me-1"></i>' +
+          escHtml(data.msg) + '</div>';
+        errorActions.classList.remove('d-none');
+      } else {
+        resultBox.innerHTML =
+          '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill me-1"></i>' +
+          escHtml(data.msg) +
+          '<br><small class="text-muted">Redirigiendo al inicio de sesión en 3 s…</small></div>';
+        setTimeout(function () { window.location.href = logoutUrl; }, 3000);
+      }
+      resultBox.classList.remove('d-none');
+    } else {
+      connecting.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-1 text-warning"></span> ' +
+        escHtml(data.msg);
+      const row = document.createElement('div');
+      row.className = 'text-secondary';
+      row.innerHTML = '<i class="bi bi-check-lg text-success"></i> ' + escHtml(data.msg);
+      list.insertBefore(row, connecting);
+      list.scrollTop = list.scrollHeight;
+    }
+  });
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+})();
+</script>
+{% endblock %}

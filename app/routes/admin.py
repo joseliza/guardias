@@ -2548,18 +2548,90 @@ def restore_database():
     if url.password:
         env["MYSQL_PWD"] = url.password
 
-    try:
-        subprocess.run(cmd, input=sql_data, env=env, capture_output=True, check=True, timeout=300)
-    except FileNotFoundError:
-        flash("No se encontró la herramienta mysql en el servidor.", "danger")
-        return redirect(url_for("admin.config") + "#section-backup")
-    except subprocess.CalledProcessError as e:
-        current_app.logger.error("Error al restaurar la base de datos: %s", e.stderr.decode(errors="replace"))
-        flash("Error al restaurar la base de datos. Puede haber quedado en un estado inconsistente.", "danger")
-        return redirect(url_for("admin.config") + "#section-backup")
+    app = current_app._get_current_object()
 
-    flash("Base de datos restaurada. Inicia sesión de nuevo.", "success")
-    return redirect(url_for("auth.logout"))
+    def _do_restore():
+        import re as _re
+        import eventlet
+        import eventlet.tpool
+        from app.extensions import socketio as _sock
+
+        def progress(msg, done=False, error=False):
+            _sock.emit("restore_progress", {"msg": msg, "done": done, "error": error})
+            _sock.sleep(0)  # cede el event loop para que el mensaje se envíe ya
+
+        def _run_mysql(input_data, timeout=60):
+            # Corre en thread pool para no bloquear el event loop de eventlet
+            return subprocess.run(cmd, input=input_data, env=env,
+                                  capture_output=True, check=True, timeout=timeout)
+
+        # Espera a que el navegador cargue la página y conecte el WebSocket
+        _sock.sleep(1.5)
+
+        try:
+            with app.app_context():
+                db.engine.dispose()
+
+            sql_text = sql_data.decode("utf-8", errors="replace")
+
+            # Separar en preámbulo + una sección por tabla
+            parts = _re.split(r'(?=-- Table structure for table )', sql_text)
+            preamble = parts[0]
+            table_parts = parts[1:]
+
+            # Prefijo para cada sección: extraer USE `db` del preámbulo y
+            # añadir explícitamente charset y FK checks (en el dump vienen como
+            # comentarios condicionales /*!...*/ que nuestro filtro no captura)
+            use_line = ""
+            for line in preamble.splitlines():
+                s = line.strip()
+                if s.startswith("USE `"):
+                    use_line = s if s.endswith(";") else s + ";"
+                    break
+            prefix = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n"
+            if use_line:
+                prefix += use_line + "\n"
+
+            # Ejecutar preámbulo (crea la BD si no existe) en thread pool
+            eventlet.tpool.execute(_run_mysql, preamble.encode("utf-8"), 30)
+
+            total = len(table_parts)
+            progress(f"Restaurando {total} tablas…")
+
+            for i, part in enumerate(table_parts, 1):
+                m = _re.search(r"Table structure for table `([^`]+)`", part)
+                tname = m.group(1) if m else f"tabla_{i}"
+                progress(f"Tabla {tname} ({i}/{total})")
+                # Eliminar líneas que restauran variables de sesión (@OLD_*)
+                # que sólo tienen sentido en una sesión mysql única
+                clean = "\n".join(
+                    l for l in part.splitlines() if "=@OLD_" not in l
+                ) + "\n"
+                eventlet.tpool.execute(_run_mysql, (prefix + clean).encode("utf-8"), 60)
+
+            progress("Base de datos restaurada correctamente.", done=True)
+            app.logger.info("Restauración completada (%d tablas).", total)
+
+        except subprocess.CalledProcessError as e:
+            err = e.stderr.decode(errors="replace")
+            progress(f"Error MySQL: {err[:300]}", done=True, error=True)
+            app.logger.error("Error al restaurar la base de datos: %s", err)
+        except Exception as exc:
+            progress(f"Error inesperado: {exc}", done=True, error=True)
+            app.logger.error("Excepción inesperada en restauración: %s", exc)
+
+    from app.extensions import socketio as _socketio
+    _socketio.start_background_task(_do_restore)
+
+    return redirect(url_for("admin.restore_progress"))
+
+
+@admin_bp.route("/copia-seguridad/restaurando")
+@login_required
+def restore_progress():
+    if not _require_developer():
+        return redirect(url_for("dashboard.index"))
+    return render_template("admin/restore_progress.html")
 
 
 @admin_bp.route("/configuracion/ayuda", methods=["POST"])
