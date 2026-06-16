@@ -18,6 +18,8 @@ from app.models.schedule import TeacherSchedule
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
+PROTECTED_ADMIN_EMAIL = "admin@ies.es"
+
 
 def _require_management():
     if not current_user.is_management:
@@ -187,17 +189,25 @@ def teacher_edit(tid):
         if existing and existing.id != teacher.id:
             flash("Ya existe un usuario con ese correo electrónico.", "danger")
             return redirect(request.url)
+        is_protected_admin = teacher.email == PROTECTED_ADMIN_EMAIL
         teacher.name = request.form["name"].strip()
         teacher.surname = request.form["surname"].strip()
-        teacher.email = email
+        if is_protected_admin:
+            teacher.email = PROTECTED_ADMIN_EMAIL
+        else:
+            teacher.email = email
         teacher.abbreviation = request.form.get("abbreviation", "").strip() or None
-        teacher.role = request.form.get("role", "teacher")
-        teacher.active = request.form.get("active") == "on"
-        teacher.track_points = request.form.get("track_points") == "on" and teacher.role == "management"
-        if current_user.dev_access:
-            teacher.dev_access = request.form.get("dev_access") == "on" and teacher.role == "management"
-        elif teacher.role != "management":
-            teacher.dev_access = False
+        if is_protected_admin:
+            teacher.role = "management"
+            teacher.dev_access = True
+        else:
+            teacher.role = request.form.get("role", "teacher")
+            teacher.active = request.form.get("active") == "on"
+            teacher.track_points = request.form.get("track_points") == "on" and teacher.role == "management"
+            if current_user.dev_access:
+                teacher.dev_access = request.form.get("dev_access") == "on" and teacher.role == "management"
+            elif teacher.role != "management":
+                teacher.dev_access = False
         teacher.receive_emails = request.form.get("receive_emails") == "on"
         teacher.show_substitute_public = request.form.get("show_substitute_public") == "on"
         if password:
@@ -247,6 +257,9 @@ def teacher_delete(tid):
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     teacher = User.query.get_or_404(tid)
+    if teacher.email == PROTECTED_ADMIN_EMAIL:
+        flash("El usuario administrador del sistema no puede ser eliminado.", "danger")
+        return redirect(url_for("admin.teacher_edit", tid=tid))
     if teacher.id == current_user.id:
         flash("No puedes eliminar tu propia cuenta.", "danger")
         return redirect(url_for("admin.teacher_edit", tid=tid))
@@ -343,6 +356,10 @@ def teacher_bulk_delete():
         ids = []
 
     ids = [i for i in ids if i != current_user.id]
+    protected = User.query.filter_by(email=PROTECTED_ADMIN_EMAIL).first()
+    if protected and protected.id in ids:
+        ids = [i for i in ids if i != protected.id]
+        flash("El usuario administrador del sistema no puede ser eliminado y fue excluido de la selección.", "warning")
     if not ids:
         flash("No se seleccionó ningún profesor válido.", "warning")
         return redirect(url_for("admin.teachers"))

@@ -5,6 +5,8 @@ from app.models.user import User
 from app.models.group import Group
 from app.models.room import Room
 
+PROTECTED_ADMIN_EMAIL = "admin@ies.es"
+
 app = create_app()
 
 GROUPS = (
@@ -34,11 +36,10 @@ GROUPS = (
 with app.app_context():
     db.create_all()
 
-    # Usuario admin
-    admin_email = app.config["ADMIN_EMAIL"]
-    if not User.query.filter_by(email=admin_email).first():
+    # Usuario administrador del sistema (protegido, siempre debe existir)
+    if not User.query.filter_by(email=PROTECTED_ADMIN_EMAIL).first():
         admin = User(
-            email=admin_email,
+            email=PROTECTED_ADMIN_EMAIL,
             name="Admin",
             surname="Sistema",
             role="management",
@@ -46,9 +47,28 @@ with app.app_context():
         )
         admin.set_password("admin1234")
         db.session.add(admin)
-        print(f"Usuario admin creado: {admin_email} / admin1234")
+        db.session.commit()
+        print(f"Usuario admin del sistema creado: {PROTECTED_ADMIN_EMAIL} / admin1234")
     else:
-        print("El usuario admin ya existe.")
+        print(f"El usuario admin del sistema ya existe: {PROTECTED_ADMIN_EMAIL}")
+
+    # Usuario admin configurado en .env (si es distinto del admin del sistema)
+    admin_email = app.config.get("ADMIN_EMAIL", "")
+    if admin_email and admin_email != PROTECTED_ADMIN_EMAIL:
+        if not User.query.filter_by(email=admin_email).first():
+            admin_env = User(
+                email=admin_email,
+                name="Admin",
+                surname="",
+                role="management",
+                dev_access=True,
+            )
+            admin_env.set_password("admin1234")
+            db.session.add(admin_env)
+            db.session.commit()
+            print(f"Usuario admin (.env) creado: {admin_email} / admin1234")
+        else:
+            print(f"El usuario admin (.env) ya existe: {admin_email}")
 
     # Aulas 1-40
     rooms_created = 0

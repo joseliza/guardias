@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Editar' if teacher else 'Nuevo' }} profesor{% endblock %}
+{% set is_protected_admin = teacher and teacher.email == 'admin@ies.es' %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0"><i class="bi bi-person"></i> {{ 'Editar' if teacher else 'Nuevo' }} profesor</h4>
@@ -11,15 +12,18 @@
       <div class="row g-3">
         <div class="col-md-6">
           <label class="form-label">Nombre</label>
-          <input type="text" name="name" class="form-control" value="{{ teacher.name if teacher else '' }}" required>
+          <input type="text" name="name" class="form-control" value="{{ teacher.name if teacher else '' }}" required
+                 {% if is_protected_admin %}disabled title="El nombre del administrador del sistema no puede cambiarse"{% endif %}>
         </div>
         <div class="col-md-6">
           <label class="form-label">Apellidos</label>
-          <input type="text" name="surname" class="form-control" value="{{ teacher.surname if teacher else '' }}" required>
+          <input type="text" name="surname" class="form-control" value="{{ teacher.surname if teacher else '' }}" required
+                 {% if is_protected_admin %}disabled title="Los apellidos del administrador del sistema no pueden cambiarse"{% endif %}>
         </div>
         <div class="col-md-5">
           <label class="form-label">Email</label>
-          <input type="email" name="email" class="form-control" value="{{ teacher.email if teacher else '' }}" required>
+          <input type="email" name="email" class="form-control" value="{{ teacher.email if teacher else '' }}" required
+                 {% if is_protected_admin %}disabled title="El email del administrador del sistema no puede cambiarse"{% endif %}>
         </div>
         <div class="col-md-1">
           <label class="form-label">Abrev.</label>
@@ -29,7 +33,7 @@
         </div>
         <div class="col-md-3">
           <label class="form-label">Rol</label>
-          <select name="role" class="form-select">
+          <select name="role" class="form-select" {% if is_protected_admin %}disabled title="El rol del administrador del sistema no puede cambiarse"{% endif %}>
             <option value="teacher" {% if teacher and teacher.role=='teacher' %}selected{% endif %}>Profesorado</option>
             <option value="extracurricular" {% if teacher and teacher.role=='extracurricular' %}selected{% endif %}>Extraescolares</option>
             <option value="management" {% if teacher and teacher.role=='management' %}selected{% endif %}>Management</option>
@@ -56,7 +60,9 @@
           </div>
           {% if current_user.dev_access %}
           <div class="form-check" id="dev-access-wrapper" style="display:none">
-            <input type="checkbox" class="form-check-input" name="dev_access" id="dev_access" {% if teacher and teacher.dev_access %}checked{% endif %}>
+            <input type="checkbox" class="form-check-input" name="dev_access" id="dev_access"
+                   {% if teacher and teacher.dev_access %}checked{% endif %}
+                   {% if is_protected_admin %}disabled title="El administrador del sistema siempre tiene acceso a Desarrollo"{% endif %}>
             <label class="form-check-label" for="dev_access">
               Acceso a sección Desarrollo
             </label>
@@ -74,7 +80,8 @@
         {% if teacher %}
         <div class="col-12">
           <label class="form-label">Sustituye a</label>
-          <select name="substitutes_id" class="form-select" id="substitutes_id">
+          <select name="substitutes_id" class="form-select" id="substitutes_id"
+                  {% if is_protected_admin %}disabled title="El administrador del sistema no puede tener sustitución"{% endif %}>
             <option value="">Sin sustitución</option>
             {% for t in all_teachers %}
             <option value="{{ t.id }}" {% if teacher.substitutes_id == t.id %}selected{% endif %}>
@@ -121,9 +128,15 @@
         </p>
       </div>
       {% if teacher.id != current_user.id %}
+      {% if is_protected_admin %}
+      <button type="button" class="btn btn-danger" disabled title="El administrador del sistema no puede ser eliminado">
+        <i class="bi bi-trash"></i> Eliminar profesor
+      </button>
+      {% else %}
       <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#modalEliminar">
         <i class="bi bi-trash"></i> Eliminar profesor
       </button>
+      {% endif %}
       {% endif %}
     </div>
 
