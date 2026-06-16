@@ -3077,22 +3077,34 @@ def dev_reset_database():
     from app.models.room import Room as _Room  # noqa: F401
     from app.models.presence import UserPresence  # noqa: F401
     from app.models.chat import ChatClear  # noqa: F401
+    from werkzeug.security import generate_password_hash
 
     try:
+        pw_hash = generate_password_hash("admin1234")
+        # Cierra todas las conexiones del pool para liberar metadata locks que
+        # bloquearían los TRUNCATE (conexiones inactivas con transacciones abiertas).
+        db.engine.dispose()
         with db.engine.begin() as conn:
             conn.execute(db.text("SET FOREIGN_KEY_CHECKS=0"))
-            for table in db.metadata.sorted_tables:
-                conn.execute(db.text(f"TRUNCATE TABLE `{table.name}`"))
+            for table in reversed(db.metadata.sorted_tables):
+                # alembic_version refleja el estado del esquema, no de los datos: no tocar
+                if table.name == "alembic_version":
+                    continue
+                # DELETE en lugar de TRUNCATE: evita el bloqueo de metadatos
+                # que TRUNCATE necesita y que las transacciones abiertas de otras
+                # peticiones concurrentes bloquean indefinidamente.
+                conn.execute(db.text(f"DELETE FROM `{table.name}`"))
             conn.execute(db.text("SET FOREIGN_KEY_CHECKS=1"))
+            # Insertar admin dentro del mismo bloque para que la BD nunca quede sin usuarios
+            conn.execute(db.text(
+                "INSERT INTO users (email, name, surname, password_hash, role, "
+                "active, points, track_points, receive_emails, dev_access, show_substitute_public) "
+                "VALUES ('admin@ies.es', 'Admin', 'Sistema', :pw, 'management', 1, 0, 0, 1, 1, 1)"
+            ), {"pw": pw_hash})
     except Exception as e:
         current_app.logger.error("Error al resetear la base de datos: %s", e)
         flash("Error al resetear la base de datos.", "danger")
         return redirect(url_for("admin.config") + "#section-dev")
-
-    admin = User(email="admin@ies.es", name="Admin", surname="Sistema", role="management", dev_access=True)
-    admin.set_password("admin1234")
-    db.session.add(admin)
-    db.session.commit()
 
     flash("Base de datos reseteada. Inicia sesión con admin@ies.es / admin1234.", "success")
     return redirect(url_for("auth.logout"))

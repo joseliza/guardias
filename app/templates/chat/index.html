@@ -60,9 +60,56 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
+<style>
+@keyframes pulso-mensaje {
+  0%, 100% { background-color: transparent; }
+  50%       { background-color: #ffd6d6;    }
+}
+.msg-resaltado {
+  border-radius: 5px;
+  padding: 3px 6px;
+  margin: -3px -6px;
+}
+.msg-resaltado.activo {
+  animation: pulso-mensaje 4s ease-in-out infinite;
+  animation-delay: -2s;
+}
+</style>
 <script>
 const channel = {{ channel | tojson }};
 const socket = io();
+
+let _divResaltado = null;
+let _timerResaltado = null;
+
+function detenerResaltado(div) {
+  const colorActual = getComputedStyle(div).backgroundColor;
+  div.classList.remove('activo');
+  div.style.backgroundColor = colorActual;
+  div.style.transition = 'background-color 1.4s ease';
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    div.style.backgroundColor = 'transparent';
+    setTimeout(() => {
+      div.style.transition = '';
+      div.style.backgroundColor = '';
+      div.classList.remove('msg-resaltado');
+    }, 1400);
+  }));
+}
+
+function resaltarMensaje(div) {
+  if (_divResaltado) {
+    detenerResaltado(_divResaltado);
+    clearTimeout(_timerResaltado);
+  }
+  div.classList.add('msg-resaltado');
+  requestAnimationFrame(() => requestAnimationFrame(() => div.classList.add('activo')));
+  _divResaltado = div;
+  _timerResaltado = setTimeout(() => {
+    detenerResaltado(div);
+    _divResaltado = null;
+  }, 60000);
+}
 
 // Reentrar en la sala en cada conexión: tras una reconexión el servidor
 // olvida las salas y un join único al cargar dejaría de recibir mensajes.
@@ -75,9 +122,12 @@ socket.on('new_message', (data) => {
   div.innerHTML = `<strong>${data.author}</strong> <small class="text-muted ms-2">${data.timestamp}</small><div>${data.message}</div>`;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
+  resaltarMensaje(div);
 });
 
 socket.on('chat_cleared', () => {
+  if (_timerResaltado) { clearTimeout(_timerResaltado); _timerResaltado = null; }
+  _divResaltado = null;
   document.getElementById('chat-box').innerHTML = '';
 });
 
@@ -90,6 +140,11 @@ document.getElementById('chat-form').addEventListener('submit', (e) => {
   input.value = '';
 });
 
-document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
+const box = document.getElementById('chat-box');
+box.scrollTop = box.scrollHeight;
+const mensajesIniciales = box.querySelectorAll('.mb-2');
+if (mensajesIniciales.length > 0) {
+  resaltarMensaje(mensajesIniciales[mensajesIniciales.length - 1]);
+}
 </script>
 {% endblock %}

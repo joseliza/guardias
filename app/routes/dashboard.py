@@ -193,7 +193,7 @@ def index():
             {
                 "id": g.id,
                 "label": (
-                    (g.absence.teacher.full_name if g.absence else "—")
+                    (g.absence.teacher.full_name if g.absence and g.absence.teacher else "—")
                     + " / "
                     + (g.group.name if g.group else "—")
                 ),
@@ -205,7 +205,7 @@ def index():
             {
                 "id": g.id,
                 "label": (
-                    (g.absence.teacher.full_name if g.absence else "—")
+                    (g.absence.teacher.full_name if g.absence and g.absence.teacher else "—")
                     + " / "
                     + (g.group.name if g.group else "—")
                 ),

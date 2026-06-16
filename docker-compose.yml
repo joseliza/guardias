@@ -6,7 +6,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
       MYSQL_DATABASE: guardias
       MYSQL_USER: guardias
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-1234456789}
       TZ: Europe/Madrid
     volumes:
       - mysql_data:/var/lib/mysql
@@ -23,7 +23,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql+pymysql://guardias:${MYSQL_PASSWORD:-password}@db/guardias
+      DATABASE_URL: mysql+pymysql://guardias:${MYSQL_PASSWORD:-1234456789}@db/guardias
       SECRET_KEY: ${SECRET_KEY:-cambia_esto}
       MAIL_SERVER: ${MAIL_SERVER:-localhost}
       MAIL_PORT: ${MAIL_PORT:-587}
