@@ -59,16 +59,43 @@
             </div>
           </div>
           <div class="mb-4">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" name="points_system_enabled"
-                     id="points_system_enabled"
-                     {% if general_config.get('points_system_enabled', True) %}checked{% endif %}>
-              <label class="form-check-label" for="points_system_enabled">
-                <strong>Sistema de puntuación</strong>
-                <small class="d-block text-muted mt-1">
-                  Si está desactivado, no se asignan ni descuentan puntos y el profesorado
-                  no ve ninguna referencia a ellos. La dirección sigue teniendo acceso a los
-                  informes y la configuración de puntuación, con un aviso de que está desactivado.
+            <label class="form-label fw-semibold">Reparto de guardias</label>
+            <small class="d-block text-muted mb-2">
+              Criterio de ordenación al asignar automáticamente profesores a las guardias pendientes.
+            </small>
+            {% set _mode = general_config.get('guard_assign_mode', 'scoring') %}
+            <div class="form-check mb-1">
+              <input class="form-check-input" type="radio" name="guard_assign_mode"
+                     id="assign_scoring" value="scoring"
+                     {% if _mode == 'scoring' %}checked{% endif %}>
+              <label class="form-check-label" for="assign_scoring">
+                <strong>Puntuación</strong>
+                <small class="d-block text-muted">
+                  Primero quien tenga menos puntos acumulados. Activa el sistema de puntuación
+                  (se asignan y descuentan puntos).
+                </small>
+              </label>
+            </div>
+            <div class="form-check mb-1">
+              <input class="form-check-input" type="radio" name="guard_assign_mode"
+                     id="assign_count" value="count"
+                     {% if _mode == 'count' %}checked{% endif %}>
+              <label class="form-check-label" for="assign_count">
+                <strong>Por número de guardias cubiertas</strong>
+                <small class="d-block text-muted">
+                  Primero quien haya cubierto menos guardias en el curso. No se usan puntos.
+                </small>
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="guard_assign_mode"
+                     id="assign_random" value="random"
+                     {% if _mode == 'random' %}checked{% endif %}>
+              <label class="form-check-label" for="assign_random">
+                <strong>Aleatoria</strong>
+                <small class="d-block text-muted">
+                  Cada reparto automático elige profesores al azar entre los disponibles.
+                  No se usan puntos.
                 </small>
               </label>
             </div>
@@ -103,6 +130,20 @@
                 <option value="count" {% if general_config.get('presence_detail','count') == 'count' %}selected{% endif %}>Solo número de conectados</option>
                 <option value="names" {% if general_config.get('presence_detail','count') == 'names' %}selected{% endif %}>Número y nombres</option>
               </select>
+            </div>
+          </div>
+          <div class="mb-4">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="teachers_see_all_absences"
+                     id="teachers_see_all_absences"
+                     {% if general_config.get('teachers_see_all_absences', True) %}checked{% endif %}>
+              <label class="form-check-label" for="teachers_see_all_absences">
+                <strong>Los profesores ven las ausencias de todos</strong>
+                <small class="d-block text-muted mt-1">
+                  Si está activado, cada profesor puede ver las ausencias del resto del claustro.
+                  Si está desactivado, cada uno solo ve las propias.
+                </small>
+              </label>
             </div>
           </div>
           <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
@@ -381,12 +422,15 @@
     <div id="section-points" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
       <div class="accordion-body">
 
-        {% if not general_config.get('points_system_enabled', True) %}
+        {% if general_config.get('guard_assign_mode', 'scoring') != 'scoring' %}
         <div class="alert alert-warning py-2 px-3 small">
           <i class="bi bi-exclamation-triangle"></i>
-          El sistema de puntuación está <strong>desactivado</strong> (sección General). No se asignan ni
-          descuentan puntos y el profesorado no ve ninguna referencia a ellos. Esta sección sigue
-          disponible para consultar el historial y ajustar la configuración de cara a una futura reactivación.
+          El sistema de puntuación está <strong>desactivado</strong>: el reparto está configurado como
+          «{{ {'count': 'Por número de guardias cubiertas', 'random': 'Aleatoria'}
+               .get(general_config.get('guard_assign_mode'), '') }}» (sección General).
+          No se asignan ni descuentan puntos y el profesorado no ve ninguna referencia a ellos.
+          Esta sección sigue disponible para consultar el historial y ajustar la configuración
+          de cara a una futura reactivación.
         </div>
         {% endif %}
 

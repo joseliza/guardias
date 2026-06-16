@@ -5,14 +5,24 @@ _DIAS_ABREV = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 _DIAS_LARGO = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
 
-def points_system_enabled():
-    """Lee de la configuración general si el sistema de puntuación está activo."""
+def guard_assign_mode():
+    """Devuelve el modo de reparto automático de guardias: 'scoring', 'count' o 'random'.
+    Compatibilidad: si la config tiene la clave antigua 'points_system_enabled' y no
+    tiene 'guard_assign_mode', deriva el modo del valor booleano legado."""
     try:
         from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
         gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
-        return gcfg.get("points_system_enabled", True)
+        if "guard_assign_mode" in gcfg:
+            return gcfg["guard_assign_mode"]
+        # Migración desde config antigua
+        return "scoring" if gcfg.get("points_system_enabled", True) else "count"
     except Exception:
-        return True
+        return "scoring"
+
+
+def points_system_enabled():
+    """El sistema de puntuación está activo solo cuando el modo de reparto es 'scoring'."""
+    return guard_assign_mode() == "scoring"
 
 
 def fecha_es(d, fmt="%A, %d de %B de %Y"):

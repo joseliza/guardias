@@ -10,17 +10,24 @@ from datetime import date
 from app.models.user import User
 from app.models.schedule import TeacherSchedule
 from app.models.absence import Absence
-from app.utils import points_system_enabled
+import random as _random
+from app.utils import guard_assign_mode, points_system_enabled
 from app.utils.school_year import get_current_school_year
 
 
 def fairness_sort_key(teachers):
-    """Clave de ordenación para repartir guardias de forma equitativa: por puntos
-    acumulados si el sistema de puntuación está activo (asc.), o por nº de guardias
-    cubiertas históricamente si está desactivado (asc.) — evita depender de un
-    valor de puntos congelado y mantiene un reparto justo."""
-    if points_system_enabled():
+    """Clave de ordenación según el modo de reparto configurado:
+    - 'scoring': por puntos acumulados (asc.)
+    - 'count':   por nº de guardias cubiertas históricamente (asc.)
+    - 'random':  orden aleatorio (valores pre-calculados para consistencia)
+    """
+    mode = guard_assign_mode()
+    if mode == "scoring":
         return lambda t: t.points
+    if mode == "random":
+        rand_vals = {t.id: _random.random() for t in teachers}
+        return lambda t: rand_vals.get(t.id, 0)
+    # mode == "count"
     from app.extensions import db
     from app.models.guard import GuardRecord
     from sqlalchemy import func

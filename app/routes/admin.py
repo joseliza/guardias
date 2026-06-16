@@ -1844,10 +1844,11 @@ MAIL_KEYS = ["MAIL_SERVER", "MAIL_PORT", "MAIL_USE_TLS", "MAIL_USERNAME", "MAIL_
 GENERAL_DEFAULTS = {
     "show_future_absences": False,
     "auto_justify_extracurricular": False,
-    "points_system_enabled": True,
+    "guard_assign_mode": "scoring",
     "blink_guard_alert": False,
     "presence_visible_to": "none",
     "presence_detail": "count",
+    "teachers_see_all_absences": True,
 }
 
 
@@ -1957,13 +1958,17 @@ def config_general():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     current = _read_mail_config()
+    assign_mode = request.form.get("guard_assign_mode", "scoring")
+    if assign_mode not in ("scoring", "count", "random"):
+        assign_mode = "scoring"
     current["GENERAL"] = {
         "show_future_absences":        bool(request.form.get("show_future_absences")),
         "auto_justify_extracurricular": bool(request.form.get("auto_justify_extracurricular")),
-        "points_system_enabled":       bool(request.form.get("points_system_enabled")),
+        "guard_assign_mode":           assign_mode,
         "blink_guard_alert":           bool(request.form.get("blink_guard_alert")),
         "presence_visible_to":         request.form.get("presence_visible_to", "none"),
         "presence_detail":             request.form.get("presence_detail", "count"),
+        "teachers_see_all_absences":   bool(request.form.get("teachers_see_all_absences")),
     }
     _write_mail_config(current)
     flash("Configuración general guardada.", "success")
