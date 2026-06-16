@@ -45,17 +45,16 @@ def index():
         session.pop("task_prompt_ids", None)
         return redirect(url_for("absences.index", fecha=target_date.isoformat()))
 
-    if current_user.is_management:
-        # Solo ausencias de profesores del curso vigente (las filas archivadas
-        # de cursos anteriores pueden conservar ausencias antiguas).
-        absences = (
-            Absence.query.join(User, Absence.teacher_id == User.id)
-            .filter(Absence.date == target_date,
-                    User.school_year_id == get_current_school_year().id)
-            .order_by(Absence.slot_id).all()
-        )
-    else:
-        absences = Absence.query.filter_by(teacher_id=current_user.id, date=target_date).order_by(Absence.slot_id).all()
+    from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
+    _gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
+    _see_all = _gcfg.get("teachers_see_all_absences", True)
+
+    _q = (Absence.query.join(User, Absence.teacher_id == User.id)
+          .filter(Absence.date == target_date,
+                  User.school_year_id == get_current_school_year().id))
+    if not _see_all and not current_user.is_management:
+        _q = _q.filter(Absence.teacher_id == current_user.id)
+    absences = _q.order_by(Absence.slot_id).all()
 
     slots_cfg = current_app.config["TIME_SLOTS"]
     slot_map = {s["id"]: s for s in slots_cfg}

@@ -451,7 +451,7 @@
         </div>
       </div>
 
-    {% if current_user.is_management or is_display_user %}
+    {% if True %}{# todos los usuarios ven el panel de tareas #}
       <!-- Separador arrastrable -->
       <div id="resize-handle"
            style="height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;margin:2px 0;">
@@ -953,7 +953,7 @@ markCurrentSlot(); // re-evalúa el blink ya con la solapa inicial activada
 {% endif %}
 
 // ── Resize chat / tareas ─────────────────────────────────────────────────────
-{% if current_user.is_management or is_display_user %}
+{% if True %}{# todos los usuarios tienen el handle de resize #}
 (function() {
   const handle    = document.getElementById('resize-handle');
   const chatBox   = document.getElementById('chat-box');

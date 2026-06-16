@@ -255,7 +255,7 @@ def index():
 
     from collections import defaultdict
     tasks_by_slot = defaultdict(list)
-    if current_user.is_management or is_display_user:
+    if True:  # todos los usuarios ven las tareas en el dashboard
         for a in day_absences:
             task_list = list(a.tasks)
             if task_list:
