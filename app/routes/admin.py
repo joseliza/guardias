@@ -717,6 +717,15 @@ def room_delete(rid):
     return redirect(url_for("admin.rooms"))
 
 
+def _can_edit_schedule(teacher_id=None):
+    if current_user.is_management:
+        return True
+    general = _read_mail_config().get("GENERAL", {})
+    if general.get("teachers_can_edit_schedule") and current_user.role == "teacher":
+        return teacher_id is None or teacher_id == current_user.id
+    return False
+
+
 @admin_bp.route("/horarios")
 @login_required
 def schedules():
@@ -793,6 +802,9 @@ def schedules():
     rooms  = RoomModel.query.filter_by(active=True).order_by(RoomModel.name).all()
     subjects = Subject.query.filter_by(school_year_id=year_id).order_by(Subject.name).all()
 
+    general_cfg = _read_mail_config().get("GENERAL", {})
+    teachers_can_edit_schedule = general_cfg.get("teachers_can_edit_schedule", False)
+
     from datetime import date as _date
     return render_template("admin/schedules.html",
                            teachers=teachers,
@@ -810,18 +822,19 @@ def schedules():
                            today=_date.today(),
                            current_year=current_year,
                            is_self_view=is_self_view,
-                           can_edit=current_user.is_management)
+                           teachers_can_edit_schedule=teachers_can_edit_schedule,
+                           can_edit=_can_edit_schedule(selected.id if selected else None))
 
 
 @admin_bp.route("/horarios/clonar-celda", methods=["POST"])
 @login_required
 def schedule_clone_cell():
-    if not _require_management():
+    teacher_id = int(request.form["teacher_id"])
+    if not _can_edit_schedule(teacher_id):
         return redirect(url_for("dashboard.index"))
     from app.utils.school_year import get_current_school_year
     year_id = get_current_school_year().id
 
-    teacher_id  = int(request.form["teacher_id"])
     src_day     = int(request.form["src_day"])
     src_slot_id = int(request.form["src_slot_id"])
 
@@ -871,12 +884,11 @@ def schedule_clone_cell():
 @admin_bp.route("/horarios/celda", methods=["POST"])
 @login_required
 def schedule_set_cell():
-    if not _require_management():
+    teacher_id = int(request.form["teacher_id"])
+    if not _can_edit_schedule(teacher_id):
         return redirect(url_for("dashboard.index"))
     from app.utils.school_year import get_current_school_year
     year_id = get_current_school_year().id
-
-    teacher_id = int(request.form["teacher_id"])
     day        = int(request.form["day"])
     slot_id    = int(request.form["slot_id"])
     action     = request.form["action"]  # "clear" | "guard" | "group"
@@ -1866,6 +1878,7 @@ GENERAL_DEFAULTS = {
     "presence_visible_to": "none",
     "presence_detail": "count",
     "teachers_see_all_absences": True,
+    "teachers_can_edit_schedule": False,
 }
 
 
@@ -1986,6 +1999,7 @@ def config_general():
         "presence_visible_to":         request.form.get("presence_visible_to", "none"),
         "presence_detail":             request.form.get("presence_detail", "count"),
         "teachers_see_all_absences":   bool(request.form.get("teachers_see_all_absences")),
+        "teachers_can_edit_schedule":  bool(request.form.get("teachers_can_edit_schedule")),
     }
     _write_mail_config(current)
     flash("Configuración general guardada.", "success")
