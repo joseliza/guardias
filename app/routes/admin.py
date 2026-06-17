@@ -114,8 +114,13 @@ def teachers():
         return redirect(url_for("dashboard.index"))
     from app.utils.school_year import get_current_school_year
     current_year = get_current_school_year()
+    from sqlalchemy import or_
     all_teachers = (User.query
-                    .filter(User.school_year_id == current_year.id, User.role != "display")
+                    .filter(or_(
+                        User.school_year_id == current_year.id,
+                        User.school_year_id.is_(None),
+                        User.role == "display",
+                    ))
                     .order_by(User.surname, User.name).all())
     all_emails_on = all(t.receive_emails for t in all_teachers)
     covered_by = {}

@@ -94,7 +94,7 @@
           <td><span class="badge bg-light text-dark border">{{ t.abbreviation or '—' }}</span></td>
           <td>{{ t.email }}</td>
           <td><span class="badge bg-secondary">{{ t.role }}</span></td>
-          {% if points_enabled %}<td>{{ '—' if t.role == 'management' else t.points }}</td>{% endif %}
+          {% if points_enabled %}<td>{{ '—' if t.role in ('management', 'display') else t.points }}</td>{% endif %}
           <td><span class="badge bg-{{ 'success' if t.active else 'warning text-dark' }}">{{ 'Sí' if t.active else 'Baja' }}</span></td>
           <td>
             {% if t.substitutes_id and t.substitutes %}
@@ -122,7 +122,7 @@
           <td>
             <div class="d-flex gap-1">
               <a href="{{ url_for('admin.teacher_edit', tid=t.id) }}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="bi bi-pencil"></i></a>
-              <a href="{{ url_for('admin.schedules', teacher_id=t.id) }}" class="btn btn-sm btn-outline-secondary" title="Ver horario"><i class="bi bi-calendar3"></i></a>
+              {% if t.role != 'display' %}<a href="{{ url_for('admin.schedules', teacher_id=t.id) }}" class="btn btn-sm btn-outline-secondary" title="Ver horario"><i class="bi bi-calendar3"></i></a>{% endif %}
               {% if t.role == 'teacher' %}
               <form method="POST" action="{{ url_for('impersonate.start', uid=t.id) }}" class="d-inline">
                 <button type="submit" class="btn btn-sm btn-outline-secondary" title="Ver como este profesor">
