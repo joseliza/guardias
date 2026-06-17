@@ -125,6 +125,19 @@ def create_app():
         return {"current_school_year": None}
 
     @app.context_processor
+    def inject_app_version():
+        import subprocess, os as _os
+        try:
+            h = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=_os.path.dirname(__file__),
+                stderr=subprocess.DEVNULL,
+            ).decode().strip()
+        except Exception:
+            h = "—"
+        return {"app_version": h}
+
+    @app.context_processor
     def inject_presence_cfg():
         try:
             if current_user.is_authenticated:

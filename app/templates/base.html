@@ -183,6 +183,7 @@
             <li><hr class="dropdown-divider"></li>
             {% endif %}
             <li><a class="dropdown-item" href="{{ url_for('dashboard.help') }}"><i class="bi bi-question-circle"></i> Ayuda</a></li>
+            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalAcercaDe"><i class="bi bi-info-circle"></i> Acerca de</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</a></li>
           </ul>
@@ -384,6 +385,46 @@ document.querySelectorAll('input[type="date"]').forEach(function(el) {
 {% endif %}
 
 {% block scripts %}{% endblock %}
+
+{% if current_user.is_authenticated %}
+<div class="modal fade" id="modalAcercaDe" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-info-circle"></i> Acerca de Guardias</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1">Sistema de gestión de guardias y ausencias para centros educativos.</p>
+        <hr>
+        <dl class="row mb-0" style="font-size:.92rem;">
+          <dt class="col-sm-4">Desarrollado por</dt>
+          <dd class="col-sm-8">José Manuel Lizana Jiménez</dd>
+          <dt class="col-sm-4">Centro</dt>
+          <dd class="col-sm-8">IES Ciudad Jardín (Sevilla)</dd>
+          <dt class="col-sm-4">Contacto</dt>
+          <dd class="col-sm-8"><a href="mailto:joseliza@iesciudadjardin.com">joseliza@iesciudadjardin.com</a></dd>
+          <dt class="col-sm-4">Versión</dt>
+          <dd class="col-sm-8"><code>{{ app_version }}</code></dd>
+          <dt class="col-sm-4">Licencia</dt>
+          <dd class="col-sm-8">
+            <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener">
+              GNU GPL v3
+            </a>
+            <div class="text-muted mt-1" style="font-size:.82rem;">
+              Software libre: puedes redistribuirlo y/o modificarlo bajo los términos de la
+              Licencia Pública General GNU v3 publicada por la Free Software Foundation.
+            </div>
+          </dd>
+        </dl>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 {% if current_user.is_authenticated and current_user.is_management and not impersonating %}
 <script>
