@@ -31,133 +31,139 @@
     <div id="section-general" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
       <div class="accordion-body">
         <form method="POST" action="{{ url_for('admin.config_general') }}">
-          <div class="mb-4">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" name="show_future_absences"
-                     id="show_future_absences"
-                     {% if general_config.get('show_future_absences') %}checked{% endif %}>
-              <label class="form-check-label" for="show_future_absences">
-                <strong>Mostrar ausencias futuras en el panel de justificación</strong>
-                <small class="d-block text-muted mt-1">
-                  Si está desactivado, solo aparecen ausencias de hoy o de fechas pasadas.
+          <div class="row g-4">
+            <div class="col-md-6">
+              <div class="mb-4">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="show_future_absences"
+                         id="show_future_absences"
+                         {% if general_config.get('show_future_absences') %}checked{% endif %}>
+                  <label class="form-check-label" for="show_future_absences">
+                    <strong>Mostrar ausencias futuras en el panel de justificación</strong>
+                    <small class="d-block text-muted mt-1">
+                      Si está desactivado, solo aparecen ausencias de hoy o de fechas pasadas.
+                    </small>
+                  </label>
+                </div>
+              </div>
+              <div class="mb-4">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="auto_justify_extracurricular"
+                         id="auto_justify_extracurricular"
+                         {% if general_config.get('auto_justify_extracurricular') %}checked{% endif %}>
+                  <label class="form-check-label" for="auto_justify_extracurricular">
+                    <strong>Justificar automáticamente las ausencias por actividad extraescolar</strong>
+                    <small class="d-block text-muted mt-1">
+                      Las ausencias generadas al registrar una actividad quedan marcadas como justificadas
+                      y no aparecen en el panel de revisión.
+                    </small>
+                  </label>
+                </div>
+              </div>
+              <div class="mb-4">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="blink_guard_alert"
+                         id="blink_guard_alert"
+                         {% if general_config.get('blink_guard_alert') %}checked{% endif %}>
+                  <label class="form-check-label" for="blink_guard_alert">
+                    <strong>Parpadeo de aviso al inicio de guardia</strong>
+                    <small class="d-block text-muted mt-1">
+                      En el panel de hoy, el nombre del profesor asignado parpadea cuando llega
+                      la hora de inicio del tramo. Un clic sobre él lo detiene.
+                    </small>
+                  </label>
+                </div>
+              </div>
+              <div class="mb-4">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="teachers_see_all_absences"
+                         id="teachers_see_all_absences"
+                         {% if general_config.get('teachers_see_all_absences', True) %}checked{% endif %}>
+                  <label class="form-check-label" for="teachers_see_all_absences">
+                    <strong>Los profesores ven las ausencias de todos</strong>
+                    <small class="d-block text-muted mt-1">
+                      Si está activado, cada profesor puede ver las ausencias del resto del claustro.
+                      Si está desactivado, cada uno solo ve las propias.
+                    </small>
+                  </label>
+                </div>
+              </div>
+              <div class="mb-4">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="teachers_can_edit_schedule"
+                         id="teachers_can_edit_schedule"
+                         {% if general_config.get('teachers_can_edit_schedule') %}checked{% endif %}>
+                  <label class="form-check-label" for="teachers_can_edit_schedule">
+                    <strong>Los profesores pueden editar su horario</strong>
+                    <small class="d-block text-muted mt-1">
+                      Si está activado, cada profesor puede modificar las celdas de su propio horario.
+                      Si está desactivado, aparecerá un candado en su página de horario.
+                    </small>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="mb-4">
+                <label class="form-label fw-semibold">Indicador de usuarios conectados</label>
+                <div class="mb-2">
+                  <label class="form-label text-muted small mb-1">Visible para</label>
+                  <select name="presence_visible_to" class="form-select form-select-sm" style="max-width:280px">
+                    <option value="none"       {% if general_config.get('presence_visible_to','none') == 'none'       %}selected{% endif %}>Nadie (desactivado)</option>
+                    <option value="management" {% if general_config.get('presence_visible_to','none') == 'management' %}selected{% endif %}>Solo dirección</option>
+                    <option value="all"        {% if general_config.get('presence_visible_to','none') == 'all'        %}selected{% endif %}>Todos los usuarios</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label text-muted small mb-1">Detalle mostrado</label>
+                  <select name="presence_detail" class="form-select form-select-sm" style="max-width:280px">
+                    <option value="count" {% if general_config.get('presence_detail','count') == 'count' %}selected{% endif %}>Solo número de conectados</option>
+                    <option value="names" {% if general_config.get('presence_detail','count') == 'names' %}selected{% endif %}>Número y nombres</option>
+                  </select>
+                </div>
+              </div>
+              <div class="mb-4">
+                <label class="form-label fw-semibold">Reparto de guardias</label>
+                <small class="d-block text-muted mb-2">
+                  Criterio de ordenación al asignar automáticamente profesores a las guardias pendientes.
                 </small>
-              </label>
-            </div>
-          </div>
-          <div class="mb-4">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" name="auto_justify_extracurricular"
-                     id="auto_justify_extracurricular"
-                     {% if general_config.get('auto_justify_extracurricular') %}checked{% endif %}>
-              <label class="form-check-label" for="auto_justify_extracurricular">
-                <strong>Justificar automáticamente las ausencias por actividad extraescolar</strong>
-                <small class="d-block text-muted mt-1">
-                  Las ausencias generadas al registrar una actividad quedan marcadas como justificadas
-                  y no aparecen en el panel de revisión.
-                </small>
-              </label>
-            </div>
-          </div>
-          <div class="mb-4">
-            <label class="form-label fw-semibold">Reparto de guardias</label>
-            <small class="d-block text-muted mb-2">
-              Criterio de ordenación al asignar automáticamente profesores a las guardias pendientes.
-            </small>
-            {% set _mode = general_config.get('guard_assign_mode', 'scoring') %}
-            <div class="form-check mb-1">
-              <input class="form-check-input" type="radio" name="guard_assign_mode"
-                     id="assign_scoring" value="scoring"
-                     {% if _mode == 'scoring' %}checked{% endif %}>
-              <label class="form-check-label" for="assign_scoring">
-                <strong>Puntuación</strong>
-                <small class="d-block text-muted">
-                  Primero quien tenga menos puntos acumulados. Activa el sistema de puntuación
-                  (se asignan y descuentan puntos).
-                </small>
-              </label>
-            </div>
-            <div class="form-check mb-1">
-              <input class="form-check-input" type="radio" name="guard_assign_mode"
-                     id="assign_count" value="count"
-                     {% if _mode == 'count' %}checked{% endif %}>
-              <label class="form-check-label" for="assign_count">
-                <strong>Por número de guardias cubiertas</strong>
-                <small class="d-block text-muted">
-                  Primero quien haya cubierto menos guardias en el curso. No se usan puntos.
-                </small>
-              </label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="radio" name="guard_assign_mode"
-                     id="assign_random" value="random"
-                     {% if _mode == 'random' %}checked{% endif %}>
-              <label class="form-check-label" for="assign_random">
-                <strong>Aleatoria</strong>
-                <small class="d-block text-muted">
-                  Cada reparto automático elige profesores al azar entre los disponibles.
-                  No se usan puntos.
-                </small>
-              </label>
-            </div>
-          </div>
-          <div class="mb-4">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" name="blink_guard_alert"
-                     id="blink_guard_alert"
-                     {% if general_config.get('blink_guard_alert') %}checked{% endif %}>
-              <label class="form-check-label" for="blink_guard_alert">
-                <strong>Parpadeo de aviso al inicio de guardia</strong>
-                <small class="d-block text-muted mt-1">
-                  En el panel de hoy, el nombre del profesor asignado parpadea cuando llega
-                  la hora de inicio del tramo. Un clic sobre él lo detiene.
-                </small>
-              </label>
-            </div>
-          </div>
-          <div class="mb-4">
-            <label class="form-label fw-semibold">Indicador de usuarios conectados</label>
-            <div class="mb-2">
-              <label class="form-label text-muted small mb-1">Visible para</label>
-              <select name="presence_visible_to" class="form-select form-select-sm" style="max-width:280px">
-                <option value="none"       {% if general_config.get('presence_visible_to','none') == 'none'       %}selected{% endif %}>Nadie (desactivado)</option>
-                <option value="management" {% if general_config.get('presence_visible_to','none') == 'management' %}selected{% endif %}>Solo dirección</option>
-                <option value="all"        {% if general_config.get('presence_visible_to','none') == 'all'        %}selected{% endif %}>Todos los usuarios</option>
-              </select>
-            </div>
-            <div>
-              <label class="form-label text-muted small mb-1">Detalle mostrado</label>
-              <select name="presence_detail" class="form-select form-select-sm" style="max-width:280px">
-                <option value="count" {% if general_config.get('presence_detail','count') == 'count' %}selected{% endif %}>Solo número de conectados</option>
-                <option value="names" {% if general_config.get('presence_detail','count') == 'names' %}selected{% endif %}>Número y nombres</option>
-              </select>
-            </div>
-          </div>
-          <div class="mb-4">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" name="teachers_see_all_absences"
-                     id="teachers_see_all_absences"
-                     {% if general_config.get('teachers_see_all_absences', True) %}checked{% endif %}>
-              <label class="form-check-label" for="teachers_see_all_absences">
-                <strong>Los profesores ven las ausencias de todos</strong>
-                <small class="d-block text-muted mt-1">
-                  Si está activado, cada profesor puede ver las ausencias del resto del claustro.
-                  Si está desactivado, cada uno solo ve las propias.
-                </small>
-              </label>
-            </div>
-          </div>
-          <div class="mb-4">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" name="teachers_can_edit_schedule"
-                     id="teachers_can_edit_schedule"
-                     {% if general_config.get('teachers_can_edit_schedule') %}checked{% endif %}>
-              <label class="form-check-label" for="teachers_can_edit_schedule">
-                <strong>Los profesores pueden editar su horario</strong>
-                <small class="d-block text-muted mt-1">
-                  Si está activado, cada profesor puede modificar las celdas de su propio horario.
-                  Si está desactivado, aparecerá un candado en su página de horario.
-                </small>
-              </label>
+                {% set _mode = general_config.get('guard_assign_mode', 'scoring') %}
+                <div class="form-check mb-1">
+                  <input class="form-check-input" type="radio" name="guard_assign_mode"
+                         id="assign_scoring" value="scoring"
+                         {% if _mode == 'scoring' %}checked{% endif %}>
+                  <label class="form-check-label" for="assign_scoring">
+                    <strong>Puntuación</strong>
+                    <small class="d-block text-muted">
+                      Primero quien tenga menos puntos acumulados. Activa el sistema de puntuación
+                      (se asignan y descuentan puntos).
+                    </small>
+                  </label>
+                </div>
+                <div class="form-check mb-1">
+                  <input class="form-check-input" type="radio" name="guard_assign_mode"
+                         id="assign_count" value="count"
+                         {% if _mode == 'count' %}checked{% endif %}>
+                  <label class="form-check-label" for="assign_count">
+                    <strong>Por número de guardias cubiertas</strong>
+                    <small class="d-block text-muted">
+                      Primero quien haya cubierto menos guardias en el curso. No se usan puntos.
+                    </small>
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="guard_assign_mode"
+                         id="assign_random" value="random"
+                         {% if _mode == 'random' %}checked{% endif %}>
+                  <label class="form-check-label" for="assign_random">
+                    <strong>Aleatoria</strong>
+                    <small class="d-block text-muted">
+                      Cada reparto automático elige profesores al azar entre los disponibles.
+                      No se usan puntos.
+                    </small>
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
           <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
