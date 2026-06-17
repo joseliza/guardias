@@ -61,54 +61,43 @@
 {% endblock %}
 {% block scripts %}
 <style>
-@keyframes pulso-mensaje {
-  0%, 100% { background-color: transparent; }
-  50%       { background-color: #ffd6d6;    }
-}
 .msg-resaltado {
   border-radius: 5px;
   padding: 3px 6px;
   margin: -3px -6px;
-}
-.msg-resaltado.activo {
-  animation: pulso-mensaje 4s ease-in-out infinite;
-  animation-delay: -2s;
 }
 </style>
 <script>
 const channel = {{ channel | tojson }};
 const socket = io();
 
-let _divResaltado = null;
-let _timerResaltado = null;
+let _blinkInterval = null;
+let _blinkDiv = null;
+let _blinkTimer = null;
 
-function detenerResaltado(div) {
-  const colorActual = getComputedStyle(div).backgroundColor;
-  div.classList.remove('activo');
-  div.style.backgroundColor = colorActual;
-  div.style.transition = 'background-color 1.4s ease';
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    div.style.backgroundColor = 'transparent';
+function detenerBlink() {
+  if (_blinkInterval) { clearInterval(_blinkInterval); _blinkInterval = null; }
+  if (_blinkDiv) {
+    _blinkDiv.style.transition = 'background-color 0.6s ease';
+    _blinkDiv.style.backgroundColor = '';
     setTimeout(() => {
-      div.style.transition = '';
-      div.style.backgroundColor = '';
-      div.classList.remove('msg-resaltado');
-    }, 1400);
-  }));
+      if (_blinkDiv) { _blinkDiv.style.transition = ''; _blinkDiv.classList.remove('msg-resaltado'); _blinkDiv = null; }
+    }, 600);
+  }
+  if (_blinkTimer) { clearTimeout(_blinkTimer); _blinkTimer = null; }
 }
 
 function resaltarMensaje(div) {
-  if (_divResaltado) {
-    detenerResaltado(_divResaltado);
-    clearTimeout(_timerResaltado);
-  }
+  detenerBlink();
   div.classList.add('msg-resaltado');
-  requestAnimationFrame(() => requestAnimationFrame(() => div.classList.add('activo')));
-  _divResaltado = div;
-  _timerResaltado = setTimeout(() => {
-    detenerResaltado(div);
-    _divResaltado = null;
-  }, 60000);
+  _blinkDiv = div;
+  let encendido = true;
+  div.style.backgroundColor = '#ffd6d6';
+  _blinkInterval = setInterval(() => {
+    encendido = !encendido;
+    div.style.backgroundColor = encendido ? '#ffd6d6' : '';
+  }, 600);
+  _blinkTimer = setTimeout(detenerBlink, 60000);
 }
 
 // Reentrar en la sala en cada conexión: tras una reconexión el servidor
@@ -126,8 +115,9 @@ socket.on('new_message', (data) => {
 });
 
 socket.on('chat_cleared', () => {
-  if (_timerResaltado) { clearTimeout(_timerResaltado); _timerResaltado = null; }
-  _divResaltado = null;
+  if (_blinkInterval) { clearInterval(_blinkInterval); _blinkInterval = null; }
+  if (_blinkTimer) { clearTimeout(_blinkTimer); _blinkTimer = null; }
+  _blinkDiv = null;
   document.getElementById('chat-box').innerHTML = '';
 });
 
