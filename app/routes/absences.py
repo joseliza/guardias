@@ -276,7 +276,7 @@ def create():
             normal_slot_ids.append(slot_id)
 
         db.session.commit()
-        if task_ids:
+        if task_ids and current_user.role != "display":
             session["task_prompt_ids"] = task_ids
 
         # Auto-asignación solo en tramos normales (no recreo)
