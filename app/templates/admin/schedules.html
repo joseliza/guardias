@@ -16,6 +16,11 @@
 </div>
 {% if not selected %}
 <input type="search" class="table-filter form-control mb-0" data-target="#tabla-horarios" placeholder="Buscar profesor...">
+{% elif not is_self_view %}
+<div class="position-relative mb-0">
+  <input type="search" id="teacher-nav-search" class="form-control form-control-sm" autocomplete="off" placeholder="Buscar profesor...">
+  <div id="teacher-nav-sugg" class="list-group position-absolute w-100 shadow-sm" style="z-index:1050;display:none;max-height:220px;overflow-y:auto"></div>
+</div>
 {% endif %}
 </div>
 
@@ -713,6 +718,30 @@ makeModalAutocomplete('slot-subject-search', 'slot-subject-sugg', subjectData, (
   document.getElementById('slot-subject-chip').style.display = '';
   updateSaveGroupBtn();
 });
+
+// ── Buscador de navegación entre profesores (visible cuando se ve el horario de uno) ──
+{% if not is_self_view %}
+(function() {
+  const navData = [{% for t in teachers %}{ id: {{ t.id }}, name: {{ t.full_name|tojson }} },{% endfor %}];
+  const navInput = document.getElementById('teacher-nav-search');
+  const navSugg  = document.getElementById('teacher-nav-sugg');
+  if (!navInput) return;
+  function renderNav(q) {
+    const matches = q ? navData.filter(t => normalize(t.name).includes(normalize(q))) : navData;
+    if (!matches.length) { navSugg.style.display = 'none'; return; }
+    navSugg.innerHTML = matches.slice(0, 20).map(t =>
+      `<a href="{{ url_for('admin.schedules') }}?teacher_id=${t.id}"
+          class="list-group-item list-group-item-action py-1 px-3">${t.name}</a>`
+    ).join('');
+    navSugg.style.display = 'block';
+  }
+  navInput.addEventListener('focus', () => renderNav(navInput.value.trim()));
+  navInput.addEventListener('input', () => renderNav(navInput.value.trim()));
+  document.addEventListener('click', function(e) {
+    if (!navInput.contains(e.target) && !navSugg.contains(e.target)) navSugg.style.display = 'none';
+  });
+})();
+{% endif %}
 
 // ── Disponibilidad para guardia: selector de grupos + alta/edición ────────────
 const availabilityModalEl = document.getElementById('availabilityModal');
