@@ -702,7 +702,7 @@ def room_clone(rid):
     db.session.add(clone)
     db.session.commit()
     flash(f"Aula clonada como '{clone.name}'. Edítala para cambiar el nombre.", "success")
-    return redirect(url_for("admin.rooms"))
+    return redirect(url_for("admin.rooms", highlight=clone.id))
 
 
 @admin_bp.route("/aulas/<int:rid>/borrar", methods=["POST"])

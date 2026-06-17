@@ -20,7 +20,7 @@
       </thead>
       <tbody>
         {% for r in rooms %}
-        <tr>
+        <tr id="row-{{ r.id }}">
           <td>{{ r.name }}</td>
           <td><span class="text-muted small">{{ r.groups | length }}</span></td>
           <td><span class="badge bg-{{ 'success' if r.active else 'danger' }}">{{ 'Sí' if r.active else 'No' }}</span></td>
@@ -40,4 +40,18 @@
     </table>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const highlightId = new URLSearchParams(location.search).get('highlight');
+if (highlightId) {
+  const row = document.getElementById('row-' + highlightId);
+  if (row) {
+    row.classList.add('table-warning');
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    history.replaceState(null, '', location.pathname);
+  }
+}
+</script>
 {% endblock %}
