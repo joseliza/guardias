@@ -25,30 +25,6 @@ def _get_cutoff():
     return last_clear.cleared_at if last_clear else today_midnight
 
 
-@chat_bp.route("/")
-@login_required
-def index():
-    cutoff = _get_cutoff()
-    messages = (ChatMessage.query
-                .filter(ChatMessage.channel == "general",
-                        ChatMessage.created_at >= cutoff)
-                .order_by(ChatMessage.created_at)
-                .limit(200).all())
-    return render_template("chat/index.html", messages=messages, channel="general")
-
-
-@chat_bp.route("/tramo/<channel>")
-@login_required
-def slot_chat(channel):
-    cutoff = _get_cutoff()
-    messages = (ChatMessage.query
-                .filter(ChatMessage.channel == channel,
-                        ChatMessage.created_at >= cutoff)
-                .order_by(ChatMessage.created_at)
-                .limit(200).all())
-    return render_template("chat/index.html", messages=messages, channel=channel)
-
-
 @chat_bp.route("/informe")
 @login_required
 def report():
@@ -147,12 +123,12 @@ def _query_range(desde, hasta):
 def clear():
     if not current_user.is_management:
         flash("Sin permiso.", "danger")
-        return redirect(url_for("chat.index"))
+        return redirect(url_for("dashboard.index"))
     db.session.add(ChatClear(cleared_by_id=current_user.id))
     db.session.commit()
     socketio.emit("chat_cleared", {}, room="general")
     flash("Chat limpiado. Los mensajes anteriores se conservan en la base de datos.", "success")
-    return redirect(request.referrer or url_for("chat.index"))
+    return redirect(request.referrer or url_for("dashboard.index"))
 
 
 # ── Socket.IO events ──────────────────────────────────────────────────────────
