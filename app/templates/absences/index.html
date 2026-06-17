@@ -20,7 +20,7 @@
     <a href="{{ url_for('absences.index', fecha=next_date.isoformat()) }}" class="btn btn-outline-secondary btn-sm" title="Día siguiente"><i class="bi bi-chevron-right"></i></a>
     <a href="{{ url_for('absences.index') }}" class="btn btn-outline-primary btn-sm"
        style="{{ 'visibility:hidden' if is_today }}">Hoy</a>
-    <a href="{{ back_url('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
     {% if is_editable %}
     <a href="{{ url_for('absences.create') }}" class="btn btn-warning btn-sm"><i class="bi bi-plus-lg"></i> Nueva ausencia</a>
     {% endif %}
