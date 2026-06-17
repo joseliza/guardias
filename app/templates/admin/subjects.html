@@ -28,7 +28,7 @@
       </thead>
       <tbody>
         {% for s in subjects %}
-        <tr>
+        <tr id="row-{{ s.id }}">
           <td>{{ s.name }}</td>
           <td><code class="text-secondary">{{ s.abbreviation or '—' }}</code></td>
           <td>
@@ -125,6 +125,16 @@ document.getElementById('btn-nueva-materia').addEventListener('click', function(
   modal.show();
   setTimeout(() => nameInput.focus(), 300);
 });
+
+const highlightId = new URLSearchParams(location.search).get('highlight');
+if (highlightId) {
+  const row = document.getElementById('row-' + highlightId);
+  if (row) {
+    row.classList.add('table-warning');
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    history.replaceState(null, '', location.pathname);
+  }
+}
 
 document.querySelectorAll('.btn-edit-subject').forEach(function(btn) {
   btn.addEventListener('click', function() {

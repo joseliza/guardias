@@ -529,7 +529,7 @@ def group_clone(gid):
     db.session.add(clone)
     db.session.commit()
     flash(f"Grupo clonado como '{clone.name}'. Edítalo para cambiar el nombre.", "success")
-    return redirect(url_for("admin.groups"))
+    return redirect(url_for("admin.groups", highlight=clone.id))
 
 
 @admin_bp.route("/grupos/<int:gid>/borrar", methods=["POST"])
@@ -621,7 +621,7 @@ def subject_clone(sid):
     db.session.add(clone)
     db.session.commit()
     flash(f"Materia clonada como '{clone.name}'. Edítala para asignarle una abreviatura.", "success")
-    return redirect(url_for("admin.subjects"))
+    return redirect(url_for("admin.subjects", highlight=clone.id))
 
 
 @admin_bp.route("/materias/<int:sid>/borrar", methods=["POST"])

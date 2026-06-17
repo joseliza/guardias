@@ -20,7 +20,7 @@
       <thead class="table-light"><tr><th>Nombre</th><th>Abreviatura</th><th>Tipo</th><th>Alta dificultad</th><th>Multiplicador</th><th>Activo</th><th></th></tr></thead>
       <tbody>
         {% for g in groups %}
-        <tr>
+        <tr id="row-{{ g.id }}">
           <td>{{ g.name }}</td>
           <td><code class="text-secondary">{{ g.abbreviation or '—' }}</code></td>
           <td>
@@ -51,4 +51,18 @@
     </table>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const highlightId = new URLSearchParams(location.search).get('highlight');
+if (highlightId) {
+  const row = document.getElementById('row-' + highlightId);
+  if (row) {
+    row.classList.add('table-warning');
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    history.replaceState(null, '', location.pathname);
+  }
+}
+</script>
 {% endblock %}
