@@ -58,6 +58,12 @@
 .task-item.current-time-slot {
   background-color: rgba(13, 110, 253, .14);
 }
+#tasks-body .tasks-pdf-col {
+  flex-shrink: 0;
+  min-width: 58px;
+  text-align: right;
+  padding-left: 4px;
+}
 </style>
 
 {% if blink_guard_alert %}
@@ -482,37 +488,43 @@
               {% set slot_absences = tasks_by_slot.get(sd.slot.id, []) %}
               {% if slot_absences %}
                 {% set ns.has_tasks = true %}
-                <div class="d-flex justify-content-between align-items-center mt-2 mb-1 tasks-slot-header" data-tasks-slot="{{ sd.slot.id }}">
-                  <span class="text-uppercase fw-bold small text-primary" style="font-size:.72rem;letter-spacing:.05em;">
+                <div class="d-flex align-items-center mt-2 mb-1 tasks-slot-header" data-tasks-slot="{{ sd.slot.id }}">
+                  <span class="text-uppercase fw-bold small text-primary flex-grow-1" style="font-size:.72rem;letter-spacing:.05em;">
                     <i class="bi bi-clock"></i> {{ sd.slot.label }} · {{ sd.slot.start }}–{{ sd.slot.end }}
                   </span>
-                  <a href="{{ url_for('absences.slot_download', date_str=target_date.isoformat(), slot_id=sd.slot.id, inline=1) }}"
-                     onclick="return openPdfPopup(this.href)" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;"
-                     title="Ver PDF del tramo">
-                    <i class="bi bi-file-earmark-pdf text-danger"></i> Tramo
-                  </a>
+                  <span class="tasks-pdf-col">
+                    <a href="{{ url_for('absences.slot_download', date_str=target_date.isoformat(), slot_id=sd.slot.id, inline=1) }}"
+                       onclick="return openPdfPopup(this.href)" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;"
+                       title="Ver PDF del tramo">
+                      <i class="bi bi-file-earmark-pdf text-danger"></i> Tramo
+                    </a>
+                  </span>
                 </div>
                 {% for ab in slot_absences %}
-                <div class="mb-2 p-2 rounded task-item" data-tasks-slot="{{ sd.slot.id }}" style="font-size:.83rem;">
-                  <div class="d-flex justify-content-between align-items-start mb-1">
-                    <span class="text-muted" style="font-size:.75rem;">
+                <div class="mb-2 ps-2 py-2 pe-0 rounded task-item" data-tasks-slot="{{ sd.slot.id }}" style="font-size:.83rem;">
+                  <div class="d-flex align-items-center mb-1">
+                    <span class="text-muted flex-grow-1" style="font-size:.75rem;">
                       <i class="bi bi-person"></i> {{ ab.teacher }} — <strong>{{ ab.group }}</strong>
                     </span>
-                    <a href="{{ url_for('absences.tasks_download', absence_id=ab.absence_id, inline=1) }}"
-                       onclick="return openPdfPopup(this.href)" class="btn btn-outline-secondary btn-sm py-0 px-1 ms-1" style="font-size:.7rem;"
-                       title="Ver PDF de este grupo">
-                      <i class="bi bi-file-earmark-pdf text-danger"></i> Grupo
-                    </a>
+                    <span class="tasks-pdf-col">
+                      <a href="{{ url_for('absences.tasks_download', absence_id=ab.absence_id, inline=1) }}"
+                         onclick="return openPdfPopup(this.href)" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;"
+                         title="Ver PDF de este grupo">
+                        <i class="bi bi-file-earmark-pdf text-danger"></i> Grupo
+                      </a>
+                    </span>
                   </div>
                   {% for t in ab.tasks %}
-                  <div class="ms-1">
-                    <i class="bi bi-arrow-right-short text-secondary"></i> {{ t.description }}
-                    {% if t.attachment %}
-                    <a href="{{ url_for('absences.task_attachment', task_id=t.task_id) }}" target="_blank"
-                       class="text-danger ms-1" style="font-size:.75rem;" title="Ver PDF adjunto">
-                      <i class="bi bi-file-earmark-pdf"></i>
-                    </a>
-                    {% endif %}
+                  <div class="d-flex align-items-center ms-1">
+                    <span class="flex-grow-1"><i class="bi bi-arrow-right-short text-secondary"></i> {{ t.description }}</span>
+                    <span class="tasks-pdf-col">
+                      {% if t.attachment %}
+                      <a href="{{ url_for('absences.task_attachment', task_id=t.task_id) }}" target="_blank"
+                         class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;" title="Ver PDF adjunto">
+                        <i class="bi bi-file-earmark-pdf text-danger"></i>
+                      </a>
+                      {% endif %}
+                    </span>
                   </div>
                   {% endfor %}
                 </div>
