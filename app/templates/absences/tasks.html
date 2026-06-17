@@ -39,7 +39,15 @@
         <label class="form-label">Adjunto PDF <span class="text-muted">(opcional)</span></label>
         <input type="file" name="attachment" class="form-control" accept=".pdf">
       </div>
-      <button type="submit" class="btn btn-primary">Añadir tarea</button>
+      <hr class="my-3">
+      <div class="d-flex justify-content-end gap-2">
+        <a href="{{ back_url('absences.index') }}" class="btn btn-outline-secondary">
+          <i class="bi bi-x-lg"></i> Cancelar
+        </a>
+        <button type="submit" class="btn btn-success">
+          <i class="bi bi-plus-circle-fill"></i> Añadir tarea
+        </button>
+      </div>
     </form>
   </div>
 </div>
