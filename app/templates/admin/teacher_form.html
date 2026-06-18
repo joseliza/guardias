@@ -80,15 +80,19 @@
         {% if teacher %}
         <div class="col-12">
           <label class="form-label">Sustituye a</label>
-          <select name="substitutes_id" class="form-select" id="substitutes_id"
-                  {% if is_protected_admin %}disabled title="El administrador del sistema no puede tener sustitución"{% endif %}>
-            <option value="">Sin sustitución</option>
-            {% for t in all_teachers %}
-            <option value="{{ t.id }}" {% if teacher.substitutes_id == t.id %}selected{% endif %}>
-              {{ t.full_name }}{% if t.substitutes_id %} → {{ t.substitutes.full_name }}{% elif not t.active %} (inactivo){% endif %}
-            </option>
-            {% endfor %}
-          </select>
+          <input type="hidden" name="substitutes_id" id="substitutes_id"
+                 value="{{ teacher.substitutes_id or '' }}">
+          <div class="position-relative">
+            <input type="text" id="sub-search" class="form-control pe-4" autocomplete="off"
+                   placeholder="Buscar profesor…"
+                   value="{{ teacher.substitutes.full_name if teacher.substitutes else '' }}"
+                   {% if is_protected_admin %}disabled title="El administrador del sistema no puede tener sustitución"{% endif %}>
+            <button type="button" id="sub-search-clear"
+                    style="display:{{ 'block' if teacher.substitutes else 'none' }};position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;padding:0;line-height:1;cursor:pointer;color:#6c757d;"
+                    tabindex="-1">&#x2715;</button>
+            <div id="sub-suggestions" class="list-group position-absolute w-100 shadow-sm"
+                 style="z-index:1050;display:none;max-height:220px;overflow-y:auto"></div>
+          </div>
           <div class="form-text">
             <i class="bi bi-info-circle"></i> Copia el horario del sustituido y lo pone inactivo.
           </div>
@@ -206,13 +210,65 @@
   roleSelect.addEventListener('change', toggleTrackPoints);
   toggleTrackPoints();
 
-  const subSelect = document.getElementById('substitutes_id');
-  if (subSelect) {
-    const originalSubId = '{{ teacher.substitutes_id or "" }}';
-    subSelect.closest('form').addEventListener('submit', function(e) {
-      const newSubId = subSelect.value;
+  {% if teacher %}
+  const subData = [
+    {% for t in all_teachers %}
+    { id: {{ t.id }}, name: {{ (t.full_name + (' → ' + t.substitutes.full_name if t.substitutes_id else '') + ('' if t.active else ' (inactivo)'))|tojson }} },
+    {% endfor %}
+  ];
+
+  function normalize(s) { return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+
+  const subHidden  = document.getElementById('substitutes_id');
+  const subInput   = document.getElementById('sub-search');
+  const subClear   = document.getElementById('sub-search-clear');
+  const subSugg    = document.getElementById('sub-suggestions');
+  const originalSubId = '{{ teacher.substitutes_id or "" }}';
+
+  function renderSub(q) {
+    const matches = q ? subData.filter(x => normalize(x.name).includes(normalize(q))) : subData;
+    if (!matches.length) { subSugg.style.display = 'none'; return; }
+    subSugg.innerHTML = matches.slice(0, 15).map(x =>
+      `<button type="button" class="list-group-item list-group-item-action py-1 px-3"
+               data-id="${x.id}" data-name="${x.name.replace(/"/g,'&quot;')}">${x.name}</button>`
+    ).join('');
+    subSugg.style.display = 'block';
+  }
+
+  if (subInput) {
+    subInput.addEventListener('focus', () => renderSub(subInput.value.trim()));
+    subInput.addEventListener('input', function() {
+      subClear.style.display = this.value ? 'block' : 'none';
+      if (!this.value) { subHidden.value = ''; }
+      renderSub(this.value.trim());
+    });
+
+    subSugg.addEventListener('mousedown', function(e) {
+      const btn = e.target.closest('[data-id]');
+      if (!btn) return;
+      e.preventDefault();
+      subInput.value  = btn.dataset.name;
+      subHidden.value = btn.dataset.id;
+      subClear.style.display = 'block';
+      subSugg.style.display  = 'none';
+    });
+
+    subClear.addEventListener('click', function() {
+      subInput.value  = '';
+      subHidden.value = '';
+      subClear.style.display = 'none';
+      subSugg.style.display  = 'none';
+      subInput.focus();
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!subInput.contains(e.target) && !subSugg.contains(e.target)) subSugg.style.display = 'none';
+    });
+
+    subInput.closest('form').addEventListener('submit', function(e) {
+      const newSubId = subHidden.value;
       if (newSubId && newSubId !== originalSubId) {
-        const name = subSelect.options[subSelect.selectedIndex].text.trim();
+        const name = subInput.value.trim();
         if (!confirm('Se pondrá inactivo a "' + name + '" y se copiará su horario a este profesor. ¿Continuar?')) {
           e.preventDefault();
         }
@@ -223,5 +279,6 @@
       }
     });
   }
+  {% endif %}
 </script>
 {% endblock %}
