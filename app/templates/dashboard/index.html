@@ -519,7 +519,8 @@
                     <span class="flex-grow-1"><i class="bi bi-arrow-right-short text-secondary"></i> {{ t.description }}</span>
                     <span class="tasks-pdf-col">
                       {% if t.attachment %}
-                      <a href="{{ url_for('absences.task_attachment', task_id=t.task_id) }}" target="_blank"
+                      <a href="{{ url_for('absences.task_attachment', task_id=t.task_id) }}"
+                         onclick="return openPdfPopup(this.href)"
                          class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;" title="Ver PDF adjunto">
                         <i class="bi bi-file-earmark-pdf text-danger"></i>
                       </a>
@@ -542,6 +543,21 @@
 
   </div>{# /side-panel-col #}
   {% endif %}{# has_side_panel #}
+</div>
+
+<!-- Modal visor PDF incrustado -->
+<div class="modal fade" id="modalPdfViewer" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width:90vw;">
+    <div class="modal-content" style="height:90vh;">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0"><i class="bi bi-file-earmark-pdf text-danger"></i> PDF</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0" style="flex:1;overflow:hidden;">
+        <iframe id="pdfViewerFrame" src="" style="width:100%;height:100%;border:0;"></iframe>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modal asignación rápida -->
@@ -575,11 +591,15 @@
 
 {% block scripts %}
 <script>
-// Abre un PDF (tramo/grupo/día) en una ventana emergente en lugar de navegar a él
+// Abre un PDF en un modal con iframe incrustado
 function openPdfPopup(url) {
-  window.open(url, '_blank', 'width=850,height=900,resizable,scrollbars');
+  document.getElementById('pdfViewerFrame').src = url;
+  new bootstrap.Modal(document.getElementById('modalPdfViewer')).show();
   return false;
 }
+document.getElementById('modalPdfViewer').addEventListener('hidden.bs.modal', function() {
+  document.getElementById('pdfViewerFrame').src = '';
+});
 
 // Layout: fija la altura del área principal al espacio restante y bloquea el scroll de página
 (function() {
