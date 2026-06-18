@@ -56,26 +56,30 @@
       <thead class="table-light">
         <tr>
           <th>Profesor/a</th>
-          <th>Comentarios · Estado · Acciones</th>
+          <th>Comentarios</th>
+          <th>Estado</th>
+          <th>Acciones</th>
         </tr>
       </thead>
       <tbody>
         {% for a in item.absences %}
         <tr>
-          <td class="align-top">{{ a.teacher.display_name }}</td>
+          <td>{{ a.teacher.display_name }}</td>
+          <td class="text-muted">{{ a.reason or '—' }}</td>
           <td>
-            <div class="text-muted small mb-1">{{ a.reason or '—' }}</div>
-            <div class="d-flex gap-1 flex-wrap align-items-center">
-              {% if a.status == 'returned' %}
-              <span class="badge bg-success">Reincorporado</span>
-              {% if a.returned_at %}
-              <small class="text-muted">{{ a.returned_at.strftime('%H:%M') }}</small>
-              {% endif %}
-              {% elif a.status == 'confirmed' %}
-              <span class="badge bg-info text-dark">Confirmada</span>
-              {% else %}
-              <span class="badge bg-warning text-dark">Pendiente</span>
-              {% endif %}
+            {% if a.status == 'returned' %}
+            <span class="badge bg-success">Reincorporado</span>
+            {% if a.returned_at %}
+            <br><small class="text-muted">{{ a.returned_at.strftime('%H:%M') }}</small>
+            {% endif %}
+            {% elif a.status == 'confirmed' %}
+            <span class="badge bg-info text-dark">Confirmada</span>
+            {% else %}
+            <span class="badge bg-warning text-dark">Pendiente</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="d-flex gap-1 flex-wrap">
               {% if is_editable and (current_user.is_management or a.teacher_id == current_user.id) %}
               <a href="{{ url_for('absences.tasks', absence_id=a.id) }}" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-list-task"></i> Tareas
