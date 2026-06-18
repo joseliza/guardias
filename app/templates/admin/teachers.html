@@ -3,8 +3,32 @@
 {% block main_class %}container-fluid pb-4{% endblock %}
 {% block content %}
 
-{# Formulario oculto para borrado masivo #}
+{# Formularios ocultos para acciones masivas #}
 <form id="form-bulk-delete" method="POST" action="{{ url_for('admin.teacher_bulk_delete') }}"></form>
+<form id="form-bulk-welcome" method="POST" action="{{ url_for('admin.teacher_bulk_welcome') }}">
+  <input type="hidden" name="mode" id="bulk-welcome-mode" value="selected">
+</form>
+
+<!-- Modal confirmación envío masivo de bienvenida -->
+<div class="modal fade" id="modalBulkWelcome" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-envelope-heart"></i> Enviar correo de bienvenida</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p id="modal-welcome-msg"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-confirm-bulk-welcome">
+          <i class="bi bi-send"></i> Enviar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Modal confirmación borrado masivo -->
 <div class="modal fade" id="modalBulkDelete" tabindex="-1">
@@ -52,6 +76,16 @@
               class="btn btn-danger btn-sm d-none"
               onclick="confirmBulkDelete()">
         <i class="bi bi-trash"></i> Borrar seleccionados
+      </button>
+      <button id="btn-bulk-welcome-sel" type="button"
+              class="btn btn-outline-primary btn-sm d-none"
+              onclick="confirmBulkWelcome('selected')">
+        <i class="bi bi-envelope-heart"></i> Bienvenida a seleccionados
+      </button>
+      <button type="button"
+              class="btn btn-outline-primary btn-sm"
+              onclick="confirmBulkWelcome('all')">
+        <i class="bi bi-envelope-heart"></i> Bienvenida a todos
       </button>
       <a href="{{ back_url('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
       <a href="{{ url_for('admin.teacher_create') }}" class="btn btn-primary"><i class="bi bi-person-plus"></i> Nuevo</a>
@@ -166,9 +200,11 @@
       selCount.textContent = n + ' seleccionado' + (n === 1 ? '' : 's');
       selCount.classList.remove('d-none');
       btnDel.classList.remove('d-none');
+      document.getElementById('btn-bulk-welcome-sel').classList.remove('d-none');
     } else {
       selCount.classList.add('d-none');
       btnDel.classList.add('d-none');
+      document.getElementById('btn-bulk-welcome-sel').classList.add('d-none');
     }
     const all = document.querySelectorAll('.cb-teacher:not([disabled])');
     cbAll.indeterminate = n > 0 && n < all.length;
@@ -204,6 +240,37 @@
     });
     bulkModal.show();
   };
+
+  const welcomeModal = new bootstrap.Modal(document.getElementById('modalBulkWelcome'));
+  const formWelcome  = document.getElementById('form-bulk-welcome');
+
+  window.confirmBulkWelcome = function (mode) {
+    document.getElementById('bulk-welcome-mode').value = mode;
+    formWelcome.querySelectorAll('input[name="ids[]"]').forEach(el => el.remove());
+    let msg;
+    if (mode === 'all') {
+      msg = 'Se enviará el correo de bienvenida a todos los profesores con correo activado. ¿Continuar?';
+    } else {
+      const checked = getChecked();
+      if (!checked.length) return;
+      const n = checked.length;
+      msg = `Se enviará el correo de bienvenida a ${n} profesor${n === 1 ? '' : 'es'} seleccionado${n === 1 ? '' : 's'}. ¿Continuar?`;
+      checked.forEach(cb => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'ids[]';
+        inp.value = cb.dataset.id;
+        formWelcome.appendChild(inp);
+      });
+    }
+    document.getElementById('modal-welcome-msg').textContent = msg;
+    welcomeModal.show();
+  };
+
+  document.getElementById('btn-confirm-bulk-welcome').addEventListener('click', function () {
+    welcomeModal.hide();
+    formWelcome.submit();
+  });
 
   document.getElementById('btn-confirm-bulk-delete').addEventListener('click', function () {
     const checked = getChecked();

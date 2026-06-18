@@ -1962,6 +1962,47 @@ def teacher_send_welcome(tid):
     return redirect(url_for("admin.teacher_edit", tid=tid))
 
 
+@admin_bp.route("/profesores/enviar-bienvenida-masiva", methods=["POST"])
+@login_required
+def teacher_bulk_welcome():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+    cfg = _read_mail_config()
+    if not cfg.get("MAIL_WELCOME_TEMPLATE", "").strip():
+        flash("No hay plantilla de bienvenida configurada. "
+              "Ve a Admin → Configuración → Servidor de correo para definirla.", "warning")
+        return redirect(url_for("admin.teachers"))
+
+    mode = request.form.get("mode", "selected")
+    if mode == "all":
+        targets = (User.query
+                   .filter_by(active=True, receive_emails=True)
+                   .filter(User.role != "display")
+                   .order_by(User.surname, User.name)
+                   .all())
+    else:
+        ids = [int(i) for i in request.form.getlist("ids[]") if i.isdigit()]
+        targets = User.query.filter(User.id.in_(ids)).all() if ids else []
+
+    if not targets:
+        flash("No hay profesores a los que enviar el correo.", "warning")
+        return redirect(url_for("admin.teachers"))
+
+    ok, errors = 0, []
+    for user in targets:
+        try:
+            _send_welcome_email(user)
+            ok += 1
+        except Exception as e:
+            errors.append(f"{user.display_name}: {e.__context__ or e}")
+
+    if ok:
+        flash(f"Correo de bienvenida enviado a {ok} profesor{'es' if ok != 1 else ''}.", "success")
+    for msg in errors:
+        flash(f"Error — {msg}", "danger")
+    return redirect(url_for("admin.teachers"))
+
+
 # ── Configuración ─────────────────────────────────────────────────────────────
 
 MAIL_KEYS = ["MAIL_SERVER", "MAIL_PORT", "MAIL_USE_TLS", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_DEFAULT_SENDER", "MAIL_WELCOME_TEMPLATE", "MAIL_JUSTIFICATION_TEMPLATE"]
