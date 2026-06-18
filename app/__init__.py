@@ -151,6 +151,17 @@ def create_app():
         return {"institute_name": app.config.get("INSTITUTE_NAME", "IES"), "institute_logo_url": ""}
 
     @app.context_processor
+    def inject_group_schedules_cfg():
+        try:
+            if current_user.is_authenticated:
+                from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
+                gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
+                return {"teachers_see_group_schedules": gcfg.get("teachers_see_group_schedules", False)}
+        except Exception:
+            pass
+        return {"teachers_see_group_schedules": False}
+
+    @app.context_processor
     def inject_presence_cfg():
         try:
             if current_user.is_authenticated:

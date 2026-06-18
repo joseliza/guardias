@@ -831,6 +831,64 @@ def schedules():
                            can_edit=_can_edit_schedule(selected.id if selected else None))
 
 
+@admin_bp.route("/horarios-grupos")
+@login_required
+def group_schedules():
+    from flask import current_app
+    from app.utils.school_year import get_current_school_year, get_year_groups
+
+    gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
+    is_teacher = current_user.role == "teacher"
+    if is_teacher and not gcfg.get("teachers_see_group_schedules"):
+        return redirect(url_for("dashboard.index"))
+    if not current_user.is_management and current_user.role not in ("display", "teacher"):
+        return redirect(url_for("dashboard.index"))
+
+    current_year = get_current_school_year()
+    year_id = current_year.id
+
+    groups = get_year_groups(year_id)
+    # Excluir grupos especiales de guardia
+    groups = [g for g in groups if not g.guard_type]
+
+    group_id = request.args.get("group_id", type=int)
+    selected = next((g for g in groups if g.id == group_id), None) if group_id else None
+
+    prev_group = next_group = None
+    if selected:
+        idx = next((i for i, g in enumerate(groups) if g.id == selected.id), None)
+        if idx is not None:
+            if idx > 0:
+                prev_group = groups[idx - 1]
+            if idx < len(groups) - 1:
+                next_group = groups[idx + 1]
+
+    slots_cfg = current_app.config["TIME_SLOTS"]
+    days = current_app.config["DAYS_OF_WEEK"]
+    schedule_grid = None
+    if selected:
+        entries = TeacherSchedule.query.filter_by(group_id=selected.id, school_year_id=year_id).all()
+        entry_map = {(e.day_of_week, e.slot_id): e for e in entries}
+        schedule_grid = []
+        for s in slots_cfg:
+            row = {"slot": s, "days": [entry_map.get((d, s["id"])) for d in range(5)]}
+            schedule_grid.append(row)
+
+    from datetime import date as _date
+    return render_template(
+        "admin/group_schedules.html",
+        groups=groups,
+        selected=selected,
+        schedule_grid=schedule_grid,
+        days=days,
+        slots=slots_cfg,
+        prev_group=prev_group,
+        next_group=next_group,
+        current_year=current_year,
+        today=_date.today(),
+    )
+
+
 @admin_bp.route("/horarios/clonar-celda", methods=["POST"])
 @login_required
 def schedule_clone_cell():
@@ -1917,6 +1975,7 @@ GENERAL_DEFAULTS = {
     "presence_detail": "count",
     "teachers_see_all_absences": True,
     "teachers_can_edit_schedule": False,
+    "teachers_see_group_schedules": False,
     "institute_name": "",
     "institute_logo": "",
 }
@@ -2067,6 +2126,7 @@ def config_general():
         "presence_detail":             request.form.get("presence_detail", "count"),
         "teachers_see_all_absences":   bool(request.form.get("teachers_see_all_absences")),
         "teachers_can_edit_schedule":  bool(request.form.get("teachers_can_edit_schedule")),
+        "teachers_see_group_schedules": bool(request.form.get("teachers_see_group_schedules")),
         "institute_name":              institute_name,
         "institute_logo":              institute_logo,
     }

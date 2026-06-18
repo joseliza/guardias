@@ -168,6 +168,21 @@
 
               <div class="mb-4">
                 <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="teachers_see_group_schedules"
+                         id="teachers_see_group_schedules"
+                         {% if general_config.get('teachers_see_group_schedules', False) %}checked{% endif %}>
+                  <label class="form-check-label" for="teachers_see_group_schedules">
+                    <strong>Los profesores pueden ver el horario de los grupos</strong>
+                    <small class="d-block text-muted mt-1">
+                      Si está activado, cada profesor puede consultar el horario completo de cualquier grupo,
+                      de igual forma que puede ver el suyo propio.
+                    </small>
+                  </label>
+                </div>
+              </div>
+
+              <div class="mb-4">
+                <div class="form-check form-switch">
                   <input class="form-check-input" type="checkbox" name="auto_assign_guards"
                          id="auto_assign_guards"
                          {% if general_config.get('auto_assign_guards', True) %}checked{% endif %}>

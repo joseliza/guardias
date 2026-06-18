@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Horarios de grupos{% endblock %}
+{% block main_class %}container-fluid pb-4{% endblock %}
+{% block content %}
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <h4 class="mb-0"><i class="bi bi-calendar3-week"></i> Horarios de grupos
+      {% if current_year %}<span class="badge bg-primary ms-2" style="font-size:.75rem">{{ current_year.name }}</span>{% endif %}
+    </h4>
+    <a href="{{ back_url('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+  </div>
+  <input type="search" class="table-filter form-control mb-0" data-target="#tabla-grupos" placeholder="Buscar grupo...">
+</div>
+
+{% if selected %}
+<div class="card mb-3">
+  <div class="card-body p-0">
+    <div class="px-3 pt-3 pb-2 border-bottom d-flex align-items-center gap-2 flex-wrap">
+      <div class="btn-group btn-group-sm" role="group">
+        {% if prev_group %}
+        <a href="{{ url_for('admin.group_schedules', group_id=prev_group.id) }}"
+           class="btn btn-outline-secondary" title="{{ prev_group.name }}">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        {% else %}
+        <span class="btn btn-outline-secondary disabled"><i class="bi bi-arrow-left"></i></span>
+        {% endif %}
+        {% if next_group %}
+        <a href="{{ url_for('admin.group_schedules', group_id=next_group.id) }}"
+           class="btn btn-outline-secondary" title="{{ next_group.name }}">
+          <i class="bi bi-arrow-right"></i>
+        </a>
+        {% else %}
+        <span class="btn btn-outline-secondary disabled"><i class="bi bi-arrow-right"></i></span>
+        {% endif %}
+      </div>
+      <i class="bi bi-people"></i>
+      <strong>{{ selected.name }}</strong>
+      {% if selected.abbreviation %}<span class="badge bg-secondary">{{ selected.abbreviation }}</span>{% endif %}
+      <a href="{{ url_for('admin.group_schedules') }}" class="btn btn-sm btn-outline-secondary ms-auto"><i class="bi bi-x-lg"></i></a>
+    </div>
+
+    <div class="table-responsive js-internal-scroll">
+      <table class="table table-bordered table-sm align-middle text-center mb-0" style="min-width:600px">
+        <thead class="table-light">
+          <tr>
+            <th style="width:110px">Tramo</th>
+            {% for day in days %}<th>{{ day }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in schedule_grid %}
+          {% set s = row.slot %}
+          {% if s.is_break %}
+          <tr class="table-secondary">
+            <td class="text-start fw-semibold small text-muted">
+              <i class="bi bi-cup-hot"></i> {{ s.label }}<br>
+              <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
+            </td>
+            {% for entry in row.days %}
+            <td><span class="text-muted" style="font-size:.8rem">—</span></td>
+            {% endfor %}
+          </tr>
+          {% else %}
+          <tr>
+            <td class="text-start fw-semibold small text-muted">
+              {{ s.label }}<br>
+              <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
+            </td>
+            {% for entry in row.days %}
+            <td class="py-2{% if entry %} bg-primary-subtle{% endif %}" style="min-width:110px">
+              {% if entry %}
+                <span class="badge bg-primary">{{ entry.teacher.surname }}, {{ entry.teacher.name }}</span>
+                {% if entry.subject %}
+                <div class="small text-muted mt-1"><i class="bi bi-book"></i> {{ entry.subject.name }}</div>
+                {% endif %}
+                {% if entry.room %}
+                <div class="small text-muted mt-1"><i class="bi bi-door-open"></i> {{ entry.room.name }}</div>
+                {% endif %}
+                {% if entry.notes %}
+                <div class="small text-muted mt-1"><i class="bi bi-pencil"></i> {{ entry.notes }}</div>
+                {% endif %}
+              {% else %}
+              <span class="text-muted" style="font-size:.8rem">Libre</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% set class_count = namespace(n=0) %}
+    {% set free_count  = namespace(n=0) %}
+    {% for row in schedule_grid %}
+      {% if not row.slot.is_break %}
+        {% for entry in row.days %}
+          {% if entry %}{% set class_count.n = class_count.n + 1 %}
+          {% else %}{% set free_count.n = free_count.n + 1 %}{% endif %}
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+    <div class="d-flex gap-2 px-3 py-2 border-top">
+      <span class="badge bg-primary"><i class="bi bi-people"></i> {{ class_count.n }} tramo{{ 's' if class_count.n != 1 }} con clase</span>
+      <span class="badge bg-secondary"><i class="bi bi-dash-circle"></i> {{ free_count.n }} libre{{ 's' if free_count.n != 1 }}</span>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card{% if selected %} d-none{% endif %}" id="lista-grupos">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0" id="tabla-grupos">
+      <thead class="table-light">
+        <tr>
+          <th>Grupo</th>
+          <th>Abreviatura</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in groups %}
+        <tr style="cursor:pointer"
+            onclick="window.location='{{ url_for('admin.group_schedules', group_id=g.id) }}'">
+          <td>{{ g.name }}</td>
+          <td>{% if g.abbreviation %}<span class="badge bg-secondary">{{ g.abbreviation }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function() {
+  var inp  = document.querySelector('.table-filter[data-target="#tabla-grupos"]');
+  var card = document.getElementById('lista-grupos');
+  if (!inp || !card) return;
+  var startHidden = card.classList.contains('d-none');
+  inp.addEventListener('input', function() {
+    if (inp.value.trim()) {
+      card.classList.remove('d-none');
+    } else if (startHidden) {
+      card.classList.add('d-none');
+    }
+  });
+})();
+</script>
+{% endblock %}
