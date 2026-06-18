@@ -73,9 +73,12 @@ def index():
     prompt_ids = session.get("task_prompt_ids", [])
     prompt_absences = []
     if prompt_ids:
-        for a in Absence.query.filter(Absence.id.in_(prompt_ids)).all():
+        _pq = Absence.query.filter(Absence.id.in_(prompt_ids))
+        if not current_user.is_management:
+            _pq = _pq.filter(Absence.teacher_id == current_user.id)
+        for a in _pq.all():
             prompt_absences.append({"absence": a, "has_tasks": a.tasks.count() > 0})
-        if all(p["has_tasks"] for p in prompt_absences):
+        if not prompt_absences or all(p["has_tasks"] for p in prompt_absences):
             session.pop("task_prompt_ids", None)
             prompt_absences = []
 

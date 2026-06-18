@@ -35,6 +35,7 @@ def login():
 @login_required
 def logout():
     via_google = session.get("via_google", False)
+    session.pop("task_prompt_ids", None)
     logout_user()
     if via_google:
         return redirect("https://accounts.google.com/Logout")
