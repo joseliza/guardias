@@ -22,11 +22,11 @@
   </div>
 </div>
 {% if not is_self_view %}
-<input type="search" class="table-filter form-control mb-0" data-target="#tabla-horarios" placeholder="Buscar profesor...">
-{% elif not is_self_view %}
-<div class="position-relative mb-0">
-  <input type="search" id="teacher-nav-search" class="form-control form-control-sm" autocomplete="off" placeholder="Buscar profesor...">
-  <div id="teacher-nav-sugg" class="list-group position-absolute w-100 shadow-sm" style="z-index:1050;display:none;max-height:220px;overflow-y:auto"></div>
+<div class="position-relative">
+  <input type="search" class="table-filter form-control mb-0" id="teacher-search"
+         data-target="#tabla-horarios" placeholder="Buscar profesor..." autocomplete="off">
+  <div id="teacher-sugg" class="list-group position-absolute w-100 shadow"
+       style="z-index:1000;display:none;max-height:240px;overflow-y:auto;top:calc(100% + 2px)"></div>
 </div>
 {% endif %}
 </div>
@@ -488,16 +488,44 @@
 {% block scripts %}
 <script>
 (function() {
-  var inp  = document.querySelector('.table-filter[data-target="#tabla-horarios"]');
+  var inp  = document.getElementById('teacher-search');
   var card = document.getElementById('lista-profesores');
-  if (!inp || !card) return;
-  var startHidden = card.classList.contains('d-none');
+  var sugg = document.getElementById('teacher-sugg');
+  if (!inp) return;
+
+  var teacherData = [
+    {% for t in teachers %}
+    { name: {{ t.full_name|tojson }}, url: {{ url_for('admin.schedules', teacher_id=t.id)|tojson }} },
+    {% endfor %}
+  ];
+
+  function render(q) {
+    var matches = q ? teacherData.filter(function(t) { return normalize(t.name).includes(normalize(q)); }) : [];
+    if (!matches.length) { sugg.style.display = 'none'; return; }
+    sugg.innerHTML = matches.slice(0, 12).map(function(t) {
+      return '<a href="' + t.url + '" class="list-group-item list-group-item-action py-1 px-3">' + t.name + '</a>';
+    }).join('');
+    sugg.style.display = 'block';
+  }
+
+  var startHidden = card && card.classList.contains('d-none');
   inp.addEventListener('input', function() {
-    if (inp.value.trim()) {
-      card.classList.remove('d-none');
-    } else if (startHidden) {
-      card.classList.add('d-none');
+    render(inp.value.trim());
+    if (card) {
+      if (inp.value.trim()) card.classList.remove('d-none');
+      else if (startHidden) card.classList.add('d-none');
     }
+  });
+  inp.addEventListener('focus', function() { if (inp.value.trim()) render(inp.value.trim()); });
+  inp.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      var first = sugg.querySelector('a');
+      if (first) { e.preventDefault(); window.location = first.href; }
+    }
+    if (e.key === 'Escape') sugg.style.display = 'none';
+  });
+  document.addEventListener('click', function(e) {
+    if (!inp.contains(e.target) && !sugg.contains(e.target)) sugg.style.display = 'none';
   });
 })();
 </script>

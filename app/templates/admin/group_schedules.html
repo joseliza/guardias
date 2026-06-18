@@ -9,7 +9,12 @@
     </h4>
     <a href="{{ back_url('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
   </div>
-  <input type="search" class="table-filter form-control mb-0" data-target="#tabla-grupos" placeholder="Buscar grupo...">
+  <div class="position-relative">
+    <input type="search" class="table-filter form-control mb-0" id="group-search"
+           data-target="#tabla-grupos" placeholder="Buscar grupo..." autocomplete="off">
+    <div id="group-sugg" class="list-group position-absolute w-100 shadow"
+         style="z-index:1000;display:none;max-height:240px;overflow-y:auto;top:calc(100% + 2px)"></div>
+  </div>
 </div>
 
 {% if selected %}
@@ -135,16 +140,48 @@
 {% block scripts %}
 <script>
 (function() {
-  var inp  = document.querySelector('.table-filter[data-target="#tabla-grupos"]');
+  var inp  = document.getElementById('group-search');
   var card = document.getElementById('lista-grupos');
-  if (!inp || !card) return;
-  var startHidden = card.classList.contains('d-none');
+  var sugg = document.getElementById('group-sugg');
+  if (!inp) return;
+
+  var groupData = [
+    {% for g in groups %}
+    { name: {{ g.name|tojson }}, abbr: {{ (g.abbreviation or '')|tojson }}, url: {{ url_for('admin.group_schedules', group_id=g.id)|tojson }} },
+    {% endfor %}
+  ];
+
+  function render(q) {
+    var matches = q ? groupData.filter(function(g) {
+      return normalize(g.name).includes(normalize(q)) || normalize(g.abbr).includes(normalize(q));
+    }) : [];
+    if (!matches.length) { sugg.style.display = 'none'; return; }
+    sugg.innerHTML = matches.slice(0, 12).map(function(g) {
+      return '<a href="' + g.url + '" class="list-group-item list-group-item-action py-1 px-3">'
+        + g.name + (g.abbr ? ' <span class="badge bg-secondary ms-1">' + g.abbr + '</span>' : '')
+        + '</a>';
+    }).join('');
+    sugg.style.display = 'block';
+  }
+
+  var startHidden = card && card.classList.contains('d-none');
   inp.addEventListener('input', function() {
-    if (inp.value.trim()) {
-      card.classList.remove('d-none');
-    } else if (startHidden) {
-      card.classList.add('d-none');
+    render(inp.value.trim());
+    if (card) {
+      if (inp.value.trim()) card.classList.remove('d-none');
+      else if (startHidden) card.classList.add('d-none');
     }
+  });
+  inp.addEventListener('focus', function() { if (inp.value.trim()) render(inp.value.trim()); });
+  inp.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      var first = sugg.querySelector('a');
+      if (first) { e.preventDefault(); window.location = first.href; }
+    }
+    if (e.key === 'Escape') sugg.style.display = 'none';
+  });
+  document.addEventListener('click', function(e) {
+    if (!inp.contains(e.target) && !sugg.contains(e.target)) sugg.style.display = 'none';
   });
 })();
 </script>
