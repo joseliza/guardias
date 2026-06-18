@@ -52,20 +52,20 @@
     </span>
   </div>
   <div class="card-body p-0">
-    <table class="table table-sm table-hover mb-0">
+    <table class="table table-sm table-hover mb-0" style="table-layout:fixed">
       <thead class="table-light">
         <tr>
-          <th>Profesor/a</th>
-          <th>Comentarios</th>
-          <th>Estado</th>
-          <th>Acciones</th>
+          <th style="width:22%">Profesor/a</th>
+          <th style="width:36%">Comentarios</th>
+          <th style="width:14%">Estado</th>
+          <th style="width:28%">Acciones</th>
         </tr>
       </thead>
       <tbody>
         {% for a in item.absences %}
         <tr>
           <td>{{ a.teacher.display_name }}</td>
-          <td class="text-muted">{{ a.reason or '—' }}</td>
+          <td class="text-muted" style="overflow-wrap:break-word">{{ a.reason or '—' }}</td>
           <td>
             {% if a.status == 'returned' %}
             <span class="badge bg-success">Reincorporado</span>
