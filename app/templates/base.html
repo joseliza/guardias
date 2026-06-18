@@ -57,7 +57,7 @@
 {% elif current_user.is_authenticated %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
   <div class="container-fluid">
-    <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="{{ url_for('dashboard.index') }}">
+    <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="{{ url_for('dashboard.index') }}" data-date-nav>
       {% if institute_logo_url %}<img src="{{ institute_logo_url }}" alt="" style="height:32px;width:auto;">{% else %}<i class="bi bi-shield-check"></i>{% endif %}
       {{ institute_name }}
       {% if current_school_year %}
@@ -70,14 +70,14 @@
     <div class="collapse navbar-collapse" id="navMenu">
       <ul class="navbar-nav me-auto">
         <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('dashboard.index') }}"><i class="bi bi-house"></i> Inicio</a>
+          <a class="nav-link" href="{{ url_for('dashboard.index') }}" data-date-nav><i class="bi bi-house"></i> Inicio</a>
         </li>
         {% if current_user.role not in ('display', 'extracurricular') %}
         <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('guards.my_guard') }}"><i class="bi bi-shield-check"></i> Mi guardia</a>
+          <a class="nav-link" href="{{ url_for('guards.my_guard') }}" data-date-nav><i class="bi bi-shield-check"></i> Mi guardia</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('absences.index') }}"><i class="bi bi-calendar-x"></i> Ausencias</a>
+          <a class="nav-link" href="{{ url_for('absences.index') }}" data-date-nav><i class="bi bi-calendar-x"></i> Ausencias</a>
         </li>
         {% endif %}
         {% if current_user.role == 'teacher' %}
@@ -395,6 +395,24 @@ document.querySelectorAll('input[type="date"]').forEach(function(el) {
 </script>
 {% endif %}
 
+<script>
+(function() {
+  var SESSION_KEY = 'guardias_fecha';
+  var TODAY = new Date().toISOString().slice(0, 10);
+  var urlFecha = new URLSearchParams(window.location.search).get('fecha');
+  if (urlFecha) {
+    sessionStorage.setItem(SESSION_KEY, urlFecha);
+  }
+  var stored = sessionStorage.getItem(SESSION_KEY);
+  if (stored && stored !== TODAY) {
+    document.querySelectorAll('[data-date-nav]').forEach(function(el) {
+      var url = new URL(el.href, window.location.origin);
+      url.searchParams.set('fecha', stored);
+      el.href = url.toString();
+    });
+  }
+})();
+</script>
 {% block scripts %}{% endblock %}
 
 {% if current_user.is_authenticated %}
