@@ -87,8 +87,9 @@
               {% endif %}
               {% set tasks = a.tasks.all() %}
               {% if tasks %}
-              <a href="{{ url_for('absences.tasks_pdf', absence_id=a.id) }}" class="btn btn-sm btn-outline-secondary" title="Imprimir tareas" target="_blank">
-                <i class="bi bi-printer"></i>
+              <a href="{{ url_for('absences.tasks_download', absence_id=a.id, inline=1) }}"
+                 onclick="return openPdfPopup(this.href)" class="btn btn-sm btn-outline-secondary" title="Ver PDF de tareas">
+                <i class="bi bi-file-earmark-pdf text-danger"></i>
               </a>
               {% endif %}
               {% if current_user.is_management and a.status != 'returned' and is_editable and (a.date > today or a.slot_id not in past_slot_ids) %}
@@ -176,6 +177,11 @@
 
 {% block scripts %}
 <script>
+function openPdfPopup(url) {
+  window.open(url, '_blank', 'width=850,height=900,resizable,scrollbars');
+  return false;
+}
+
 document.getElementById('date-picker').addEventListener('change', function() {
   if (this.value) window.location.href = '{{ url_for("absences.index") }}?fecha=' + this.value;
 });
