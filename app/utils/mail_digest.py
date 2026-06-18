@@ -67,7 +67,8 @@ def send_daily_digest(app):
 
             subject = (subject_tpl
                        .replace("{fecha}", fecha_str)
-                       .replace("{nombre}", user.name))
+                       .replace("{nombre}", user.name)
+                       .replace("{nombre_apellidos}", user.natural_name))
 
             lines = []
             if intro:

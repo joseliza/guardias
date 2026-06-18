@@ -1931,6 +1931,7 @@ def _send_welcome_email(user, password: str = None):
     password_text = password if password else "(usa tu acceso Google Workspace o contacta con el equipo directivo)"
     body = (template
             .replace("{nombre}", user.full_name)
+            .replace("{nombre_apellidos}", user.natural_name)
             .replace("{email}", user.email)
             .replace("{contraseña}", password_text))
 
@@ -2258,6 +2259,7 @@ def test_email():
             return redirect(url_for("admin.config", _anchor="section-mail"))
         body = (template
                 .replace("{nombre}", current_user.full_name)
+                .replace("{nombre_apellidos}", current_user.natural_name)
                 .replace("{email}", recipient)
                 .replace("{contraseña}", "••••••••"))
         subject = f"[PRUEBA] Bienvenido/a a la aplicación de guardias — {_get_institute_name()}"
@@ -2272,6 +2274,7 @@ def test_email():
         )
         body = (template
                 .replace("{nombre}", current_user.full_name)
+                .replace("{nombre_apellidos}", current_user.natural_name)
                 .replace("{lista_faltas}", lista_ejemplo))
         subject = f"[PRUEBA] Faltas pendientes de justificación — {_get_institute_name()}"
     else:
@@ -2411,6 +2414,7 @@ def _send_justification_email_for_teacher(teacher_id: int) -> bool:
 
     body = (template
             .replace("{nombre}", teacher.full_name)
+            .replace("{nombre_apellidos}", teacher.natural_name)
             .replace("{lista_faltas}", lista_faltas))
 
     try:

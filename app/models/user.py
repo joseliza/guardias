@@ -63,6 +63,10 @@ class User(UserMixin, db.Model):
         return f"{self.surname}, {self.name}"
 
     @property
+    def natural_name(self):
+        return f"{self.name} {self.surname}"
+
+    @property
     def substitution_chain(self):
         """Lista de titulares en cadena: [B, C] si self→B→C."""
         chain, current, visited = [], self.substitutes, {self.id}

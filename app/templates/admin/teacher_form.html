@@ -213,7 +213,7 @@
   {% if teacher %}
   const subData = [
     {% for t in all_teachers %}
-    { id: {{ t.id }}, name: {{ (t.full_name + (' → ' + t.substitutes.full_name if t.substitutes_id else '') + ('' if t.active else ' (inactivo)'))|tojson }} },
+    { id: {{ t.id }}, name: {{ (t.full_name + (' → ' + t.substitutes.full_name if t.substitutes_id and t.substitutes else '') + ('' if t.active else ' (inactivo)'))|tojson }} },
     {% endfor %}
   ];
 
@@ -224,6 +224,13 @@
   const subClear   = document.getElementById('sub-search-clear');
   const subSugg    = document.getElementById('sub-suggestions');
   const originalSubId = '{{ teacher.substitutes_id or "" }}';
+
+  // Sincroniza el texto del buscador con el formato de subData (incluye "(inactivo)" si aplica)
+  const initialSubId = {{ teacher.substitutes_id or 'null' }};
+  if (initialSubId && subInput) {
+    const entry = subData.find(x => x.id === initialSubId);
+    if (entry) subInput.value = entry.name;
+  }
 
   function renderSub(q) {
     const matches = q ? subData.filter(x => normalize(x.name).includes(normalize(q))) : subData;
@@ -269,7 +276,13 @@
       const newSubId = subHidden.value;
       if (newSubId && newSubId !== originalSubId) {
         const name = subInput.value.trim();
-        if (!confirm('Se pondrá inactivo a "' + name + '" y se copiará su horario a este profesor. ¿Continuar?')) {
+        let msg;
+        if (originalSubId) {
+          msg = 'Se cambiará la sustitución:\n• El profesor anterior será reactivado y se borrará el horario actual.\n• "' + name + '" pasará a inactivo.\n• A partir de ahora, el horario de este profesor será una copia del de "' + name + '".\n\n¿Continuar?';
+        } else {
+          msg = '"' + name + '" pasará a inactivo y su horario será copiado a este profesor. ¿Continuar?';
+        }
+        if (!confirm(msg)) {
           e.preventDefault();
         }
       } else if (!newSubId && originalSubId) {

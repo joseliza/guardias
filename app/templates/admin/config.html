@@ -312,7 +312,7 @@
             <div class="col-12">
               <label class="form-label">
                 Plantilla correo de bienvenida
-                <small class="text-muted">— variables: <code>{nombre}</code>, <code>{email}</code>, <code>{contraseña}</code></small>
+                <small class="text-muted">— variables: <code>{nombre}</code> (Apellidos, Nombre), <code>{nombre_apellidos}</code> (Nombre Apellidos), <code>{email}</code>, <code>{contraseña}</code></small>
               </label>
               <textarea name="MAIL_WELCOME_TEMPLATE" class="form-control font-monospace" rows="5"
                         placeholder="Bienvenido/a {nombre}, tu cuenta ha sido creada...">{{ mail_config.MAIL_WELCOME_TEMPLATE }}</textarea>
@@ -320,7 +320,7 @@
             <div class="col-12">
               <label class="form-label">
                 Plantilla correo de justificación de faltas
-                <small class="text-muted">— variables: <code>{nombre}</code>, <code>{lista_faltas}</code> (listado de todas las faltas sin justificar)</small>
+                <small class="text-muted">— variables: <code>{nombre}</code> (Apellidos, Nombre), <code>{nombre_apellidos}</code> (Nombre Apellidos), <code>{lista_faltas}</code> (listado de todas las faltas sin justificar)</small>
               </label>
               <textarea name="MAIL_JUSTIFICATION_TEMPLATE" class="form-control font-monospace" rows="6"
                         placeholder="Estimado/a {nombre},&#10;&#10;Le comunicamos que tiene registrada una falta de asistencia el {fecha} ({tramo}).&#10;Motivo: {motivo}&#10;&#10;Le rogamos que aporte la documentación justificativa.">{{ mail_config.get('MAIL_JUSTIFICATION_TEMPLATE', '') }}</textarea>
@@ -400,7 +400,7 @@
               </div>
             </div>
             <div class="col-md-6">
-              <label class="form-label">Asunto <small class="text-muted">— variables: <code>{fecha}</code>, <code>{nombre}</code></small></label>
+              <label class="form-label">Asunto <small class="text-muted">— variables: <code>{fecha}</code>, <code>{nombre}</code> (Apellidos, Nombre), <code>{nombre_apellidos}</code> (Nombre Apellidos)</small></label>
               <input type="text" name="subject" class="form-control"
                      value="{{ sched.get('subject', 'Guardias del {fecha}') }}">
             </div>
