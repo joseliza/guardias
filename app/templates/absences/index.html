@@ -92,7 +92,8 @@
               </a>
               {% endif %}
               {% if current_user.is_management and a.status != 'returned' and is_editable and (a.date > today or a.slot_id not in past_slot_ids) %}
-              <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=a.id) }}" class="d-inline">
+              <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=a.id) }}" class="d-inline"
+                    onsubmit="return confirm('¿Confirmas que {{ a.teacher.display_name }} se ha reincorporado?')">
                 <input type="hidden" name="back" value="absences">
                 <button type="submit" class="btn btn-sm btn-outline-success">
                   <i class="bi bi-box-arrow-in-right"></i> Reincorporar
