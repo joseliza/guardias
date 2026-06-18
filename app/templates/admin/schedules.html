@@ -3,7 +3,7 @@
 {% block main_class %}container-fluid pb-4{% endblock %}
 {% block content %}
 <div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
-<div class="d-flex justify-content-between align-items-center mb-{% if not selected %}1{% else %}0{% endif %}">
+<div class="d-flex justify-content-between align-items-center mb-{% if not is_self_view %}1{% else %}0{% endif %}">
   <h4 class="mb-0"><i class="bi bi-calendar3"></i> {{ 'Mi horario' if is_self_view else 'Horarios del profesorado' }}
     {% if current_year %}<span class="badge bg-primary ms-2" style="font-size:.75rem">{{ current_year.name }}</span>{% endif %}
   </h4>
@@ -21,7 +21,7 @@
     {% endif %}
   </div>
 </div>
-{% if not selected %}
+{% if not is_self_view %}
 <input type="search" class="table-filter form-control mb-0" data-target="#tabla-horarios" placeholder="Buscar profesor...">
 {% elif not is_self_view %}
 <div class="position-relative mb-0">
@@ -447,8 +447,7 @@
 
 {% endif %}
 
-{% if not selected %}
-<div class="card">
+<div class="card{% if selected %} d-none{% endif %}" id="lista-profesores">
   <div class="card-body p-0">
     <table class="table table-hover mb-0" id="tabla-horarios">
       <thead class="table-light">
@@ -478,10 +477,24 @@
     </table>
   </div>
 </div>
-{% endif %}
 
 {% endblock %}
 {% block scripts %}
+<script>
+(function() {
+  var inp  = document.querySelector('.table-filter[data-target="#tabla-horarios"]');
+  var card = document.getElementById('lista-profesores');
+  if (!inp || !card) return;
+  var startHidden = card.classList.contains('d-none');
+  inp.addEventListener('input', function() {
+    if (inp.value.trim()) {
+      card.classList.remove('d-none');
+    } else if (startHidden) {
+      card.classList.add('d-none');
+    }
+  });
+})();
+</script>
 {% if selected %}
 <script>
 const groupData   = [{% for g in groups %}{ id: {{ g.id }}, name: {{ g.name|tojson }}, abbr: {{ g.abbreviation|tojson }} },{% endfor %}];
