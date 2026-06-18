@@ -17,6 +17,7 @@ from app.models.schedule import TeacherSchedule
 from app.models.activity import ExtraActivity, ExtraActivityTeacher
 from app.utils.points import apply_absence_penalty
 from app.utils.guards import auto_assign_pending_guards
+from app.utils import auto_assign_guards_enabled
 from app.utils.school_year import get_current_school_year
 from app.routes.admin import _get_institute_name
 
@@ -280,9 +281,10 @@ def create():
         if task_ids and current_user.role != "display":
             session["task_prompt_ids"] = task_ids
 
-        # Auto-asignación solo en tramos normales (no recreo)
-        for slot_id in normal_slot_ids:
-            auto_assign_pending_guards(absence_date, slot_id)
+        # Auto-asignación solo en tramos normales (no recreo) y si está habilitada
+        if auto_assign_guards_enabled():
+            for slot_id in normal_slot_ids:
+                auto_assign_pending_guards(absence_date, slot_id)
 
         if skipped_past:
             flash(f"Tramos omitidos (ya han finalizado): {', '.join(skipped_past)}.", "warning")

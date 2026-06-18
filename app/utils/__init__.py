@@ -25,6 +25,16 @@ def points_system_enabled():
     return guard_assign_mode() == "scoring"
 
 
+def auto_assign_guards_enabled():
+    """Devuelve True si la autoasignación de guardias está activada en la config general."""
+    try:
+        from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
+        gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
+        return bool(gcfg.get("auto_assign_guards", True))
+    except Exception:
+        return True
+
+
 def fecha_es(d, fmt="%A, %d de %B de %Y"):
     """Formatea una fecha en castellano. Soporta %A (día largo), %a (día abreviado),
     %B (mes largo), %d (día con cero), %Y (año)."""

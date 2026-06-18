@@ -166,6 +166,21 @@
                 </div>
               </div>
 
+              <div class="mb-4">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="auto_assign_guards"
+                         id="auto_assign_guards"
+                         {% if general_config.get('auto_assign_guards', True) %}checked{% endif %}>
+                  <label class="form-check-label" for="auto_assign_guards">
+                    <strong>Autoasignación de guardias</strong>
+                    <small class="d-block text-muted mt-1">
+                      Si está activado, al registrar una ausencia el sistema asigna automáticamente
+                      un profesor de guardia. Si está desactivado, las guardias quedan pendientes
+                      para asignarse manualmente desde el panel.
+                    </small>
+                  </label>
+                </div>
+              </div>
 
               <div class="mb-4">
                 <label class="form-label fw-semibold">Reparto de guardias</label>
