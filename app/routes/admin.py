@@ -2017,16 +2017,19 @@ def config():
 
     if request.method == "POST":
         port_str = request.form.get("MAIL_PORT", "587").strip()
-        updates = {
-            "MAIL_SERVER":            request.form.get("MAIL_SERVER", "").strip(),
-            "MAIL_PORT":              port_str,
-            "MAIL_USE_TLS":           "true" if request.form.get("MAIL_USE_TLS") else "false",
-            "MAIL_USERNAME":          request.form.get("MAIL_USERNAME", "").strip(),
-            "MAIL_PASSWORD":          request.form.get("MAIL_PASSWORD", "").strip(),
-            "MAIL_DEFAULT_SENDER":    request.form.get("MAIL_DEFAULT_SENDER", "").strip(),
-            "MAIL_WELCOME_TEMPLATE":  request.form.get("MAIL_WELCOME_TEMPLATE", ""),
-        }
-        _write_mail_config(updates)
+        current = _read_mail_config()
+        current.update({
+            "MAIL_SERVER":                  request.form.get("MAIL_SERVER", "").strip(),
+            "MAIL_PORT":                    port_str,
+            "MAIL_USE_TLS":                 "true" if request.form.get("MAIL_USE_TLS") else "false",
+            "MAIL_USERNAME":                request.form.get("MAIL_USERNAME", "").strip(),
+            "MAIL_PASSWORD":                request.form.get("MAIL_PASSWORD", "").strip(),
+            "MAIL_DEFAULT_SENDER":          request.form.get("MAIL_DEFAULT_SENDER", "").strip(),
+            "MAIL_WELCOME_TEMPLATE":        request.form.get("MAIL_WELCOME_TEMPLATE", ""),
+            "MAIL_JUSTIFICATION_TEMPLATE":  request.form.get("MAIL_JUSTIFICATION_TEMPLATE", ""),
+        })
+        updates = current
+        _write_mail_config(current)
         current_app.config["MAIL_SERVER"] = updates["MAIL_SERVER"]
         current_app.config["MAIL_PORT"] = int(port_str) if port_str.isdigit() else 587
         current_app.config["MAIL_USE_TLS"] = updates["MAIL_USE_TLS"] == "true"
@@ -2034,6 +2037,7 @@ def config():
         current_app.config["MAIL_PASSWORD"] = updates["MAIL_PASSWORD"]
         current_app.config["MAIL_DEFAULT_SENDER"] = updates["MAIL_DEFAULT_SENDER"]
         current_app.config["MAIL_WELCOME_TEMPLATE"] = updates["MAIL_WELCOME_TEMPLATE"]
+        current_app.config["MAIL_JUSTIFICATION_TEMPLATE"] = updates["MAIL_JUSTIFICATION_TEMPLATE"]
         flash("Configuración guardada y aplicada.", "success")
         return redirect(url_for("admin.config"))
 
@@ -2198,20 +2202,53 @@ def test_email():
     from app.extensions import mail
 
     recipient = request.form.get("recipient", "").strip() or current_user.email
+    template_type = request.form.get("template_type", "smtp")
+    cfg = _read_mail_config()
+
+    if template_type == "welcome":
+        template = cfg.get("MAIL_WELCOME_TEMPLATE", "").strip()
+        if not template:
+            flash("No hay plantilla de bienvenida configurada.", "warning")
+            return redirect(url_for("admin.config", _anchor="section-mail"))
+        body = (template
+                .replace("{nombre}", current_user.full_name)
+                .replace("{email}", recipient)
+                .replace("{contraseña}", "••••••••"))
+        subject = f"[PRUEBA] Bienvenido/a a la aplicación de guardias — {_get_institute_name()}"
+    elif template_type == "justification":
+        template = cfg.get("MAIL_JUSTIFICATION_TEMPLATE", "").strip()
+        if not template:
+            flash("No hay plantilla de justificación configurada.", "warning")
+            return redirect(url_for("admin.config", _anchor="section-mail"))
+        lista_ejemplo = (
+            "  • 01/06/2026 — 1ª hora (08:00–09:00) — Enfermedad\n"
+            "  • 03/06/2026 — 3ª hora (10:00–11:00) — Asunto personal"
+        )
+        body = (template
+                .replace("{nombre}", current_user.full_name)
+                .replace("{lista_faltas}", lista_ejemplo))
+        subject = f"[PRUEBA] Faltas pendientes de justificación — {_get_institute_name()}"
+    else:
+        body = (
+            f"Este es un correo de prueba enviado desde la aplicación de guardias.\n\n"
+            f"Servidor: {current_app.config.get('MAIL_SERVER')}\n"
+            f"Remitente: {current_app.config.get('MAIL_DEFAULT_SENDER')}"
+        )
+        subject = "Correo de prueba — Guardias"
+
     try:
-        msg = Message(
-            subject="Correo de prueba — Guardias",
+        mail.send(Message(
+            subject=subject,
             sender=current_app.config.get("MAIL_DEFAULT_SENDER"),
             recipients=[recipient],
-            body=f"Este es un correo de prueba enviado desde la aplicación de guardias.\n\nServidor: {current_app.config.get('MAIL_SERVER')}\nRemitente: {current_app.config.get('MAIL_DEFAULT_SENDER')}",
-        )
-        mail.send(msg)
+            body=body,
+        ))
         flash(f"Correo enviado correctamente a {recipient}.", "success")
     except Exception as e:
         cause = e.__context__ or e
         flash(f"Error al enviar el correo: {cause}", "danger")
 
-    return redirect(url_for("admin.config"))
+    return redirect(url_for("admin.config", _anchor="section-mail"))
 
 
 # ── Justificación de faltas ───────────────────────────────────────────────────

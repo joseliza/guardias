@@ -336,12 +336,26 @@
         </form>
         <div class="collapse mt-3" id="test-mail-panel">
           <div class="card card-body bg-light">
-            <form method="POST" action="{{ url_for('admin.test_email') }}" class="d-flex gap-2 align-items-end">
-              <div class="flex-grow-1">
-                <label class="form-label mb-1">Destinatario</label>
-                <input type="email" name="recipient" class="form-control" value="{{ current_user.email }}">
+            <form method="POST" action="{{ url_for('admin.test_email') }}">
+              <div class="row g-2 align-items-end">
+                <div class="col-md-5">
+                  <label class="form-label mb-1">Destinatario</label>
+                  <input type="email" name="recipient" class="form-control" value="{{ current_user.email }}">
+                </div>
+                <div class="col-md-5">
+                  <label class="form-label mb-1">Plantilla a probar</label>
+                  <select name="template_type" class="form-select">
+                    <option value="smtp">Solo verificar SMTP (sin plantilla)</option>
+                    <option value="welcome">Plantilla de bienvenida</option>
+                    <option value="justification">Plantilla de justificación de faltas</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-envelope-arrow-up"></i> Enviar
+                  </button>
+                </div>
               </div>
-              <button type="submit" class="btn btn-primary"><i class="bi bi-envelope-arrow-up"></i> Enviar</button>
             </form>
           </div>
         </div>
