@@ -1845,7 +1845,7 @@ def _send_welcome_email(user, password: str = None):
             .replace("{contraseña}", password_text))
 
     mail.send(Message(
-        subject=f"Bienvenido/a a la aplicación de guardias — {current_app.config.get('INSTITUTE_NAME', '')}",
+        subject=f"Bienvenido/a a la aplicación de guardias — {_get_institute_name()}",
         recipients=[user.email],
         sender=current_app.config.get("MAIL_DEFAULT_SENDER"),
         body=body,
@@ -1884,7 +1884,15 @@ GENERAL_DEFAULTS = {
     "presence_detail": "count",
     "teachers_see_all_absences": True,
     "teachers_can_edit_schedule": False,
+    "institute_name": "",
+    "institute_logo": "",
 }
+
+
+def _get_institute_name():
+    """Devuelve el nombre del centro desde la config JSON o el fallback de Flask."""
+    cfg = _read_mail_config().get("GENERAL", {})
+    return cfg.get("institute_name") or current_app.config.get("INSTITUTE_NAME", "IES")
 
 
 def _mail_config_path():
@@ -1996,6 +2004,26 @@ def config_general():
     assign_mode = request.form.get("guard_assign_mode", "scoring")
     if assign_mode not in ("scoring", "count", "random"):
         assign_mode = "scoring"
+
+    # Logo: conservar el existente; reemplazar si se sube uno nuevo
+    institute_logo = current.get("GENERAL", {}).get("institute_logo", "")
+    logo_updated = False
+    if request.form.get("remove_logo"):
+        institute_logo = ""
+        logo_updated = True
+    else:
+        logo_file = request.files.get("institute_logo")
+        if logo_file and logo_file.filename:
+            ext = os.path.splitext(logo_file.filename)[1].lower()
+            if ext in (".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"):
+                logo_filename = f"institute_logo{ext}"
+                logo_path = os.path.join(current_app.root_path, "static", "img", logo_filename)
+                os.makedirs(os.path.dirname(logo_path), exist_ok=True)
+                logo_file.save(logo_path)
+                institute_logo = logo_filename
+                logo_updated = True
+
+    institute_name = request.form.get("institute_name", "").strip()
     current["GENERAL"] = {
         "show_future_absences":        bool(request.form.get("show_future_absences")),
         "auto_justify_extracurricular": bool(request.form.get("auto_justify_extracurricular")),
@@ -2005,8 +2033,16 @@ def config_general():
         "presence_detail":             request.form.get("presence_detail", "count"),
         "teachers_see_all_absences":   bool(request.form.get("teachers_see_all_absences")),
         "teachers_can_edit_schedule":  bool(request.form.get("teachers_can_edit_schedule")),
+        "institute_name":              institute_name,
+        "institute_logo":              institute_logo,
     }
     _write_mail_config(current)
+    if institute_name:
+        current_app.config["INSTITUTE_NAME"] = institute_name
+    if logo_updated and institute_logo:
+        flash("Logo subido correctamente.", "success")
+    elif logo_updated:
+        flash("Logo eliminado.", "info")
     flash("Configuración general guardada.", "success")
     return redirect(url_for("admin.config") + "#section-general")
 
@@ -2202,7 +2238,7 @@ def _send_justification_email_for_teacher(teacher_id: int) -> bool:
 
     try:
         mail.send(Message(
-            subject=f"Faltas pendientes de justificación — {current_app.config.get('INSTITUTE_NAME', '')}",
+            subject=f"Faltas pendientes de justificación — {_get_institute_name()}",
             recipients=[teacher.email],
             sender=current_app.config.get("MAIL_DEFAULT_SENDER"),
             body=body,
@@ -2460,7 +2496,7 @@ def justification_report_pdf():
         desde=desde,
         hasta=hasta,
         rows_data=rows_data,
-        institute_name=current_app.config.get("INSTITUTE_NAME", ""),
+        institute_name=_get_institute_name(),
     )
 
 

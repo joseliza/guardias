@@ -18,6 +18,7 @@ from app.models.activity import ExtraActivity, ExtraActivityTeacher
 from app.utils.points import apply_absence_penalty
 from app.utils.guards import auto_assign_pending_guards
 from app.utils.school_year import get_current_school_year
+from app.routes.admin import _get_institute_name
 
 absences_bp = Blueprint("absences", __name__, url_prefix="/ausencias")
 
@@ -350,7 +351,7 @@ def _append_absence_pdf_page(writer, absence, slot_label, group_name, room_name,
     pdf.add_page()
 
     pdf.set_font("dv", "B", 16)
-    pdf.cell(0, 10, current_app.config.get("INSTITUTE_NAME", ""), ln=True, align="C")
+    pdf.cell(0, 10, _get_institute_name(), ln=True, align="C")
     pdf.set_font("dv", "", 11)
     pdf.cell(0, 7, "Tareas para guardia", ln=True, align="C")
     pdf.ln(4)
@@ -564,7 +565,7 @@ def tasks_pdf(absence_id):
         slot_label=slot_label,
         group_name=group.name if group else "—",
         room_name=schedule_entry.room.name if schedule_entry and schedule_entry.room else "—",
-        institute_name=current_app.config.get("INSTITUTE_NAME", ""),
+        institute_name=_get_institute_name(),
         has_attachments=any(t.attachment for t in tasks),
     )
 
@@ -607,7 +608,7 @@ def slot_pdf(date_str, slot_id):
         target_date=target_date,
         slot_label=slot_label,
         entries=entries,
-        institute_name=current_app.config.get("INSTITUTE_NAME", ""),
+        institute_name=_get_institute_name(),
         has_attachments=any(t.attachment for item in entries for t in item["tasks"]),
         date_str=date_str,
         slot_id=slot_id,

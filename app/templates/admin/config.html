@@ -30,9 +30,68 @@
     </h2>
     <div id="section-general" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
       <div class="accordion-body">
-        <form method="POST" action="{{ url_for('admin.config_general') }}">
+        <form method="POST" action="{{ url_for('admin.config_general') }}" enctype="multipart/form-data">
           <div class="row g-4">
-            <div class="col-md-6">
+
+            <!-- ── Columna izquierda: identidad + presencia ── -->
+            <div class="col-lg-5">
+              <p class="fw-semibold text-muted small text-uppercase mb-3" style="letter-spacing:.05em;">Identidad del centro</p>
+
+              <div class="mb-4">
+                <label class="form-label fw-semibold" for="institute_name">Nombre del centro</label>
+                <input type="text" id="institute_name" name="institute_name" class="form-control"
+                       value="{{ general_config.get('institute_name') or config.INSTITUTE_NAME }}"
+                       placeholder="IES Ciudad Jardín">
+                <div class="form-text">Aparece en el menú, títulos y documentos.</div>
+              </div>
+
+              <div class="mb-4">
+                <label class="form-label fw-semibold">Logo del centro</label>
+                {% if general_config.get('institute_logo') %}
+                <div class="mb-2 d-flex align-items-center gap-3">
+                  <img src="{{ url_for('static', filename='img/' + general_config.get('institute_logo')) }}"
+                       alt="Logo actual" style="height:52px;width:auto;border:1px solid #dee2e6;border-radius:6px;padding:4px;background:#fff;">
+                  <div>
+                    <div class="form-text mb-1">Logo actual. Sube uno nuevo para reemplazarlo.</div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="remove_logo" id="remove_logo" value="1">
+                      <label class="form-check-label text-danger small" for="remove_logo">Eliminar logo actual</label>
+                    </div>
+                  </div>
+                </div>
+                {% endif %}
+                <input type="file" id="institute_logo" name="institute_logo" class="form-control"
+                       accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp">
+                <div id="logo-file-feedback" class="form-text text-success fw-semibold" style="display:none;">
+                  <i class="bi bi-check-circle"></i> <span id="logo-file-name"></span>
+                </div>
+                <div class="form-text">PNG, JPG, SVG o WEBP. Se mostrará a la izquierda del nombre (altura 32 px).</div>
+              </div>
+
+              <p class="fw-semibold text-muted small text-uppercase mb-3 mt-2" style="letter-spacing:.05em;">Usuarios conectados</p>
+              <div class="mb-4">
+                <div class="mb-2">
+                  <label class="form-label small mb-1">Visible para</label>
+                  <select name="presence_visible_to" class="form-select form-select-sm">
+                    <option value="none"       {% if general_config.get('presence_visible_to','none') == 'none'       %}selected{% endif %}>Nadie (desactivado)</option>
+                    <option value="management" {% if general_config.get('presence_visible_to','none') == 'management' %}selected{% endif %}>Solo dirección</option>
+                    <option value="all"        {% if general_config.get('presence_visible_to','none') == 'all'        %}selected{% endif %}>Todos los usuarios</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label small mb-1">Detalle mostrado</label>
+                  <select name="presence_detail" class="form-select form-select-sm">
+                    <option value="count" {% if general_config.get('presence_detail','count') == 'count' %}selected{% endif %}>Solo número de conectados</option>
+                    <option value="names" {% if general_config.get('presence_detail','count') == 'names' %}selected{% endif %}>Número y nombres</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── Columna derecha: opciones de comportamiento ── -->
+            <div class="col-lg-7">
+              <p class="fw-semibold text-muted small text-uppercase mb-3" style="letter-spacing:.05em;">Opciones</p>
+
               <div class="mb-4">
                 <div class="form-check form-switch">
                   <input class="form-check-input" type="checkbox" name="show_future_absences"
@@ -46,6 +105,7 @@
                   </label>
                 </div>
               </div>
+
               <div class="mb-4">
                 <div class="form-check form-switch">
                   <input class="form-check-input" type="checkbox" name="auto_justify_extracurricular"
@@ -60,6 +120,7 @@
                   </label>
                 </div>
               </div>
+
               <div class="mb-4">
                 <div class="form-check form-switch">
                   <input class="form-check-input" type="checkbox" name="blink_guard_alert"
@@ -74,6 +135,7 @@
                   </label>
                 </div>
               </div>
+
               <div class="mb-4">
                 <div class="form-check form-switch">
                   <input class="form-check-input" type="checkbox" name="teachers_see_all_absences"
@@ -88,6 +150,7 @@
                   </label>
                 </div>
               </div>
+
               <div class="mb-4">
                 <div class="form-check form-switch">
                   <input class="form-check-input" type="checkbox" name="teachers_can_edit_schedule"
@@ -102,26 +165,8 @@
                   </label>
                 </div>
               </div>
-            </div>
-            <div class="col-md-6">
-              <div class="mb-4">
-                <label class="form-label fw-semibold">Indicador de usuarios conectados</label>
-                <div class="mb-2">
-                  <label class="form-label text-muted small mb-1">Visible para</label>
-                  <select name="presence_visible_to" class="form-select form-select-sm" style="max-width:280px">
-                    <option value="none"       {% if general_config.get('presence_visible_to','none') == 'none'       %}selected{% endif %}>Nadie (desactivado)</option>
-                    <option value="management" {% if general_config.get('presence_visible_to','none') == 'management' %}selected{% endif %}>Solo dirección</option>
-                    <option value="all"        {% if general_config.get('presence_visible_to','none') == 'all'        %}selected{% endif %}>Todos los usuarios</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="form-label text-muted small mb-1">Detalle mostrado</label>
-                  <select name="presence_detail" class="form-select form-select-sm" style="max-width:280px">
-                    <option value="count" {% if general_config.get('presence_detail','count') == 'count' %}selected{% endif %}>Solo número de conectados</option>
-                    <option value="names" {% if general_config.get('presence_detail','count') == 'names' %}selected{% endif %}>Número y nombres</option>
-                  </select>
-                </div>
-              </div>
+
+
               <div class="mb-4">
                 <label class="form-label fw-semibold">Reparto de guardias</label>
                 <small class="d-block text-muted mb-2">
@@ -165,9 +210,25 @@
                 </div>
               </div>
             </div>
+          </div><!-- /row -->
+
+          <div class="mt-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
           </div>
-          <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
         </form>
+
+        <script>
+        document.getElementById('institute_logo').addEventListener('change', function() {
+          var feedback = document.getElementById('logo-file-feedback');
+          var nameEl   = document.getElementById('logo-file-name');
+          if (this.files && this.files.length > 0) {
+            nameEl.textContent = this.files[0].name + ' listo para subir';
+            feedback.style.display = 'block';
+          } else {
+            feedback.style.display = 'none';
+          }
+        });
+        </script>
       </div>
     </div>
   </div>

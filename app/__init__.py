@@ -138,6 +138,19 @@ def create_app():
         return {"app_version": h}
 
     @app.context_processor
+    def inject_institute_branding():
+        try:
+            from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
+            gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
+            name = gcfg.get("institute_name") or app.config.get("INSTITUTE_NAME", "IES")
+            logo = gcfg.get("institute_logo", "")
+            logo_url = url_for("static", filename=f"img/{logo}") if logo else ""
+            return {"institute_name": name, "institute_logo_url": logo_url}
+        except Exception:
+            pass
+        return {"institute_name": app.config.get("INSTITUTE_NAME", "IES"), "institute_logo_url": ""}
+
+    @app.context_processor
     def inject_presence_cfg():
         try:
             if current_user.is_authenticated:

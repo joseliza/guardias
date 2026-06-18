@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Panel Sala de Profesores – {{ config.INSTITUTE_NAME }}</title>
+  <title>Panel Sala de Profesores – {{ institute_name }}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
@@ -89,7 +89,10 @@
 
   <!-- Topbar -->
   <div id="topbar">
-    <h1><i class="bi bi-shield-check text-primary"></i> {{ config.INSTITUTE_NAME }} — Panel de Guardia</h1>
+    <h1 style="display:flex;align-items:center;gap:10px;">
+      {% if institute_logo_url %}<img src="{{ institute_logo_url }}" alt="" style="height:36px;width:auto;">{% else %}<i class="bi bi-shield-check text-primary"></i>{% endif %}
+      {{ institute_name }} — Panel de Guardia
+    </h1>
     <div id="clock">--:--:--</div>
     <span id="conn-status" title="Tiempo real: desconectado">&#9679;</span>
     <div id="topbar-actions">

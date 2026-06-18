@@ -8,6 +8,7 @@ from datetime import date, datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
 from flask_socketio import emit, join_room
+from app.routes.admin import _get_institute_name
 from app.extensions import db, socketio
 from app.models.chat import ChatMessage, ChatClear
 
@@ -84,7 +85,7 @@ def report_pdf():
         desde=desde,
         hasta=hasta,
         msgs=msgs,
-        institute_name=current_app.config.get("INSTITUTE_NAME", ""),
+        institute_name=_get_institute_name(),
     )
 
 
