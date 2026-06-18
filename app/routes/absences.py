@@ -297,8 +297,9 @@ def create():
             return redirect(url_for("absences.index"))
         return redirect(url_for("absences.create"))
 
+    year = get_current_school_year()
     return render_template("absences/create.html", teachers=teachers, slots=slots,
-                           today=date.today().isoformat())
+                           today=date.today().isoformat(), current_year=year)
 
 
 @absences_bp.route("/horario-json/<int:tid>/<int:day_idx>")

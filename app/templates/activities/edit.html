@@ -29,7 +29,9 @@
         </div>
         <div class="col-md-4">
           <label class="form-label">Fecha</label>
-          <input type="date" name="date" class="form-control" value="{{ activity.date.isoformat() }}" min="{{ today.isoformat() }}" required>
+          <input type="date" name="date" class="form-control" value="{{ activity.date.isoformat() }}"
+                 min="{{ today.isoformat() }}"
+                 {% if current_year %}max="{{ current_year.end_date.isoformat() }}"{% endif %} required>
         </div>
         <div class="col-12">
           <label class="form-label">Descripción</label>

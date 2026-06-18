@@ -283,13 +283,18 @@
           <div class="row g-2 mb-3">
             <div class="col-6">
               <label class="form-label small fw-semibold mb-1">Desde</label>
-              <input type="date" name="start_date" class="form-control form-control-sm" required>
+              <input type="date" name="start_date" class="form-control form-control-sm" required
+                     {% if current_year %}min="{{ current_year.start_date.isoformat() }}" max="{{ current_year.end_date.isoformat() }}"{% endif %}>
             </div>
             <div class="col-6">
               <label class="form-label small fw-semibold mb-1">Hasta</label>
-              <input type="date" name="end_date" class="form-control form-control-sm" required>
+              <input type="date" name="end_date" class="form-control form-control-sm" required
+                     {% if current_year %}min="{{ current_year.start_date.isoformat() }}" max="{{ current_year.end_date.isoformat() }}"{% endif %}>
             </div>
           </div>
+          {% if current_year %}
+          <p class="small text-muted mb-2"><i class="bi bi-info-circle"></i> Las fechas deben estar dentro del curso activo ({{ current_year.start_date | fecha_es('%d/%m/%Y') }} – {{ current_year.end_date | fecha_es('%d/%m/%Y') }}).</p>
+          {% endif %}
           <div class="mb-3">
             <label class="form-label small fw-semibold mb-1">Tramos disponibles para guardia</label>
             <small class="d-block text-muted mb-1">Selecciona los tramos con clase que pasarán a estar disponibles para cubrir guardias.</small>
@@ -313,6 +318,7 @@
           <div class="mt-3 d-grid">
             <button type="submit" class="btn btn-primary btn-sm" id="availability-submit-btn"><i class="bi bi-check-lg"></i> Crear periodo</button>
           </div>
+          <p class="small text-muted mt-2 mb-0"><i class="bi bi-exclamation-triangle"></i> Los periodos no pueden solaparse entre sí.</p>
         </form>
       </div>
     </div>

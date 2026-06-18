@@ -1744,8 +1744,23 @@ def availability_create():
         return redirect(url_for("admin.schedules", teacher_id=teacher_id))
 
     from app.utils.school_year import get_current_school_year
+    year = get_current_school_year()
+    if start_date < year.start_date or end_date > year.end_date:
+        flash("Las fechas deben estar dentro del curso activo.", "warning")
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+    overlap = AvailabilityPeriod.query.filter(
+        AvailabilityPeriod.teacher_id == teacher_id,
+        AvailabilityPeriod.school_year_id == year.id,
+        AvailabilityPeriod.start_date <= end_date,
+        AvailabilityPeriod.end_date >= start_date,
+    ).first()
+    if overlap:
+        flash("El periodo se solapa con otro periodo de disponibilidad ya registrado.", "warning")
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
     period = AvailabilityPeriod(
-        school_year_id=get_current_school_year().id,
+        school_year_id=year.id,
         teacher_id=teacher_id,
         start_date=start_date,
         end_date=end_date,
@@ -1788,6 +1803,23 @@ def availability_edit(period_id):
 
     if end_date < start_date:
         flash("La fecha de fin no puede ser anterior a la de inicio.", "warning")
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+    from app.utils.school_year import get_current_school_year
+    year = get_current_school_year()
+    if start_date < year.start_date or end_date > year.end_date:
+        flash("Las fechas deben estar dentro del curso activo.", "warning")
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+    overlap = AvailabilityPeriod.query.filter(
+        AvailabilityPeriod.id != period_id,
+        AvailabilityPeriod.teacher_id == teacher_id,
+        AvailabilityPeriod.school_year_id == year.id,
+        AvailabilityPeriod.start_date <= end_date,
+        AvailabilityPeriod.end_date >= start_date,
+    ).first()
+    if overlap:
+        flash("El periodo se solapa con otro periodo de disponibilidad ya registrado.", "warning")
         return redirect(url_for("admin.schedules", teacher_id=teacher_id))
 
     period.start_date = start_date

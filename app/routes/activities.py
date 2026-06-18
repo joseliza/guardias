@@ -144,7 +144,7 @@ def create():
         return redirect(url_for("activities.index"))
 
     return render_template("activities/create.html", teachers=teachers,
-                           groups=groups, slots=slots, today=datetime.now().date())
+                           groups=groups, slots=slots, today=datetime.now().date(), current_year=year)
 
 
 @activities_bp.route("/<int:aid>/editar", methods=["GET", "POST"])
@@ -154,7 +154,8 @@ def edit(aid):
         return redirect(url_for("dashboard.index"))
 
     activity = ExtraActivity.query.get_or_404(aid)
-    from app.utils.school_year import get_year_groups
+    from app.utils.school_year import get_year_groups, get_current_school_year
+    current_year = get_current_school_year()
     year_id = activity.school_year_id
     teachers_q = User.query.filter_by(active=True)
     if year_id:
@@ -266,7 +267,7 @@ def edit(aid):
 
     return render_template("activities/edit.html", activity=activity,
                            teachers=teachers, groups=groups, slots=slots,
-                           is_past=is_past, today=_date.today())
+                           is_past=is_past, today=_date.today(), current_year=current_year)
 
 
 @activities_bp.route("/<int:aid>/eliminar", methods=["POST"])

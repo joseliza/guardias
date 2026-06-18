@@ -30,7 +30,8 @@
       <div class="mb-3">
         <label class="form-label">Fecha</label>
         <input type="date" name="date" id="absence-date" class="form-control"
-               value="{{ today }}" min="{{ today }}" required>
+               value="{{ today }}" min="{{ today }}"
+               {% if current_year %}max="{{ current_year.end_date.isoformat() }}"{% endif %} required>
       </div>
 
       <div class="mb-3">
