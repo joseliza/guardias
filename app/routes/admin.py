@@ -1948,6 +1948,9 @@ def teacher_send_welcome(tid):
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     teacher = User.query.get_or_404(tid)
+    if not teacher.active:
+        flash(f"{teacher.full_name} está inactivo/a. No se envían correos a profesores inactivos.", "danger")
+        return redirect(url_for("admin.teacher_edit", tid=tid))
     cfg = _read_mail_config()
     if not cfg.get("MAIL_WELCOME_TEMPLATE", "").strip():
         flash("No hay plantilla de bienvenida configurada. "
@@ -1982,7 +1985,9 @@ def teacher_bulk_welcome():
                    .all())
     else:
         ids = [int(i) for i in request.form.getlist("ids[]") if i.isdigit()]
-        targets = User.query.filter(User.id.in_(ids)).all() if ids else []
+        targets = (User.query
+                   .filter(User.id.in_(ids), User.active == True)
+                   .all()) if ids else []
 
     if not targets:
         flash("No hay profesores a los que enviar el correo.", "warning")
@@ -2437,6 +2442,10 @@ def send_justification_email_single(absence_id):
     absence = Absence.query.get_or_404(absence_id)
     teacher = absence.teacher
 
+    if not teacher.active:
+        flash(f"{teacher.full_name} está inactivo/a. No se envían correos a profesores inactivos.", "danger")
+        return redirect(url_for("admin.justification", teacher_id=absence.teacher_id))
+
     if not teacher.receive_emails:
         flash(f"Aviso: {teacher.full_name} tiene desactivado el envío automático de correos. "
               "El correo se envía igualmente por ser manual.", "warning")
@@ -2512,6 +2521,10 @@ def send_justification_emails():
     sent = skipped = 0
     for tid in teacher_ids:
         t = User.query.get(tid)
+        if t and not t.active:
+            flash(f"{t.full_name} está inactivo/a. No se envían correos a profesores inactivos.", "danger")
+            skipped += 1
+            continue
         if t and not t.receive_emails:
             flash(f"Aviso: {t.full_name} tiene desactivado el envío automático de correos. "
                   "El correo se envía igualmente por ser manual.", "warning")

@@ -129,7 +129,7 @@
           <td>{{ t.email }}</td>
           <td><span class="badge bg-secondary">{{ t.role }}</span></td>
           {% if points_enabled %}<td>{{ '—' if t.role in ('management', 'display') else t.points }}</td>{% endif %}
-          <td><span class="badge bg-{{ 'success' if t.active else 'warning text-dark' }}">{{ 'Sí' if t.active else 'Baja' }}</span></td>
+          <td><span class="badge bg-{{ 'success' if t.active else 'danger' }}">{{ 'Sí' if t.active else 'No' }}</span></td>
           <td>
             {% if t.substitutes_id and t.substitutes %}
               {# Muestra cadena completa: A → B → C #}
