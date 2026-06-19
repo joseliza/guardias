@@ -35,10 +35,10 @@
     <span id="display-nav-clock" class="text-white fw-bold mx-auto" style="font-size:1.5rem;font-variant-numeric:tabular-nums;letter-spacing:.04em;">--:--:--</span>
     <div class="d-flex gap-2">
       <a href="{{ url_for('admin.schedules') }}" class="btn btn-outline-light btn-sm">
-        <i class="bi bi-calendar3"></i> Horarios profesores
+        <i class="bi bi-calendar3"></i> Horarios de profesores
       </a>
       <a href="{{ url_for('admin.group_schedules') }}" class="btn btn-outline-light btn-sm">
-        <i class="bi bi-calendar3-week"></i> Grupos
+        <i class="bi bi-calendar3-week"></i> Horarios de grupos
       </a>
       {% if pantalla_mode %}
       <form method="POST" action="{{ url_for('impersonate.leave_display') }}" class="m-0">
@@ -110,7 +110,7 @@
             <li><a class="dropdown-item" href="{{ url_for('admin.groups') }}">Grupos</a></li>
             <li><a class="dropdown-item" href="{{ url_for('admin.subjects') }}">Materias</a></li>
             <li><a class="dropdown-item" href="{{ url_for('admin.rooms') }}">Aulas</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin.schedules') }}"><i class="bi bi-calendar3"></i> Horarios profesores</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('admin.schedules') }}"><i class="bi bi-calendar3"></i> Horarios de profesores</a></li>
             <li><a class="dropdown-item" href="{{ url_for('admin.group_schedules') }}"><i class="bi bi-calendar3-week"></i> Horarios de grupos</a></li>
             <li><hr class="dropdown-divider"></li>
             <li>
