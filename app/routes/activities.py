@@ -92,6 +92,7 @@ def create():
         auto_justify = _gcfg.get("auto_justify_extracurricular", False)
 
         day_idx = activity_date.weekday()
+        absence_errors = []
         for tid in teacher_ids:
             at = ExtraActivityTeacher(activity_id=activity.id, teacher_id=int(tid))
             db.session.add(at)
@@ -110,34 +111,48 @@ def create():
                     teacher_id=int(tid), date=activity_date, slot_id=int(slot_id)
                 ).filter(Absence.status != "returned").first()
                 if not existing:
-                    absence = Absence(
-                        teacher_id=int(tid),
-                        date=activity_date,
-                        slot_id=int(slot_id),
-                        reason=f"Actividad extraescolar: {name}",
-                        reported_by_role="extracurricular",
-                        reported_by_id=current_user.id,
-                        justified=auto_justify,
-                        penalty_points=0.0,
-                    )
-                    db.session.add(absence)
-                    db.session.flush()
-                    guard = Guard(
-                        absence_id=absence.id,
-                        date=activity_date,
-                        slot_id=int(slot_id),
-                        group_id=group_id,
-                        status="pending",
-                    )
-                    db.session.add(guard)
-
+                    try:
+                        absence = Absence(
+                            teacher_id=int(tid),
+                            date=activity_date,
+                            slot_id=int(slot_id),
+                            reason=f"Actividad extraescolar: {name}",
+                            reported_by_role="extracurricular",
+                            reported_by_id=current_user.id,
+                            justified=auto_justify,
+                            penalty_points=0.0,
+                        )
+                        db.session.add(absence)
+                        db.session.flush()
+                        guard = Guard(
+                            absence_id=absence.id,
+                            date=activity_date,
+                            slot_id=int(slot_id),
+                            group_id=group_id,
+                            status="pending",
+                        )
+                        db.session.add(guard)
+                    except Exception as exc:
+                        db.session.rollback()
+                        current_app.logger.error(
+                            "Error creando ausencia extraescolar: actividad=%s teacher=%s slot=%s: %s",
+                            name, tid, slot_id, exc,
+                        )
+                        absence_errors.append((tid, slot_id))
 
         db.session.commit()
 
         # Email a acompañantes
         _send_task_request_emails(activity)
 
-        flash("Actividad registrada y emails enviados a los acompañantes.", "success")
+        if absence_errors:
+            flash(
+                f"Actividad registrada, pero no se pudieron generar {len(absence_errors)} "
+                f"ausencia(s). Revisa el log del servidor.",
+                "warning",
+            )
+        else:
+            flash("Actividad registrada y emails enviados a los acompañantes.", "success")
         return redirect(url_for("activities.index"))
 
     return render_template("activities/create.html", teachers=teachers,
@@ -223,6 +238,7 @@ def edit(aid):
 
         new_day_idx = new_date.weekday()
         ExtraActivityTeacher.query.filter_by(activity_id=aid).delete(synchronize_session=False)
+        absence_errors = []
         for tid in new_teacher_ids:
             db.session.add(ExtraActivityTeacher(activity_id=aid, teacher_id=tid))
             for slot_id in new_slot_ids:
@@ -240,23 +256,38 @@ def edit(aid):
                     teacher_id=tid, date=new_date, slot_id=int(slot_id)
                 ).filter(Absence.status != "returned").first()
                 if not existing:
-                    absence = Absence(
-                        teacher_id=tid, date=new_date, slot_id=int(slot_id),
-                        reason=f"Actividad extraescolar: {request.form['name']}",
-                        reported_by_role="extracurricular",
-                        reported_by_id=current_user.id,
-                        justified=auto_justify,
-                        penalty_points=0.0,
-                    )
-                    db.session.add(absence)
-                    db.session.flush()
-                    db.session.add(Guard(
-                        absence_id=absence.id, date=new_date,
-                        slot_id=int(slot_id), group_id=group_id, status="pending"
-                    ))
+                    try:
+                        absence = Absence(
+                            teacher_id=tid, date=new_date, slot_id=int(slot_id),
+                            reason=f"Actividad extraescolar: {request.form['name']}",
+                            reported_by_role="extracurricular",
+                            reported_by_id=current_user.id,
+                            justified=auto_justify,
+                            penalty_points=0.0,
+                        )
+                        db.session.add(absence)
+                        db.session.flush()
+                        db.session.add(Guard(
+                            absence_id=absence.id, date=new_date,
+                            slot_id=int(slot_id), group_id=group_id, status="pending"
+                        ))
+                    except Exception as exc:
+                        db.session.rollback()
+                        current_app.logger.error(
+                            "Error creando ausencia extraescolar (edit): actividad=%s teacher=%s slot=%s: %s",
+                            aid, tid, slot_id, exc,
+                        )
+                        absence_errors.append((tid, slot_id))
 
         db.session.commit()
-        flash("Actividad actualizada.", "success")
+        if absence_errors:
+            flash(
+                f"Actividad actualizada, pero no se pudieron generar {len(absence_errors)} "
+                f"ausencia(s). Revisa el log del servidor.",
+                "warning",
+            )
+        else:
+            flash("Actividad actualizada.", "success")
         return redirect(url_for("activities.index"))
 
     return render_template("activities/edit.html", activity=activity,
