@@ -65,9 +65,6 @@ def create():
             flash(f"La fecha debe estar dentro del curso {year.name} "
                   f"({year.start_date.strftime('%d/%m/%Y')} - {year.end_date.strftime('%d/%m/%Y')}).", "danger")
             return redirect(url_for("activities.create"))
-        if not group_ids:
-            flash("Debes seleccionar al menos un grupo participante.", "danger")
-            return redirect(url_for("activities.create"))
         if not teacher_ids:
             flash("Debes seleccionar al menos un profesor acompañante.", "danger")
             return redirect(url_for("activities.create"))
@@ -185,9 +182,6 @@ def edit(aid):
         if not (_year.start_date <= new_date <= _year.end_date):
             flash(f"La fecha debe estar dentro del curso {_year.name} "
                   f"({_year.start_date.strftime('%d/%m/%Y')} - {_year.end_date.strftime('%d/%m/%Y')}).", "danger")
-            return redirect(url_for("activities.edit", aid=aid))
-        if not new_group_ids:
-            flash("Debes seleccionar al menos un grupo participante.", "danger")
             return redirect(url_for("activities.edit", aid=aid))
         if not new_teacher_ids_list:
             flash("Debes seleccionar al menos un profesor acompañante.", "danger")

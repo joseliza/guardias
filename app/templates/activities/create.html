@@ -200,11 +200,6 @@ makeAutocomplete('teacher-search', 'teacher-search-clear', 'teacher-suggestions'
 
 // ── Validación antes de enviar ────────────────────────────────────────────────
 document.querySelector('form').addEventListener('submit', function(e) {
-  if (!selGroups.size) {
-    e.preventDefault();
-    alert('Debes seleccionar al menos un grupo participante.');
-    return;
-  }
   if (!selTeachers.size) {
     e.preventDefault();
     alert('Debes seleccionar al menos un profesor acompañante.');

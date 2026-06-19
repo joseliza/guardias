@@ -239,11 +239,6 @@ addTeacher({{ at.teacher_id }}, {{ at.teacher.full_name|tojson }});
 {% if not is_past %}
 // ── Validación antes de enviar ────────────────────────────────────────────────
 document.querySelector('form').addEventListener('submit', function(e) {
-  if (!selGroups.size) {
-    e.preventDefault();
-    alert('Debes seleccionar al menos un grupo participante.');
-    return;
-  }
   if (!selTeachers.size) {
     e.preventDefault();
     alert('Debes seleccionar al menos un profesor acompañante.');
