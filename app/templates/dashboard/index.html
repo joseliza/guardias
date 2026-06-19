@@ -194,7 +194,16 @@
                 <span class="badge bg-secondary ms-1"><i class="bi bi-door-open"></i> {{ absence_rooms[absence.id] }}</span>
                 {% endif %}
               </td>
-              <td><small class="text-muted">{{ absence.reason or '—' }}</small></td>
+              <td>
+                {% if (current_user.is_management or is_display_user) and is_editable %}
+                <span class="editable-comment text-muted small"
+                      data-absence-id="{{ absence.id }}"
+                      title="Clic para editar comentario"
+                      style="cursor:pointer;border-bottom:1px dashed #adb5bd;">{{ absence.reason or '—' }}</span>
+                {% else %}
+                <small class="text-muted">{{ absence.reason or '—' }}</small>
+                {% endif %}
+              </td>
               <td class="text-center">
                 {% if absence.tasks.count() %}
                 <i class="bi bi-check2-circle text-success fs-5" title="{{ absence.tasks.count() }} tarea(s) registrada(s)"></i>
@@ -277,6 +286,15 @@
                      class="btn btn-sm {% if guard.status == 'pending' %}btn-outline-danger{% else %}btn-outline-secondary{% endif %}">
                     <i class="bi bi-person-plus"></i> {% if guard.status == 'covered' %}Reasignar{% else %}Asignar{% endif %}
                   </a>
+                  {% if guard.status == 'pending' and (current_user.is_management or is_display_user) %}
+                  <form method="POST" action="{{ url_for('guards.mark_no_cover', guard_id=guard.id) }}"
+                        onsubmit="return confirm('¿Confirmas que esta guardia no necesita cobertura?')">
+                    <input type="hidden" name="back_fecha" value="{{ target_date.isoformat() }}">
+                    <button class="btn btn-sm btn-outline-secondary w-100">
+                      <i class="bi bi-slash-circle"></i> Sin cobertura
+                    </button>
+                  </form>
+                  {% endif %}
                   {% endif %}
                   {% if absence.status != 'returned' and s.id not in past_slot_ids %}
                   <form method="POST" action="{{ url_for('absences.mark_returned', absence_id=absence.id) }}"
@@ -330,7 +348,7 @@
                 <span class="badge bg-warning text-dark" title="Ocupado — cubriendo una ausencia">
                   <i class="bi bi-person-fill-exclamation"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
-                {% elif t.id in absent_teacher_ids_today %}
+                {% elif t.id in item.absent_slot_ids %}
                 <span class="badge bg-secondary" title="Ausente — no disponible en el centro">
                   <i class="bi bi-person-dash"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
                 </span>
@@ -887,6 +905,47 @@ document.querySelectorAll('.quick-assign-btn').forEach(btn => {
   }
 
   document.querySelectorAll('.guard-records-list').forEach(attachRecordSort);
+})();
+
+// ── Edición inline de comentarios de ausencia ────────────────────────────────
+(function() {
+  document.querySelectorAll('.editable-comment').forEach(function(span) {
+    span.addEventListener('click', function() {
+      if (span.querySelector('input')) return;
+      const absenceId = span.dataset.absenceId;
+      const current = span.textContent.trim() === '—' ? '' : span.textContent.trim();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = current;
+      input.className = 'form-control form-control-sm';
+      input.style.minWidth = '160px';
+      span.textContent = '';
+      span.appendChild(input);
+      input.focus();
+
+      function save() {
+        const text = input.value.trim();
+        fetch('/ausencias/' + absenceId + '/comentario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        })
+        .then(r => r.json())
+        .then(data => {
+          span.textContent = text || '—';
+        })
+        .catch(() => {
+          span.textContent = current || '—';
+        });
+      }
+
+      input.addEventListener('blur', save);
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { span.textContent = current || '—'; }
+      });
+    });
+  });
 })();
 {% endif %}
 

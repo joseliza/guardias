@@ -808,6 +808,20 @@ def mark_returned(absence_id):
     return _redirect_back()
 
 
+@absences_bp.route("/<int:absence_id>/comentario", methods=["POST"])
+@login_required
+def edit_comment(absence_id):
+    """Edición rápida del motivo/comentario de una ausencia (AJAX, solo management/display)."""
+    from flask import jsonify
+    if current_user.role not in ("management", "display"):
+        return jsonify({"ok": False}), 403
+    absence = Absence.query.get_or_404(absence_id)
+    data = request.get_json(silent=True) or {}
+    absence.reason = data.get("text", "").strip() or None
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 @absences_bp.route("/<int:absence_id>/deshacer-reincorporacion", methods=["POST"])
 @login_required
 def unmark_returned(absence_id):

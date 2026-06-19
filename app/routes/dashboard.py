@@ -76,9 +76,11 @@ def index():
                         ids.add(ag.group_id)
         return ids
 
-    # Profesores ausentes en algún tramo de hoy (aunque su ausencia no cubra
-    # el tramo de guardia oficial): se muestran en gris en el pool de guardia.
-    absent_teacher_ids_today = {a.teacher_id for a in day_absences if a.status != "returned"}
+    # Profesores ausentes por tramo: {slot_id: {teacher_id, ...}}
+    absent_ids_by_slot = {}
+    for _a in day_absences:
+        if _a.status != "returned":
+            absent_ids_by_slot.setdefault(_a.slot_id, set()).add(_a.teacher_id)
 
     absences_by_slot = {}
     guards_by_slot = {}
@@ -152,12 +154,10 @@ def index():
                             if User.query.get(tid)]
         extra_teachers = sorted(extra_candidates, key=fairness_sort_key(extra_candidates))
 
-        # Profesores con guardia oficial en este tramo pero con alguna
-        # ausencia activa hoy (p. ej. ausencia en su propio tramo de guardia
-        # GUARD, o en cualquier otro tramo del día sin reincorporación): se
-        # muestran en gris en el pool de guardia, no como disponibles.
+        # Profesores con guardia oficial en este tramo pero ausentes en él:
+        # se muestran en gris en el pool de guardia, no como disponibles.
         absent_duty_teachers = sorted(
-            [User.query.get(tid) for tid in (guard_entry_ids & absent_teacher_ids_today)
+            [User.query.get(tid) for tid in (guard_entry_ids & absent_ids_by_slot.get(sid, set()))
              if User.query.get(tid)],
             key=lambda t: t.surname,
         )
@@ -231,6 +231,7 @@ def index():
             "pending_guards_info": pending_guards_info,
             "all_guards_info": all_guards_info,
             "activity_group_ids": activity_gids,
+            "absent_slot_ids": absent_ids_by_slot.get(sid, set()),
         })
 
     # Chat: mensajes del día visualizado (tras el último borrado de ese día)
@@ -315,5 +316,5 @@ def index():
         unmarkable_slot_ids=unmarkable_slot_ids,
         past_slot_ids=past_slot_ids,
         is_display_user=is_display_user,
-        absent_teacher_ids_today=absent_teacher_ids_today,
+        absent_ids_by_slot=absent_ids_by_slot,
     )

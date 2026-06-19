@@ -66,12 +66,10 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
     day_idx = target_date.weekday()
     year_id = get_current_school_year().id
 
-    # Profesores con alguna ausencia activa (no reincorporada) ese día, en
-    # cualquier tramo: no se consideran disponibles para guardia en ningún
-    # tramo hasta que se registre su reincorporación.
+    # Profesores con ausencia activa en este tramo concreto (no reincorporada).
     absent_ids = {
         row[0] for row in Absence.query
-        .filter(Absence.date == target_date, Absence.status != "returned")
+        .filter(Absence.date == target_date, Absence.slot_id == slot_id, Absence.status != "returned")
         .with_entities(Absence.teacher_id)
         .all()
     }

@@ -317,6 +317,20 @@ def auto_assign_slot(date_str, slot_id):
     return redirect(url_for("dashboard.index", fecha=target_date.isoformat()) + f"#slot-{slot_id}")
 
 
+@guards_bp.route("/<int:guard_id>/sin-cobertura", methods=["POST"])
+@login_required
+def mark_no_cover(guard_id):
+    """Marca la guardia como cubierta sin asignar profesor (no necesita cobertura)."""
+    if current_user.role not in ("management", "display"):
+        flash("Sin permiso.", "danger")
+        return redirect(url_for("dashboard.index"))
+    guard = Guard.query.get_or_404(guard_id)
+    guard.status = "covered"
+    db.session.commit()
+    flash("Guardia marcada como no necesita cobertura.", "success")
+    return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()) + f"#slot-{guard.slot_id}")
+
+
 @guards_bp.route("/registro/<int:record_id>/eliminar", methods=["POST"])
 @login_required
 def remove_record(record_id):
