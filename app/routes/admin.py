@@ -3378,6 +3378,61 @@ def dev_force_logout():
     return redirect(url_for("auth.logout"))
 
 
+@admin_bp.route("/desarrollo/ausencias/eliminar", methods=["POST"])
+@login_required
+def dev_absence_delete():
+    if not _require_developer():
+        return redirect(url_for("dashboard.index"))
+
+    from app.models.absence import Absence
+    from app.models.guard import Guard, GuardRecord
+    from app.models.task import Task
+    from app.utils.points import points_system_enabled
+    from app.models.user import User as _User
+
+    try:
+        aid = int(request.form.get("aid", ""))
+    except (ValueError, TypeError):
+        flash("ID de ausencia no válido.", "danger")
+        return redirect(url_for("admin.config") + "#section-dev")
+
+    absence = Absence.query.get(aid)
+    if not absence:
+        flash(f"No existe ninguna ausencia con ID {aid}.", "danger")
+        return redirect(url_for("admin.config") + "#section-dev")
+
+    # Revertir penalización de puntos del profesor ausente
+    if points_system_enabled():
+        teacher = _User.query.get(absence.teacher_id)
+        if teacher and teacher.role not in ("management", "display"):
+            teacher.points = round(teacher.points - absence.penalty_points, 2)
+
+    # Recopilar adjuntos para borrado en disco
+    task_attachments = [
+        t.attachment for t in Task.query.filter_by(absence_id=aid)
+        .with_entities(Task.attachment).all()
+    ]
+    Task.query.filter_by(absence_id=aid).delete(synchronize_session=False)
+
+    # Guardias asociadas: revertir puntos de los profesores que cubrieron y eliminar registros
+    guards = Guard.query.filter_by(absence_id=aid).all()
+    for guard in guards:
+        if points_system_enabled():
+            for rec in guard.records.all():
+                covering = _User.query.get(rec.teacher_id)
+                if covering and covering.role not in ("management", "display"):
+                    covering.points = round(covering.points - rec.points_awarded, 2)
+        GuardRecord.query.filter_by(guard_id=guard.id).delete(synchronize_session=False)
+    Guard.query.filter_by(absence_id=aid).delete(synchronize_session=False)
+
+    db.session.delete(absence)
+    db.session.commit()
+    _delete_task_attachments(task_attachments)
+
+    flash(f"Ausencia #{aid} eliminada. Guardias, registros y puntos actualizados.", "success")
+    return redirect(url_for("admin.config") + "#section-dev")
+
+
 @admin_bp.route("/desarrollo/reset-bd", methods=["POST"])
 @login_required
 def dev_reset_database():

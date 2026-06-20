@@ -872,6 +872,26 @@
 
         <hr class="my-4">
 
+        {# ── Eliminar ausencia ── #}
+        <h6 class="fw-semibold mb-2"><i class="bi bi-calendar-x me-1"></i> Eliminar ausencia</h6>
+        <p class="text-muted small">
+          Elimina una ausencia y todas las guardias, registros de guardia y tareas asociadas.
+          Los puntos del profesor ausente y de los profesores que cubrieron se ajustan automáticamente.
+        </p>
+        <form method="POST" action="{{ url_for('admin.dev_absence_delete') }}"
+              onsubmit="return confirmAbsenceDelete()">
+          <div class="mb-2">
+            <label class="form-label">ID de la ausencia</label>
+            <input type="number" name="aid" id="dev-absence-id" class="form-control"
+                   style="max-width:150px" min="1" required placeholder="ej. 42">
+          </div>
+          <button type="submit" class="btn btn-outline-danger">
+            <i class="bi bi-trash3"></i> Eliminar ausencia
+          </button>
+        </form>
+
+        <hr class="my-4">
+
         {# ── Restaurar copia de seguridad ── #}
         <h6 class="fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-octagon me-1"></i> Restaurar copia de seguridad</h6>
         <div class="alert alert-danger py-2 px-3 small">
@@ -1041,6 +1061,12 @@ function confirmResetTeacher() {
   if (!confirm(`¿Resetear los puntos de ${name} a 0?\n\nEsta acción no se puede deshacer.`)) return false;
   document.getElementById('reset-teacher-form').action = sel.value;
   return true;
+}
+
+function confirmAbsenceDelete() {
+  const id = document.getElementById('dev-absence-id').value;
+  if (!id) { alert('Introduce el ID de la ausencia.'); return false; }
+  return confirm(`¿Eliminar la ausencia #${id} y todas sus guardias, registros y tareas?\n\nEsta acción no se puede deshacer.`);
 }
 
 function confirmResetDatabase() {
