@@ -895,11 +895,10 @@ def delete_bulk():
             if teacher and teacher.role not in ("management", "display"):
                 teacher.points = round(teacher.points - absence.penalty_points, 2)
 
-        task_attachments += [
-            t.attachment for t in Task.query.filter_by(absence_id=aid)
-            .with_entities(Task.attachment).all()
-        ]
-        Task.query.filter_by(absence_id=aid).delete(synchronize_session=False)
+        tasks = Task.query.filter_by(absence_id=aid).all()
+        task_attachments += [t.attachment for t in tasks if t.attachment]
+        for t in tasks:
+            db.session.delete(t)
 
         guards = Guard.query.filter_by(absence_id=aid).all()
         for guard in guards:

@@ -275,15 +275,21 @@ document.getElementById('btn-delete').addEventListener('click', async function()
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids }),
     });
-    const data = await res.json();
-    if (data.ok) {
-      showAlert(data.message + ' correctamente.', 'success');
+    if (!res.ok) {
+      showAlert('Error del servidor al eliminar. Comprobando estado actual...', 'warning');
       await doSearch();
     } else {
-      showAlert(data.error || 'Error al eliminar.', 'danger');
+      const data = await res.json();
+      if (data.ok) {
+        showAlert(data.message + ' correctamente.', 'success');
+      } else {
+        showAlert(data.error || 'Error al eliminar.', 'danger');
+      }
+      await doSearch();
     }
   } catch(e) {
-    showAlert('Error de red al eliminar.', 'danger');
+    showAlert('Error de red. Comprobando estado actual...', 'warning');
+    await doSearch();
   } finally {
     this.innerHTML = '<i class="bi bi-trash3"></i> Eliminar seleccionadas (<span id="selected-count">0</span>)';
     updateDeleteButton();
