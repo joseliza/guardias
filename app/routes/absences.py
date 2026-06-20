@@ -873,15 +873,15 @@ def delete_search_json():
 def delete_bulk():
     from app.routes.admin import _require_developer, _delete_task_attachments
     if not _require_developer():
-        return redirect(url_for("dashboard.index"))
+        return jsonify({"ok": False, "error": "Sin acceso"}), 403
 
     from app.models.guard import Guard, GuardRecord
     from app.utils.points import points_system_enabled
 
-    ids = request.form.getlist("absence_ids", type=int)
+    data = request.get_json(silent=True) or {}
+    ids = [int(i) for i in data.get("ids", []) if str(i).isdigit()]
     if not ids:
-        flash("No has seleccionado ninguna ausencia.", "warning")
-        return redirect(url_for("absences.delete_search"))
+        return jsonify({"ok": False, "error": "Sin selección"}), 400
 
     deleted = 0
     task_attachments = []
@@ -917,8 +917,8 @@ def delete_bulk():
     db.session.commit()
     _delete_task_attachments(task_attachments)
 
-    flash(f"{'Ausencia eliminada' if deleted == 1 else f'{deleted} ausencias eliminadas'} correctamente.", "success")
-    return redirect(url_for("absences.delete_search"))
+    msg = "Ausencia eliminada" if deleted == 1 else f"{deleted} ausencias eliminadas"
+    return jsonify({"ok": True, "deleted": deleted, "message": msg})
 
 
 @absences_bp.route("/<int:absence_id>/comentario", methods=["POST"])

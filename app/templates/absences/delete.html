@@ -9,7 +9,9 @@
   </div>
 </div>
 
-<div class="card mt-3 mb-3">
+<div id="page-alert" class="mt-3 d-none"></div>
+
+<div class="card mt-2 mb-3">
   <div class="card-body">
     <p class="text-muted small mb-3">
       Busca ausencias por profesor o por fecha. Selecciona las que quieras eliminar y pulsa <strong>Eliminar seleccionadas</strong>.
@@ -58,30 +60,29 @@
         </div>
       </div>
 
-      <form method="POST" action="{{ url_for('absences.delete_bulk') }}" id="delete-form">
-        <div class="table-responsive">
-          <table class="table table-sm table-hover align-middle" id="results-table">
-            <thead class="table-light">
-              <tr>
-                <th style="width:2.5rem"></th>
-                <th>Fecha</th>
-                <th>Tramo</th>
-                <th>Profesor/a</th>
-                <th>Estado</th>
-                <th>Comentario</th>
-                <th>Guardia</th>
-              </tr>
-            </thead>
-            <tbody id="results-body"></tbody>
-          </table>
-        </div>
+      {# js-internal-scroll excluye esta tabla del sticky-thead automático de base.html #}
+      <div class="js-internal-scroll" style="overflow-x:auto">
+        <table class="table table-sm table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th style="width:2.5rem"></th>
+              <th>Fecha</th>
+              <th>Tramo</th>
+              <th>Profesor/a</th>
+              <th>Estado</th>
+              <th>Comentario</th>
+              <th>Guardia</th>
+            </tr>
+          </thead>
+          <tbody id="results-body"></tbody>
+        </table>
+      </div>
 
-        <div class="mt-3">
-          <button type="submit" id="btn-delete" class="btn btn-danger" disabled>
-            <i class="bi bi-trash3"></i> Eliminar seleccionadas (<span id="selected-count">0</span>)
-          </button>
-        </div>
-      </form>
+      <div class="mt-3">
+        <button type="button" id="btn-delete" class="btn btn-danger" disabled>
+          <i class="bi bi-trash3"></i> Eliminar seleccionadas (<span id="selected-count">0</span>)
+        </button>
+      </div>
     </div>
 
     <div id="no-results" class="d-none text-muted text-center py-4">
@@ -100,12 +101,13 @@
 {% block scripts %}
 <script>
 const searchUrl = "{{ url_for('absences.delete_search_json') }}";
+const deleteUrl = "{{ url_for('absences.delete_bulk') }}";
+
 const teacherData = [
   {% for t in teachers %}{ id: {{ t.id }}, name: {{ t.display_name | tojson }} },
   {% endfor %}
 ];
 
-// ── Normalización para búsqueda sin tildes ──
 function normalize(s) {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
@@ -125,11 +127,8 @@ function tShowSuggestions(q) {
   tSugg.style.display = 'block';
 }
 
-tInput.addEventListener('focus', function() { tShowSuggestions(normalize(this.value.trim())); });
-tInput.addEventListener('input', function() {
-  tHidden.value = '';
-  tShowSuggestions(normalize(this.value.trim()));
-});
+tInput.addEventListener('focus', () => tShowSuggestions(normalize(tInput.value.trim())));
+tInput.addEventListener('input', () => { tHidden.value = ''; tShowSuggestions(normalize(tInput.value.trim())); });
 
 tSugg.addEventListener('mousedown', function(e) {
   const btn = e.target.closest('[data-id]');
@@ -140,7 +139,7 @@ tSugg.addEventListener('mousedown', function(e) {
   tSugg.style.display = 'none';
 });
 
-document.addEventListener('click', function(e) {
+document.addEventListener('click', e => {
   if (!tInput.contains(e.target) && !tSugg.contains(e.target)) tSugg.style.display = 'none';
 });
 
@@ -154,7 +153,7 @@ tInput.addEventListener('keydown', function(e) {
     if (next) { active && active.classList.remove('active'); next.classList.add('active'); }
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
-    const prev = active ? active.previousElementSibling : items[items.length-1];
+    const prev = active ? active.previousElementSibling : items[items.length - 1];
     if (prev) { active && active.classList.remove('active'); prev.classList.add('active'); }
   } else if (e.key === 'Enter' && active) {
     e.preventDefault();
@@ -174,7 +173,7 @@ async function doSearch() {
   const teacherId = tHidden.value;
   const fecha = document.getElementById('fecha-input').value;
   if (!teacherId && !fecha) {
-    alert('Introduce un profesor o una fecha para buscar.');
+    showAlert('Introduce un profesor o una fecha para buscar.', 'warning');
     return;
   }
 
@@ -187,7 +186,6 @@ async function doSearch() {
 
   const body = document.getElementById('results-body');
   body.innerHTML = '';
-
   document.getElementById('search-hint').classList.add('d-none');
 
   if (!data.length) {
@@ -198,14 +196,15 @@ async function doSearch() {
 
   document.getElementById('no-results').classList.add('d-none');
   document.getElementById('results-area').classList.remove('d-none');
-  document.getElementById('results-count').textContent = `${data.length} ausencia${data.length !== 1 ? 's' : ''} encontrada${data.length !== 1 ? 's' : ''}`;
+  document.getElementById('results-count').textContent =
+    `${data.length} ausencia${data.length !== 1 ? 's' : ''} encontrada${data.length !== 1 ? 's' : ''}`;
 
   data.forEach(a => {
     const tr = document.createElement('tr');
     const sc = STATUS_CLASS[a.status] || 'bg-secondary';
     const sl = STATUS_LABELS[a.status] || a.status;
     tr.innerHTML = `
-      <td><input type="checkbox" class="form-check-input absence-cb" name="absence_ids" value="${a.id}"></td>
+      <td><input type="checkbox" class="form-check-input absence-cb" value="${a.id}"></td>
       <td>${a.date}</td>
       <td><small>${a.slot_label}<br><span class="text-muted">${a.slot_time}</span></small></td>
       <td>${a.teacher}</td>
@@ -232,18 +231,17 @@ function updateDeleteButton() {
 
 document.getElementById('results-body').addEventListener('change', updateDeleteButton);
 
-document.getElementById('btn-select-all').addEventListener('click', function() {
+document.getElementById('btn-select-all').addEventListener('click', () => {
   document.querySelectorAll('.absence-cb').forEach(cb => cb.checked = true);
   updateDeleteButton();
 });
-
-document.getElementById('btn-deselect-all').addEventListener('click', function() {
+document.getElementById('btn-deselect-all').addEventListener('click', () => {
   document.querySelectorAll('.absence-cb').forEach(cb => cb.checked = false);
   updateDeleteButton();
 });
 
 // ── Limpiar ──
-document.getElementById('btn-limpiar').addEventListener('click', function() {
+document.getElementById('btn-limpiar').addEventListener('click', () => {
   tInput.value = '';
   tHidden.value = '';
   document.getElementById('fecha-input').value = '';
@@ -252,11 +250,43 @@ document.getElementById('btn-limpiar').addEventListener('click', function() {
   document.getElementById('search-hint').classList.remove('d-none');
 });
 
-// ── Confirmación borrado ──
-document.getElementById('delete-form').addEventListener('submit', function(e) {
-  const n = document.querySelectorAll('.absence-cb:checked').length;
-  if (!confirm(`¿Eliminar ${n} ausencia${n !== 1 ? 's' : ''}? Esta acción no se puede deshacer.`)) {
-    e.preventDefault();
+// ── Alerta inline ──
+function showAlert(msg, type) {
+  const el = document.getElementById('page-alert');
+  el.className = `mt-3 alert alert-${type} alert-dismissible fade show`;
+  el.innerHTML = `${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+  el.classList.remove('d-none');
+}
+
+// ── Borrado AJAX ──
+document.getElementById('btn-delete').addEventListener('click', async function() {
+  const ids = [...document.querySelectorAll('.absence-cb:checked')].map(cb => cb.value);
+  if (!ids.length) return;
+
+  const n = ids.length;
+  if (!confirm(`¿Eliminar ${n} ausencia${n !== 1 ? 's' : ''}? Esta acción no se puede deshacer.`)) return;
+
+  this.disabled = true;
+  this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Eliminando...';
+
+  try {
+    const res = await fetch(deleteUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showAlert(data.message + ' correctamente.', 'success');
+      await doSearch();
+    } else {
+      showAlert(data.error || 'Error al eliminar.', 'danger');
+    }
+  } catch(e) {
+    showAlert('Error de red al eliminar.', 'danger');
+  } finally {
+    this.innerHTML = '<i class="bi bi-trash3"></i> Eliminar seleccionadas (<span id="selected-count">0</span>)';
+    updateDeleteButton();
   }
 });
 </script>
