@@ -808,6 +808,119 @@ def mark_returned(absence_id):
     return _redirect_back()
 
 
+@absences_bp.route("/eliminar", methods=["GET"])
+@login_required
+def delete_search():
+    from app.routes.admin import _require_developer
+    if not _require_developer():
+        return redirect(url_for("dashboard.index"))
+    year = get_current_school_year()
+    teachers = (User.query.filter_by(active=True)
+                .filter(User.school_year_id == year.id)
+                .order_by(User.surname).all())
+    return render_template("absences/delete.html", teachers=teachers)
+
+
+@absences_bp.route("/eliminar/buscar")
+@login_required
+def delete_search_json():
+    from app.routes.admin import _require_developer
+    if not _require_developer():
+        return jsonify([]), 403
+
+    slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
+    year_id = get_current_school_year().id
+
+    teacher_id = request.args.get("teacher_id", type=int)
+    fecha_str = request.args.get("fecha", "").strip()
+
+    if not teacher_id and not fecha_str:
+        return jsonify([])
+
+    q = Absence.query.join(User, Absence.teacher_id == User.id).filter(
+        User.school_year_id == year_id
+    )
+    if teacher_id:
+        q = q.filter(Absence.teacher_id == teacher_id)
+    if fecha_str:
+        try:
+            from datetime import date as _date
+            q = q.filter(Absence.date == _date.fromisoformat(fecha_str))
+        except ValueError:
+            return jsonify([])
+
+    absences = q.order_by(Absence.date.desc(), Absence.slot_id).limit(200).all()
+
+    result = []
+    for a in absences:
+        slot = slots_cfg.get(a.slot_id, {})
+        result.append({
+            "id": a.id,
+            "date": a.date.strftime("%d/%m/%Y"),
+            "date_iso": a.date.isoformat(),
+            "slot_label": slot.get("label", f"Tramo {a.slot_id}"),
+            "slot_time": f"{slot.get('start','')}-{slot.get('end','')}",
+            "teacher": a.teacher.full_name,
+            "status": a.status,
+            "reason": a.reason or "",
+            "has_guard": a.guard is not None,
+        })
+    return jsonify(result)
+
+
+@absences_bp.route("/eliminar", methods=["POST"])
+@login_required
+def delete_bulk():
+    from app.routes.admin import _require_developer, _delete_task_attachments
+    if not _require_developer():
+        return redirect(url_for("dashboard.index"))
+
+    from app.models.guard import Guard, GuardRecord
+    from app.utils.points import points_system_enabled
+
+    ids = request.form.getlist("absence_ids", type=int)
+    if not ids:
+        flash("No has seleccionado ninguna ausencia.", "warning")
+        return redirect(url_for("absences.delete_search"))
+
+    deleted = 0
+    task_attachments = []
+    for aid in ids:
+        absence = Absence.query.get(aid)
+        if not absence:
+            continue
+
+        if points_system_enabled():
+            teacher = User.query.get(absence.teacher_id)
+            if teacher and teacher.role not in ("management", "display"):
+                teacher.points = round(teacher.points - absence.penalty_points, 2)
+
+        task_attachments += [
+            t.attachment for t in Task.query.filter_by(absence_id=aid)
+            .with_entities(Task.attachment).all()
+        ]
+        Task.query.filter_by(absence_id=aid).delete(synchronize_session=False)
+
+        guards = Guard.query.filter_by(absence_id=aid).all()
+        for guard in guards:
+            if points_system_enabled():
+                for rec in guard.records.all():
+                    covering = User.query.get(rec.teacher_id)
+                    if covering and covering.role not in ("management", "display"):
+                        covering.points = round(covering.points - rec.points_awarded, 2)
+            GuardRecord.query.filter_by(guard_id=guard.id).delete(synchronize_session=False)
+        Guard.query.filter_by(absence_id=aid).delete(synchronize_session=False)
+
+        db.session.delete(absence)
+        deleted += 1
+
+    db.session.commit()
+    _delete_task_attachments(task_attachments)
+
+    flash(f"{'Ausencia eliminada' if deleted == 1 else f'{deleted} ausencias eliminadas'} correctamente.", "success")
+    return redirect(url_for("absences.delete_search"))
+
+
 @absences_bp.route("/<int:absence_id>/comentario", methods=["POST"])
 @login_required
 def edit_comment(absence_id):

@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}Eliminar ausencias{% endblock %}
+{% block main_class %}container-fluid pb-4{% endblock %}
+{% block content %}
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+  <div class="d-flex justify-content-between align-items-center mb-0">
+    <h4 class="mb-0"><i class="bi bi-calendar-x"></i> Eliminar ausencias</h4>
+    <a href="{{ back_url('admin.config') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+  </div>
+</div>
+
+<div class="card mt-3 mb-3">
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      Busca ausencias por profesor o por fecha. Selecciona las que quieras eliminar y pulsa <strong>Eliminar seleccionadas</strong>.
+      Los puntos del profesor y de los guardias se ajustan automáticamente.
+    </p>
+
+    {# ── Filtros ── #}
+    <div class="row g-3 align-items-end mb-3">
+      <div class="col-md-5">
+        <label class="form-label">Buscar por profesor</label>
+        <div class="position-relative">
+          <input type="search" id="teacher-search" class="form-control" autocomplete="off"
+                 placeholder="Apellidos o nombre...">
+          <div id="teacher-suggestions" class="list-group position-absolute w-100 shadow-sm"
+               style="z-index:1050;display:none;max-height:260px;overflow-y:auto"></div>
+          <input type="hidden" id="teacher-id" value="">
+        </div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">O por fecha</label>
+        <input type="date" id="fecha-input" class="form-control">
+      </div>
+      <div class="col-md-2">
+        <button type="button" id="btn-buscar" class="btn btn-primary w-100">
+          <i class="bi bi-search"></i> Buscar
+        </button>
+      </div>
+      <div class="col-md-2">
+        <button type="button" id="btn-limpiar" class="btn btn-outline-secondary w-100">
+          <i class="bi bi-x-circle"></i> Limpiar
+        </button>
+      </div>
+    </div>
+
+    {# ── Resultados ── #}
+    <div id="results-area" class="d-none">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span id="results-count" class="text-muted small"></span>
+        <div>
+          <button type="button" id="btn-select-all" class="btn btn-outline-secondary btn-sm me-1">
+            <i class="bi bi-check2-all"></i> Seleccionar todas
+          </button>
+          <button type="button" id="btn-deselect-all" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x-square"></i> Deseleccionar todas
+          </button>
+        </div>
+      </div>
+
+      <form method="POST" action="{{ url_for('absences.delete_bulk') }}" id="delete-form">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle" id="results-table">
+            <thead class="table-light">
+              <tr>
+                <th style="width:2.5rem"></th>
+                <th>Fecha</th>
+                <th>Tramo</th>
+                <th>Profesor/a</th>
+                <th>Estado</th>
+                <th>Comentario</th>
+                <th>Guardia</th>
+              </tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+          </table>
+        </div>
+
+        <div class="mt-3">
+          <button type="submit" id="btn-delete" class="btn btn-danger" disabled>
+            <i class="bi bi-trash3"></i> Eliminar seleccionadas (<span id="selected-count">0</span>)
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div id="no-results" class="d-none text-muted text-center py-4">
+      <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+      Sin ausencias para los criterios indicados.
+    </div>
+
+    <div id="search-hint" class="text-muted text-center py-4">
+      <i class="bi bi-search fs-3 d-block mb-2"></i>
+      Introduce un profesor o una fecha para buscar ausencias.
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const searchUrl = "{{ url_for('absences.delete_search_json') }}";
+const teacherData = [
+  {% for t in teachers %}{ id: {{ t.id }}, name: {{ t.display_name | tojson }} },
+  {% endfor %}
+];
+
+// ── Normalización para búsqueda sin tildes ──
+function normalize(s) {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// ── Autocomplete profesores ──
+const tInput = document.getElementById('teacher-search');
+const tHidden = document.getElementById('teacher-id');
+const tSugg  = document.getElementById('teacher-suggestions');
+
+function tShowSuggestions(q) {
+  const matches = q ? teacherData.filter(t => normalize(t.name).includes(q)) : teacherData;
+  if (!matches.length) { tSugg.style.display = 'none'; return; }
+  tSugg.innerHTML = matches.slice(0, 15).map(t =>
+    `<button type="button" class="list-group-item list-group-item-action py-1 px-3"
+             data-id="${t.id}" data-name="${t.name.replace(/"/g,'&quot;')}">${t.name}</button>`
+  ).join('');
+  tSugg.style.display = 'block';
+}
+
+tInput.addEventListener('focus', function() { tShowSuggestions(normalize(this.value.trim())); });
+tInput.addEventListener('input', function() {
+  tHidden.value = '';
+  tShowSuggestions(normalize(this.value.trim()));
+});
+
+tSugg.addEventListener('mousedown', function(e) {
+  const btn = e.target.closest('[data-id]');
+  if (!btn) return;
+  e.preventDefault();
+  tHidden.value = btn.dataset.id;
+  tInput.value  = btn.dataset.name;
+  tSugg.style.display = 'none';
+});
+
+document.addEventListener('click', function(e) {
+  if (!tInput.contains(e.target) && !tSugg.contains(e.target)) tSugg.style.display = 'none';
+});
+
+tInput.addEventListener('keydown', function(e) {
+  const items = tSugg.querySelectorAll('[data-id]');
+  if (!items.length) return;
+  const active = tSugg.querySelector('.active');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    const next = active ? active.nextElementSibling : items[0];
+    if (next) { active && active.classList.remove('active'); next.classList.add('active'); }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    const prev = active ? active.previousElementSibling : items[items.length-1];
+    if (prev) { active && active.classList.remove('active'); prev.classList.add('active'); }
+  } else if (e.key === 'Enter' && active) {
+    e.preventDefault();
+    tHidden.value = active.dataset.id;
+    tInput.value  = active.dataset.name;
+    tSugg.style.display = 'none';
+  } else if (e.key === 'Escape') {
+    tSugg.style.display = 'none';
+  }
+});
+
+// ── Búsqueda ──
+const STATUS_LABELS = { pending: 'Pendiente', confirmed: 'Confirmada', returned: 'Reincorporado' };
+const STATUS_CLASS  = { pending: 'bg-warning text-dark', confirmed: 'bg-success', returned: 'bg-secondary' };
+
+async function doSearch() {
+  const teacherId = tHidden.value;
+  const fecha = document.getElementById('fecha-input').value;
+  if (!teacherId && !fecha) {
+    alert('Introduce un profesor o una fecha para buscar.');
+    return;
+  }
+
+  const params = new URLSearchParams();
+  if (teacherId) params.set('teacher_id', teacherId);
+  if (fecha) params.set('fecha', fecha);
+
+  const res = await fetch(searchUrl + '?' + params.toString());
+  const data = await res.json();
+
+  const body = document.getElementById('results-body');
+  body.innerHTML = '';
+
+  document.getElementById('search-hint').classList.add('d-none');
+
+  if (!data.length) {
+    document.getElementById('results-area').classList.add('d-none');
+    document.getElementById('no-results').classList.remove('d-none');
+    return;
+  }
+
+  document.getElementById('no-results').classList.add('d-none');
+  document.getElementById('results-area').classList.remove('d-none');
+  document.getElementById('results-count').textContent = `${data.length} ausencia${data.length !== 1 ? 's' : ''} encontrada${data.length !== 1 ? 's' : ''}`;
+
+  data.forEach(a => {
+    const tr = document.createElement('tr');
+    const sc = STATUS_CLASS[a.status] || 'bg-secondary';
+    const sl = STATUS_LABELS[a.status] || a.status;
+    tr.innerHTML = `
+      <td><input type="checkbox" class="form-check-input absence-cb" name="absence_ids" value="${a.id}"></td>
+      <td>${a.date}</td>
+      <td><small>${a.slot_label}<br><span class="text-muted">${a.slot_time}</span></small></td>
+      <td>${a.teacher}</td>
+      <td><span class="badge ${sc}">${sl}</span></td>
+      <td><small class="text-muted">${a.reason || '—'}</small></td>
+      <td>${a.has_guard ? '<i class="bi bi-shield-check text-info" title="Tiene guardia asociada"></i>' : '<span class="text-muted">—</span>'}</td>
+    `;
+    body.appendChild(tr);
+  });
+
+  updateDeleteButton();
+}
+
+document.getElementById('btn-buscar').addEventListener('click', doSearch);
+document.getElementById('fecha-input').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+tInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !tSugg.querySelector('.active')) doSearch(); });
+
+// ── Selección ──
+function updateDeleteButton() {
+  const checked = document.querySelectorAll('.absence-cb:checked').length;
+  document.getElementById('selected-count').textContent = checked;
+  document.getElementById('btn-delete').disabled = checked === 0;
+}
+
+document.getElementById('results-body').addEventListener('change', updateDeleteButton);
+
+document.getElementById('btn-select-all').addEventListener('click', function() {
+  document.querySelectorAll('.absence-cb').forEach(cb => cb.checked = true);
+  updateDeleteButton();
+});
+
+document.getElementById('btn-deselect-all').addEventListener('click', function() {
+  document.querySelectorAll('.absence-cb').forEach(cb => cb.checked = false);
+  updateDeleteButton();
+});
+
+// ── Limpiar ──
+document.getElementById('btn-limpiar').addEventListener('click', function() {
+  tInput.value = '';
+  tHidden.value = '';
+  document.getElementById('fecha-input').value = '';
+  document.getElementById('results-area').classList.add('d-none');
+  document.getElementById('no-results').classList.add('d-none');
+  document.getElementById('search-hint').classList.remove('d-none');
+});
+
+// ── Confirmación borrado ──
+document.getElementById('delete-form').addEventListener('submit', function(e) {
+  const n = document.querySelectorAll('.absence-cb:checked').length;
+  if (!confirm(`¿Eliminar ${n} ausencia${n !== 1 ? 's' : ''}? Esta acción no se puede deshacer.`)) {
+    e.preventDefault();
+  }
+});
+</script>
+{% endblock %}
