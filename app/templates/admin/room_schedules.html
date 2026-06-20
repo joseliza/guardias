@@ -9,12 +9,38 @@
     </h4>
     <a href="{{ back_url('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
   </div>
+
+  {% if not selected %}
+  {# Buscador de aulas libres #}
+  <form method="get" action="{{ url_for('admin.room_schedules') }}" class="d-flex align-items-center gap-2 mb-1 flex-wrap" id="form-libres">
+    <span class="text-muted small fw-semibold"><i class="bi bi-calendar-check"></i> Aulas libres:</span>
+    <select name="day" class="form-select form-select-sm" style="width:auto" required>
+      <option value="" disabled {% if search_day is none %}selected{% endif %}>Día</option>
+      {% for d in days %}
+      <option value="{{ loop.index0 }}" {% if search_day == loop.index0 %}selected{% endif %}>{{ d }}</option>
+      {% endfor %}
+    </select>
+    <select name="slot_id" class="form-select form-select-sm" style="width:auto" required>
+      <option value="" disabled {% if search_slot is none %}selected{% endif %}>Tramo</option>
+      {% for s in slots %}{% if not s.is_break %}
+      <option value="{{ s.id }}" {% if search_slot == s.id %}selected{% endif %}>{{ s.label }} ({{ s.start }}–{{ s.end }})</option>
+      {% endif %}{% endfor %}
+    </select>
+    <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-search"></i> Buscar</button>
+    {% if free_rooms is not none %}
+    <a href="{{ url_for('admin.room_schedules') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-lg"></i></a>
+    {% endif %}
+  </form>
+  {% endif %}
+
+  {% if not selected and free_rooms is none %}
   <div class="position-relative">
     <input type="search" class="table-filter form-control mb-0" id="room-search"
            data-target="#tabla-aulas" placeholder="Buscar aula..." autocomplete="off">
     <div id="room-sugg" class="list-group position-absolute w-100 shadow"
          style="z-index:1000;display:none;max-height:240px;overflow-y:auto;top:calc(100% + 2px)"></div>
   </div>
+  {% endif %}
 </div>
 
 {% if selected %}
@@ -119,7 +145,68 @@
 </div>
 {% endif %}
 
-<div class="card{% if selected %} d-none{% endif %}" id="lista-aulas">
+{% if free_rooms is not none %}
+{# Panel de resultados: aulas libres / ocupadas #}
+{% set day_name = days[search_day] if search_day is not none and search_day < days|length else '' %}
+{% set ns = namespace(slot_label='') %}
+{% for s in slots %}{% if s.id == search_slot %}{% set ns.slot_label = s.label ~ ' (' ~ s.start ~ '–' ~ s.end ~ ')' %}{% endif %}{% endfor %}
+{% set slot_label = ns.slot_label %}
+<div class="card mb-3">
+  <div class="card-header py-2 d-flex align-items-center gap-2">
+    <i class="bi bi-calendar-check text-success"></i>
+    <span class="fw-semibold">{{ day_name }} · {{ slot_label }}</span>
+    <span class="badge bg-success ms-2">{{ free_rooms|length }} libre{{ 's' if free_rooms|length != 1 }}</span>
+    <span class="badge bg-danger ms-1">{{ busy_rooms|length }} ocupada{{ 's' if busy_rooms|length != 1 }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="row g-0">
+      <div class="col-12 col-md-6 border-end">
+        <div class="px-3 pt-2 pb-1 border-bottom bg-success-subtle">
+          <span class="fw-semibold text-success small"><i class="bi bi-check-circle"></i> Libres</span>
+        </div>
+        {% if free_rooms %}
+        <ul class="list-group list-group-flush">
+          {% for r in free_rooms %}
+          <li class="list-group-item list-group-item-action py-2 d-flex align-items-center gap-2">
+            <i class="bi bi-door-open text-success"></i>
+            <a href="{{ url_for('admin.room_schedules', room_id=r.id) }}" class="text-decoration-none text-dark flex-grow-1">
+              <strong>{{ r.name }}</strong>
+              {% if r.description %}<span class="text-muted small ms-2">{{ r.description }}</span>{% endif %}
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="px-3 py-3 text-muted small">Ninguna aula libre en este tramo.</div>
+        {% endif %}
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="px-3 pt-2 pb-1 border-bottom bg-danger-subtle">
+          <span class="fw-semibold text-danger small"><i class="bi bi-x-circle"></i> Ocupadas</span>
+        </div>
+        {% if busy_rooms %}
+        <ul class="list-group list-group-flush">
+          {% for r in busy_rooms %}
+          <li class="list-group-item list-group-item-action py-2 d-flex align-items-center gap-2">
+            <i class="bi bi-door-closed text-danger"></i>
+            <a href="{{ url_for('admin.room_schedules', room_id=r.id) }}" class="text-decoration-none text-dark flex-grow-1">
+              <strong>{{ r.name }}</strong>
+              {% if r.description %}<span class="text-muted small ms-2">{{ r.description }}</span>{% endif %}
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="px-3 py-3 text-muted small">Ninguna aula ocupada en este tramo.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if not selected and free_rooms is none %}
+<div class="card" id="lista-aulas">
   <div class="card-body p-0">
     <table class="table table-hover mb-0" id="tabla-aulas">
       <thead class="table-light">
@@ -140,6 +227,7 @@
     </table>
   </div>
 </div>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 <script>

@@ -933,6 +933,21 @@ def room_schedules():
             row = {"slot": s, "days": [entry_map.get((d, s["id"]), []) for d in range(5)]}
             schedule_grid.append(row)
 
+    free_rooms = busy_rooms = None
+    search_day = search_slot = None
+    if not selected:
+        search_day = request.args.get("day", type=int)
+        search_slot = request.args.get("slot_id", type=int)
+        if search_day is not None and search_slot is not None:
+            occupied_ids = {
+                e.room_id for e in TeacherSchedule.query
+                .filter_by(day_of_week=search_day, slot_id=search_slot, school_year_id=year_id)
+                .filter(TeacherSchedule.room_id.isnot(None))
+                .all()
+            }
+            free_rooms = [r for r in rooms if r.id not in occupied_ids]
+            busy_rooms = [r for r in rooms if r.id in occupied_ids]
+
     return render_template(
         "admin/room_schedules.html",
         rooms=rooms,
@@ -943,6 +958,10 @@ def room_schedules():
         prev_room=prev_room,
         next_room=next_room,
         current_year=current_year,
+        free_rooms=free_rooms,
+        busy_rooms=busy_rooms,
+        search_day=search_day,
+        search_slot=search_slot,
     )
 
 
