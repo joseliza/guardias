@@ -889,6 +889,57 @@ def group_schedules():
     )
 
 
+@admin_bp.route("/horarios-aulas")
+@login_required
+def room_schedules():
+    from flask import current_app
+    from app.utils.school_year import get_current_school_year
+    from app.models.room import Room as RoomModel
+
+    if not current_user.is_management and current_user.role not in ("display",):
+        return redirect(url_for("dashboard.index"))
+
+    current_year = get_current_school_year()
+    year_id = current_year.id
+
+    rooms = RoomModel.query.filter_by(active=True).order_by(RoomModel.name).all()
+
+    room_id = request.args.get("room_id", type=int)
+    selected = next((r for r in rooms if r.id == room_id), None) if room_id else None
+
+    prev_room = next_room = None
+    if selected:
+        idx = next((i for i, r in enumerate(rooms) if r.id == selected.id), None)
+        if idx is not None:
+            if idx > 0:
+                prev_room = rooms[idx - 1]
+            if idx < len(rooms) - 1:
+                next_room = rooms[idx + 1]
+
+    slots_cfg = current_app.config["TIME_SLOTS"]
+    days = current_app.config["DAYS_OF_WEEK"]
+    schedule_grid = None
+    if selected:
+        entries = TeacherSchedule.query.filter_by(room_id=selected.id, school_year_id=year_id).all()
+        entry_map = {(e.day_of_week, e.slot_id): e for e in entries}
+        schedule_grid = []
+        for s in slots_cfg:
+            row = {"slot": s, "days": [entry_map.get((d, s["id"])) for d in range(5)]}
+            schedule_grid.append(row)
+
+    return render_template(
+        "admin/room_schedules.html",
+        rooms=rooms,
+        selected=selected,
+        schedule_grid=schedule_grid,
+        days=days,
+        slots=slots_cfg,
+        prev_room=prev_room,
+        next_room=next_room,
+        current_year=current_year,
+    )
+
+
 @admin_bp.route("/horarios/clonar-celda", methods=["POST"])
 @login_required
 def schedule_clone_cell():

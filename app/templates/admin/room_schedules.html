@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Horarios de aulas{% endblock %}
+{% block main_class %}container-fluid pb-4{% endblock %}
+{% block content %}
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <h4 class="mb-0"><i class="bi bi-door-open"></i> Horarios de aulas
+      {% if current_year %}<span class="badge bg-primary ms-2" style="font-size:.75rem">{{ current_year.name }}</span>{% endif %}
+    </h4>
+    <a href="{{ back_url('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
+  </div>
+  <div class="position-relative">
+    <input type="search" class="table-filter form-control mb-0" id="room-search"
+           data-target="#tabla-aulas" placeholder="Buscar aula..." autocomplete="off">
+    <div id="room-sugg" class="list-group position-absolute w-100 shadow"
+         style="z-index:1000;display:none;max-height:240px;overflow-y:auto;top:calc(100% + 2px)"></div>
+  </div>
+</div>
+
+{% if selected %}
+<div class="card mb-3">
+  <div class="card-body p-0">
+    <div class="px-3 pt-3 pb-2 border-bottom d-flex align-items-center gap-2 flex-wrap">
+      <div class="btn-group btn-group-sm" role="group">
+        {% if prev_room %}
+        <a href="{{ url_for('admin.room_schedules', room_id=prev_room.id) }}"
+           class="btn btn-outline-secondary" title="{{ prev_room.name }}">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        {% else %}
+        <span class="btn btn-outline-secondary disabled"><i class="bi bi-arrow-left"></i></span>
+        {% endif %}
+        {% if next_room %}
+        <a href="{{ url_for('admin.room_schedules', room_id=next_room.id) }}"
+           class="btn btn-outline-secondary" title="{{ next_room.name }}">
+          <i class="bi bi-arrow-right"></i>
+        </a>
+        {% else %}
+        <span class="btn btn-outline-secondary disabled"><i class="bi bi-arrow-right"></i></span>
+        {% endif %}
+      </div>
+      <i class="bi bi-door-open"></i>
+      <strong>{{ selected.name }}</strong>
+      {% if selected.description %}<span class="text-muted small">{{ selected.description }}</span>{% endif %}
+      <a href="{{ url_for('admin.room_schedules') }}" class="btn btn-sm btn-outline-secondary ms-auto"><i class="bi bi-x-lg"></i></a>
+    </div>
+
+    <div class="table-responsive js-internal-scroll">
+      <table class="table table-bordered table-sm align-middle text-center mb-0" style="min-width:600px">
+        <thead class="table-light">
+          <tr>
+            <th style="width:110px">Tramo</th>
+            {% for day in days %}<th>{{ day }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in schedule_grid %}
+          {% set s = row.slot %}
+          {% if s.is_break %}
+          <tr class="table-secondary">
+            <td class="text-start fw-semibold small text-muted">
+              <i class="bi bi-cup-hot"></i> {{ s.label }}<br>
+              <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
+            </td>
+            {% for entry in row.days %}
+            <td><span class="text-muted" style="font-size:.8rem">—</span></td>
+            {% endfor %}
+          </tr>
+          {% else %}
+          <tr>
+            <td class="text-start fw-semibold small text-muted">
+              {{ s.label }}<br>
+              <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
+            </td>
+            {% for entry in row.days %}
+            <td class="py-2{% if entry %} bg-primary-subtle{% endif %}" style="min-width:110px">
+              {% if entry %}
+                <span class="badge bg-primary">{{ entry.teacher.surname }}, {{ entry.teacher.name }}</span>
+                {% if entry.group %}
+                <div class="small text-muted mt-1"><i class="bi bi-people"></i> {{ entry.group.name }}</div>
+                {% endif %}
+                {% if entry.subject %}
+                <div class="small text-muted mt-1"><i class="bi bi-book"></i> {{ entry.subject.name }}</div>
+                {% endif %}
+                {% if entry.notes %}
+                <div class="small text-muted mt-1"><i class="bi bi-pencil"></i> {{ entry.notes }}</div>
+                {% endif %}
+              {% else %}
+              <span class="text-muted" style="font-size:.8rem">Libre</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% set busy_count = namespace(n=0) %}
+    {% set free_count = namespace(n=0) %}
+    {% for row in schedule_grid %}
+      {% if not row.slot.is_break %}
+        {% for entry in row.days %}
+          {% if entry %}{% set busy_count.n = busy_count.n + 1 %}
+          {% else %}{% set free_count.n = free_count.n + 1 %}{% endif %}
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+    <div class="d-flex gap-2 px-3 py-2 border-top">
+      <span class="badge bg-primary"><i class="bi bi-people"></i> {{ busy_count.n }} tramo{{ 's' if busy_count.n != 1 }} ocupado{{ 's' if busy_count.n != 1 }}</span>
+      <span class="badge bg-secondary"><i class="bi bi-dash-circle"></i> {{ free_count.n }} libre{{ 's' if free_count.n != 1 }}</span>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card{% if selected %} d-none{% endif %}" id="lista-aulas">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0" id="tabla-aulas">
+      <thead class="table-light">
+        <tr>
+          <th>Aula</th>
+          <th>Descripción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rooms %}
+        <tr style="cursor:pointer"
+            onclick="window.location='{{ url_for('admin.room_schedules', room_id=r.id) }}'">
+          <td><strong>{{ r.name }}</strong></td>
+          <td class="text-muted small">{{ r.description or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function() {
+  var inp  = document.getElementById('room-search');
+  var card = document.getElementById('lista-aulas');
+  var sugg = document.getElementById('room-sugg');
+  if (!inp) return;
+
+  var roomData = [
+    {% for r in rooms %}
+    { name: {{ r.name|tojson }}, url: {{ url_for('admin.room_schedules', room_id=r.id)|tojson }} },
+    {% endfor %}
+  ];
+
+  function render(q) {
+    var matches = q ? roomData.filter(function(r) {
+      return normalize(r.name).includes(normalize(q));
+    }) : [];
+    if (!matches.length) { sugg.style.display = 'none'; return; }
+    sugg.innerHTML = matches.slice(0, 12).map(function(r) {
+      return '<a href="' + r.url + '" class="list-group-item list-group-item-action py-1 px-3">' + r.name + '</a>';
+    }).join('');
+    sugg.style.display = 'block';
+  }
+
+  var startHidden = card && card.classList.contains('d-none');
+  inp.addEventListener('input', function() {
+    render(inp.value.trim());
+    if (card) {
+      if (inp.value.trim()) card.classList.remove('d-none');
+      else if (startHidden) card.classList.add('d-none');
+    }
+  });
+  inp.addEventListener('focus', function() { if (inp.value.trim()) render(inp.value.trim()); });
+  inp.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      var first = sugg.querySelector('a');
+      if (first) { e.preventDefault(); window.location = first.href; }
+    }
+    if (e.key === 'Escape') sugg.style.display = 'none';
+  });
+  document.addEventListener('click', function(e) {
+    if (!inp.contains(e.target) && !sugg.contains(e.target)) sugg.style.display = 'none';
+  });
+})();
+</script>
+{% endblock %}
