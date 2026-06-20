@@ -184,12 +184,12 @@
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
             <i class="bi bi-person-circle"></i> {{ current_user.full_name }}
-            {% if not current_user.is_management and points_enabled %}
+            {% if not current_user.is_management and points_visible_to_teachers %}
             <span class="badge bg-warning text-dark ms-1">{{ current_user.points }} pts</span>
             {% endif %}
           </a>
           <ul class="dropdown-menu dropdown-menu-end">
-            {% if current_user.role not in ('management', 'display', 'extracurricular') and points_enabled %}
+            {% if current_user.role not in ('management', 'display', 'extracurricular') and points_visible_to_teachers %}
             <li><a class="dropdown-item" href="{{ url_for('guards.my_points') }}"><i class="bi bi-star-half"></i> Mis puntos</a></li>
             <li><hr class="dropdown-divider"></li>
             {% endif %}

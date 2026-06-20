@@ -16,7 +16,7 @@ from app.models.group import Group
 from app.models.schedule import TeacherSchedule
 from app.utils.points import award_guard_points
 from app.utils.guards import get_available_teachers_for_slot, auto_assign_pending_guards
-from app.utils import points_system_enabled
+from app.utils import points_system_enabled, guard_assign_mode
 
 guards_bp = Blueprint("guards", __name__, url_prefix="/guardias")
 
@@ -489,8 +489,11 @@ def _build_events(teacher_id, slot_map):
 @guards_bp.route("/mis-puntos")
 @login_required
 def my_points():
-    if not current_user.is_management and not points_system_enabled():
+    if not points_system_enabled():
         flash("El sistema de puntuación está desactivado actualmente.", "info")
+        return redirect(url_for("dashboard.index"))
+    if not current_user.is_management and guard_assign_mode() != "scoring":
+        flash("El sistema de puntuación está activo solo en modo consulta para dirección.", "info")
         return redirect(url_for("dashboard.index"))
 
     slots_cfg = current_app.config["TIME_SLOTS"]
@@ -579,8 +582,11 @@ def my_points_csv():
 @guards_bp.route("/informe")
 @login_required
 def report():
-    if not current_user.is_management and not points_system_enabled():
+    if not points_system_enabled():
         flash("El sistema de puntuación está desactivado actualmente.", "info")
+        return redirect(url_for("dashboard.index"))
+    if not current_user.is_management and guard_assign_mode() != "scoring":
+        flash("El informe de puntuación solo está disponible para dirección.", "info")
         return redirect(url_for("dashboard.index"))
 
     from sqlalchemy import func

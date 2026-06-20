@@ -108,11 +108,14 @@ def create_app():
     def inject_points_cfg():
         try:
             if current_user.is_authenticated:
-                from app.utils import points_system_enabled
-                return {"points_enabled": points_system_enabled()}
+                from app.utils import points_system_enabled, guard_assign_mode
+                return {
+                    "points_enabled": points_system_enabled(),
+                    "points_visible_to_teachers": guard_assign_mode() == "scoring",
+                }
         except Exception:
             pass
-        return {"points_enabled": True}
+        return {"points_enabled": True, "points_visible_to_teachers": True}
 
     @app.context_processor
     def inject_school_year():

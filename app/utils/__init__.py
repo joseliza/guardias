@@ -20,9 +20,21 @@ def guard_assign_mode():
         return "scoring"
 
 
+def points_tracking_enabled():
+    """Seguimiento de puntos activado independientemente del modo de asignación.
+    Cuando es True, los puntos se calculan y acumulan pero solo los ven management."""
+    try:
+        from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
+        gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
+        return bool(gcfg.get("track_points_independent", False))
+    except Exception:
+        return False
+
+
 def points_system_enabled():
-    """El sistema de puntuación está activo solo cuando el modo de reparto es 'scoring'."""
-    return guard_assign_mode() == "scoring"
+    """El sistema de puntuación está activo si el modo es 'scoring'
+    o si el seguimiento independiente está activado."""
+    return guard_assign_mode() == "scoring" or points_tracking_enabled()
 
 
 def auto_assign_guards_enabled():

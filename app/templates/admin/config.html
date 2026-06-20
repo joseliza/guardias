@@ -239,6 +239,22 @@
                   </label>
                 </div>
               </div>
+
+              <div class="mb-3">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="track_points_independent"
+                         name="track_points_independent"
+                         {% if general_config.get('track_points_independent') %}checked{% endif %}>
+                  <label class="form-check-label" for="track_points_independent">
+                    <strong>Seguimiento de puntos (solo dirección)</strong>
+                    <small class="d-block text-muted">
+                      Calcula y acumula puntos aunque el reparto sea por recuento o aleatorio.
+                      Solo los usuarios de dirección pueden consultar los puntos;
+                      el profesorado no ve ninguna referencia a ellos.
+                    </small>
+                  </label>
+                </div>
+              </div>
             </div>
           </div><!-- /row -->
 
@@ -547,15 +563,22 @@
     <div id="section-points" class="accordion-collapse collapse" data-bs-parent="#config-accordion">
       <div class="accordion-body">
 
-        {% if general_config.get('guard_assign_mode', 'scoring') != 'scoring' %}
+        {% set _assign_mode = general_config.get('guard_assign_mode', 'scoring') %}
+        {% set _track_indep = general_config.get('track_points_independent', False) %}
+        {% if _assign_mode != 'scoring' and not _track_indep %}
         <div class="alert alert-warning py-2 px-3 small">
           <i class="bi bi-exclamation-triangle"></i>
           El sistema de puntuación está <strong>desactivado</strong>: el reparto está configurado como
-          «{{ {'count': 'Por número de guardias cubiertas', 'random': 'Aleatoria'}
-               .get(general_config.get('guard_assign_mode'), '') }}» (sección General).
+          «{{ {'count': 'Por número de guardias cubiertas', 'random': 'Aleatoria'}.get(_assign_mode, '') }}» (sección General)
+          y el seguimiento independiente no está activado.
           No se asignan ni descuentan puntos y el profesorado no ve ninguna referencia a ellos.
-          Esta sección sigue disponible para consultar el historial y ajustar la configuración
-          de cara a una futura reactivación.
+        </div>
+        {% elif _assign_mode != 'scoring' and _track_indep %}
+        <div class="alert alert-info py-2 px-3 small">
+          <i class="bi bi-info-circle"></i>
+          Modo <strong>seguimiento de puntos solo para dirección</strong>: los puntos se calculan y acumulan
+          aunque el reparto sea «{{ {'count': 'Por número de guardias cubiertas', 'random': 'Aleatoria'}.get(_assign_mode, '') }}».
+          El profesorado <strong>no ve</strong> sus puntos; solo dirección tiene acceso al informe y al historial.
         </div>
         {% endif %}
 
