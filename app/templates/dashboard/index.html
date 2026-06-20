@@ -346,11 +346,11 @@
               {% for t in item.guard_teachers + item.absent_duty_teachers %}
                 {% if t.id in item.assigned_teacher_ids %}
                 <span class="badge bg-warning text-dark" title="Ocupado — cubriendo una ausencia">
-                  <i class="bi bi-person-fill-exclamation"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-fill-exclamation"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% elif t.id in item.absent_slot_ids %}
                 <span class="badge bg-secondary" title="Ausente — no disponible en el centro">
-                  <i class="bi bi-person-dash"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-dash"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% elif (current_user.is_management or is_display_user) and item.all_guards_info %}
                 <button type="button"
@@ -360,18 +360,18 @@
                         data-teacher-id="{{ t.id }}"
                         data-teacher-name="{{ t.display_name }}"
                         data-guards='{{ item.all_guards_info | tojson }}'>
-                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
                 </button>
                 {% elif can_manage %}
                 <span class="badge bg-success draggable-teacher"
                       style="cursor:grab"
                       title="Arrastrar para asignar guardia"
                       data-teacher-id="{{ t.id }}">
-                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% else %}
                 <span class="badge bg-success" title="Libre — disponible para cubrir">
-                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% endif %}
               {% else %}
@@ -387,7 +387,7 @@
                 {% if t.id in item.assigned_teacher_ids %}
                 <span class="badge text-white" style="background-color:#0d6efd!important"
                       title="Ocupado — cubriendo una ausencia">
-                  <i class="bi bi-person-fill-exclamation"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-fill-exclamation"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% elif (current_user.is_management or is_display_user) and item.all_guards_info %}
                 <button type="button"
@@ -397,19 +397,19 @@
                         data-teacher-id="{{ t.id }}"
                         data-teacher-name="{{ t.display_name }}"
                         data-guards='{{ item.all_guards_info | tojson }}'>
-                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
                 </button>
                 {% elif can_manage %}
                 <span class="badge text-white draggable-teacher"
                       style="cursor:grab;background-color:#0d9488!important"
                       title="Arrastrar para asignar guardia"
                       data-teacher-id="{{ t.id }}">
-                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% else %}
                 <span class="badge text-white" style="background-color:#0d9488!important"
                       title="Disponible por actividad extraescolar">
-                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                  <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
                 </span>
                 {% endif %}
               {% endfor %}
@@ -424,7 +424,7 @@
               <span class="badge bg-purple text-white"
                     style="background-color:#6f42c1!important"
                     title="Cubriendo sin guardia oficial en este tramo">
-                <i class="bi bi-person-plus-fill"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+                <i class="bi bi-person-plus-fill"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
               </span>
               {% endfor %}
             </div>

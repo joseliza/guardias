@@ -340,7 +340,7 @@
             <span class="text-muted me-1">Guardia:</span>
             {% for t in avail[0] %}
             <span class="badge bg-success">
-              <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+              <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
             </span>
             {% else %}
             <span class="text-muted fst-italic">Ninguno asignado.</span>
@@ -353,7 +353,7 @@
             {% for t in avail[1] %}
             <span class="badge text-white" style="background-color:#0d9488!important"
                   title="Disponible por actividad extraescolar">
-              <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_enabled %} ({{ t.points }} pts){% endif %}
+              <i class="bi bi-person-check"></i> {{ t.display_name }}{% if points_visible_to_teachers %} ({{ t.points }} pts){% endif %}
             </span>
             {% endfor %}
           </div>
