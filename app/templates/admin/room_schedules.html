@@ -62,7 +62,7 @@
               <i class="bi bi-cup-hot"></i> {{ s.label }}<br>
               <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
             </td>
-            {% for entry in row.days %}
+            {% for _ in row.days %}
             <td><span class="text-muted" style="font-size:.8rem">—</span></td>
             {% endfor %}
           </tr>
@@ -72,19 +72,23 @@
               {{ s.label }}<br>
               <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
             </td>
-            {% for entry in row.days %}
-            <td class="py-2{% if entry %} bg-primary-subtle{% endif %}" style="min-width:110px">
-              {% if entry %}
-                <span class="badge bg-primary">{{ entry.teacher.surname }}, {{ entry.teacher.name }}</span>
-                {% if entry.group %}
-                <div class="small text-muted mt-1"><i class="bi bi-people"></i> {{ entry.group.name }}</div>
-                {% endif %}
-                {% if entry.subject %}
-                <div class="small text-muted mt-1"><i class="bi bi-book"></i> {{ entry.subject.name }}</div>
-                {% endif %}
-                {% if entry.notes %}
-                <div class="small text-muted mt-1"><i class="bi bi-pencil"></i> {{ entry.notes }}</div>
-                {% endif %}
+            {% for cell_entries in row.days %}
+            <td class="py-2{% if cell_entries %} bg-primary-subtle{% endif %}" style="min-width:110px">
+              {% if cell_entries %}
+                {% for entry in cell_entries %}
+                <div class="{% if not loop.first %}mt-2 pt-2 border-top border-primary-subtle{% endif %}">
+                  <span class="badge bg-primary">{{ entry.teacher.surname }}, {{ entry.teacher.name }}</span>
+                  {% if entry.group %}
+                  <div class="small text-muted mt-1"><i class="bi bi-people"></i> {{ entry.group.name }}</div>
+                  {% endif %}
+                  {% if entry.subject %}
+                  <div class="small text-muted mt-1"><i class="bi bi-book"></i> {{ entry.subject.name }}</div>
+                  {% endif %}
+                  {% if entry.notes %}
+                  <div class="small text-muted mt-1"><i class="bi bi-pencil"></i> {{ entry.notes }}</div>
+                  {% endif %}
+                </div>
+                {% endfor %}
               {% else %}
               <span class="text-muted" style="font-size:.8rem">Libre</span>
               {% endif %}
@@ -101,8 +105,8 @@
     {% set free_count = namespace(n=0) %}
     {% for row in schedule_grid %}
       {% if not row.slot.is_break %}
-        {% for entry in row.days %}
-          {% if entry %}{% set busy_count.n = busy_count.n + 1 %}
+        {% for cell_entries in row.days %}
+          {% if cell_entries %}{% set busy_count.n = busy_count.n + 1 %}
           {% else %}{% set free_count.n = free_count.n + 1 %}{% endif %}
         {% endfor %}
       {% endif %}

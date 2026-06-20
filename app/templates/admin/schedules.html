@@ -80,9 +80,9 @@
               <i class="bi bi-cup-hot"></i> {{ s.label }}<br>
               <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
             </td>
-            {% for entry in row.days %}
+            {% for cell_entries in row.days %}
             <td>
-              {% if entry and entry.is_guard_slot %}
+              {% if cell_entries and cell_entries[0].is_guard_slot %}
               <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia recreo</span>
               {% else %}
               <span class="text-muted" style="font-size:.8rem">—</span>
@@ -97,62 +97,100 @@
               <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
             </td>
             {% for d in range(5) %}
-            {% set entry = row.days[d] %}
-            {% set cur_subject = entry.subject if entry and entry.subject else None %}
-            {% set cur_type = 'guard' if entry and entry.is_guard_slot else ('group' if entry and entry.group else ('subject' if cur_subject else 'free')) %}
-            {% set cur_group_id = entry.group_id if entry and entry.group_id else 0 %}
-            {% set cur_group_name = entry.group.name if entry and entry.group else '' %}
-            {% set cur_room = entry.room if entry and entry.room else None %}
-            {% set cur_room_id = cur_room.id if cur_room else 0 %}
-            {% set cur_room_name = cur_room.name if cur_room else '' %}
-            {% set cur_subject_type = cur_subject.guard_type if cur_subject else '' %}
-            {% set cur_subject_id = cur_subject.id if cur_subject else 0 %}
-            {% set cur_subject_name = cur_subject.name if cur_subject else '' %}
-            <td class="py-2 schedule-cell{% if entry %}{% if entry.is_guard_slot %} bg-success-subtle{% else %} bg-primary-subtle{% endif %}{% endif %}"
+            {% set cell_entries = row.days[d] %}
+            {% set first = cell_entries[0] if cell_entries else None %}
+            {% set is_multi = cell_entries|length > 1 %}
+            {% set is_guard = first and first.is_guard_slot %}
+            {% set cell_class = 'bg-success-subtle' if is_guard else ('bg-primary-subtle' if cell_entries else '') %}
+            <td class="py-2 schedule-cell {{ cell_class }}"
                 style="min-width:90px{% if can_edit %}; cursor:pointer{% endif %}"
                 {% if can_edit %}
+                {% if is_multi %}
+                data-multi="1"
+                data-teacher="{{ selected.id }}"
+                data-day="{{ d }}"
+                data-slot="{{ s.id }}"
+                data-slot-label="{{ s.label }}"
+                data-day-label="{{ days[d] }}"
+                data-entry-ids="{{ cell_entries | map(attribute='id') | list | tojson }}"
+                onclick="openMultiModal(this)"
+                title="Clic para editar (multi-grupo)"
+                {% elif first %}
+                {% set cur_subject = first.subject if first.subject else None %}
+                {% set cur_type = 'guard' if is_guard else ('group' if first.group else ('subject' if cur_subject else 'free')) %}
                 data-teacher="{{ selected.id }}"
                 data-day="{{ d }}"
                 data-slot="{{ s.id }}"
                 data-slot-label="{{ s.label }}"
                 data-day-label="{{ days[d] }}"
                 data-type="{{ cur_type }}"
-                data-group-id="{{ cur_group_id if cur_group_id else '' }}"
-                data-group-name="{{ cur_group_name }}"
-                data-room-id="{{ cur_room_id if cur_room_id else '' }}"
-                data-room-name="{{ cur_room_name }}"
-                data-subject-id="{{ cur_subject_id if cur_subject_id else '' }}"
-                data-subject-name="{{ cur_subject_name }}"
-                data-notes="{{ entry.notes if entry and entry.notes else '' }}"
+                data-group-id="{{ first.group_id or '' }}"
+                data-group-name="{{ first.group.name if first.group else '' }}"
+                data-room-id="{{ first.room_id or '' }}"
+                data-room-name="{{ first.room.name if first.room else '' }}"
+                data-subject-id="{{ (cur_subject.id if cur_subject else '') }}"
+                data-subject-name="{{ (cur_subject.name if cur_subject else '') }}"
+                data-notes="{{ first.notes or '' }}"
                 onclick="openSlotModal(this)"
                 title="Clic para editar"
+                {% else %}
+                data-teacher="{{ selected.id }}"
+                data-day="{{ d }}"
+                data-slot="{{ s.id }}"
+                data-slot-label="{{ s.label }}"
+                data-day-label="{{ days[d] }}"
+                data-type="free"
+                data-group-id=""
+                data-group-name=""
+                data-room-id=""
+                data-room-name=""
+                data-subject-id=""
+                data-subject-name=""
+                data-notes=""
+                onclick="openSlotModal(this)"
+                title="Clic para editar"
+                {% endif %}
                 {% endif %}>
-              {% if entry %}
-                {% if entry.is_guard_slot %}
+              {% if cell_entries %}
+                {% if is_guard %}
                 <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia</span>
-                {% elif entry.group %}
-                <span class="badge bg-primary">{{ entry.group.name }}</span>
+                {% elif is_multi %}
+                {# Celda multi-grupo: mostrar todos los badges con datos para el modal #}
+                {% for e in cell_entries %}
+                  {% if e.group %}<span class="badge bg-primary me-1 mb-1" data-entry-id="{{ e.id }}" data-group-name="{{ e.group.name }}">{{ e.group.name }}</span>{% endif %}
+                {% endfor %}
+                {% set common_subject = cell_entries[0].subject %}
+                {% set common_room = cell_entries[0].room %}
+                {% if common_subject %}
+                <div class="small text-muted mt-1"><i class="bi bi-book"></i> {{ common_subject.name }}</div>
+                {% endif %}
+                {% if common_room %}
+                <div class="small text-muted mt-1"><i class="bi bi-door-open"></i> {{ common_room.name }}</div>
+                {% endif %}
+                {% else %}
+                {# Celda de un único grupo #}
+                {% set cur_subject = first.subject if first.subject else None %}
+                {% if first.group %}
+                <span class="badge bg-primary">{{ first.group.name }}</span>
                 {% if cur_subject %}
                 <div class="small text-muted mt-1"><i class="bi bi-book"></i> {{ cur_subject.name }}</div>
                 {% endif %}
-                {% set display_room = entry.room %}
-                {% if display_room %}
-                <div class="small text-muted mt-1"><i class="bi bi-door-open"></i> {{ display_room.name }}</div>
+                {% if first.room %}
+                <div class="small text-muted mt-1"><i class="bi bi-door-open"></i> {{ first.room.name }}</div>
                 {% endif %}
                 {% elif cur_subject %}
                 <span class="badge" style="background:#0d9488">{{ cur_subject.name }}</span>
-                {% elif entry.notes %}
-                <span class="badge bg-warning text-dark"><i class="bi bi-pencil"></i> {{ entry.notes }}</span>
+                {% elif first.notes %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-pencil"></i> {{ first.notes }}</span>
                 {% else %}
                 <span class="text-muted small">—</span>
                 {% endif %}
-                {% if entry.notes and (entry.is_guard_slot or entry.group or cur_subject) %}
-                <div class="small text-muted mt-1"><i class="bi bi-pencil"></i> {{ entry.notes }}</div>
+                {% if first.notes and (is_guard or first.group or cur_subject) %}
+                <div class="small text-muted mt-1"><i class="bi bi-pencil"></i> {{ first.notes }}</div>
                 {% endif %}
-                {% if cur_subject_type == 'desdoble_fp' %}
-                <div class="small mt-1" style="color:#6f42c1">
-                  <i class="bi bi-people"></i> Desdoble FP
-                </div>
+                {% if cur_subject and cur_subject.guard_type == 'desdoble_fp' %}
+                <div class="small mt-1" style="color:#6f42c1"><i class="bi bi-people"></i> Desdoble FP</div>
+                {% endif %}
                 {% endif %}
               {% else %}
               <span class="text-muted" style="font-size:.8rem">Libre</span>
@@ -171,9 +209,9 @@
     {% set free_count  = namespace(n=0) %}
     {% for row in schedule_grid %}
       {% if not row.slot.is_break %}
-        {% for entry in row.days %}
-          {% if entry %}
-            {% if entry.is_guard_slot %}{% set guard_count.n = guard_count.n + 1 %}
+        {% for cell_entries in row.days %}
+          {% if cell_entries %}
+            {% if cell_entries[0].is_guard_slot %}{% set guard_count.n = guard_count.n + 1 %}
             {% else %}{% set class_count.n = class_count.n + 1 %}{% endif %}
           {% else %}{% set free_count.n = free_count.n + 1 %}{% endif %}
         {% endfor %}
@@ -449,6 +487,61 @@
     </div>
   </div>
 </div>
+{# Modal multi-grupo: gestión de celdas con varios grupos simultáneos #}
+<div class="modal fade" id="multiGroupModal" tabindex="-1">
+  <div class="modal-dialog modal-md">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0"><i class="bi bi-people"></i> <span id="mg-title"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2">Este tramo tiene varios grupos simultáneos. Puedes quitar grupos individuales o añadir uno nuevo.</p>
+        <div id="mg-groups-list" class="mb-3"></div>
+
+        <hr class="my-2">
+        <p class="small fw-semibold mb-1">Añadir grupo</p>
+        <div class="row g-2 mb-2">
+          <div class="col-12">
+            <div class="position-relative">
+              <input type="text" id="mg-group-search" class="form-control form-control-sm"
+                     autocomplete="off" placeholder="Buscar grupo...">
+              <div id="mg-group-sugg" class="list-group position-absolute w-100 shadow-sm"
+                   style="z-index:1070;display:none;max-height:180px;overflow-y:auto"></div>
+            </div>
+            <div id="mg-group-chip" class="mt-1" style="display:none">
+              <span class="badge bg-primary d-inline-flex align-items-center gap-1 px-2 py-1">
+                <span id="mg-group-chip-name"></span>
+                <button type="button" class="btn-close btn-close-white ms-1" style="font-size:.6rem"
+                        onclick="clearMgGroup()"></button>
+              </span>
+            </div>
+          </div>
+        </div>
+        <form id="mg-add-form" method="POST" action="{{ url_for('admin.schedule_add_group_to_cell') }}">
+          <input type="hidden" name="teacher_id" id="mg-teacher-id">
+          <input type="hidden" name="day"        id="mg-day">
+          <input type="hidden" name="slot_id"    id="mg-slot-id">
+          <input type="hidden" name="group_id"   id="mg-group-id">
+          <button type="submit" id="mg-add-btn" class="btn btn-sm btn-primary w-100" style="display:none">
+            <i class="bi bi-plus-lg"></i> Añadir grupo
+          </button>
+        </form>
+        <hr class="my-2">
+        <form method="POST" action="{{ url_for('admin.schedule_set_cell') }}" id="mg-clear-form">
+          <input type="hidden" name="teacher_id" id="mg-clear-teacher-id">
+          <input type="hidden" name="day"        id="mg-clear-day">
+          <input type="hidden" name="slot_id"    id="mg-clear-slot-id">
+          <input type="hidden" name="action"     value="clear">
+          <button type="submit" class="btn btn-sm btn-outline-secondary w-100"
+                  onclick="return confirm('¿Dejar libre este tramo? Se eliminarán todos los grupos.')">
+            <i class="bi bi-x-circle"></i> Dejar libre el tramo
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
 {% endif %}{# can_edit #}
 
 {% endif %}
@@ -538,7 +631,7 @@ const slotsConf = [{% for s in slots %}{% if not s.is_break %}{ id: {{ s.id }}, 
 const daysConf  = [{% for d in days %}{{ d|tojson }},{% endfor %}];
 // Tramos con clase y grupo asignado: únicos elegibles para disponibilidad de guardia
 const scheduleClassSlots = new Set([
-  {% for row in schedule_grid %}{% if not row.slot.is_break %}{% for d in range(5) %}{% set entry = row.days[d] %}{% if entry and not entry.is_guard_slot and entry.group_id %}'{{ d }}:{{ row.slot.id }}',{% endif %}{% endfor %}{% endif %}{% endfor %}
+  {% for row in schedule_grid %}{% if not row.slot.is_break %}{% for d in range(5) %}{% set cell = row.days[d] %}{% if cell and not cell[0].is_guard_slot and cell[0].group_id %}'{{ d }}:{{ row.slot.id }}',{% endif %}{% endfor %}{% endif %}{% endfor %}
 ]);
 const slotModal = document.getElementById('slotModal') ? new bootstrap.Modal(document.getElementById('slotModal')) : null;
 let _srcDay = null, _srcSlot = null;
@@ -771,6 +864,71 @@ makeModalAutocomplete('slot-subject-search', 'slot-subject-sugg', subjectData, (
   document.getElementById('slot-subject-chip-name').textContent = name;
   document.getElementById('slot-subject-chip').style.display = '';
   updateSaveGroupBtn();
+});
+
+// ── Modal multi-grupo ──────────────────────────────────────────────────────────
+const multiGroupModalEl = document.getElementById('multiGroupModal');
+const multiGroupModal = multiGroupModalEl ? new bootstrap.Modal(multiGroupModalEl) : null;
+
+// entryData: { id, groupName, subjectName, roomName } pasado desde el servidor via data-attrs
+// Para el modal multi-grupo construimos la lista dinámicamente con las IDs de entrada
+const deleteEntryBaseUrl = {{ url_for('admin.schedule_entry_delete', entry_id=0)|tojson }};
+
+// Mapa id → datos de la entrada, poblado al abrir el modal
+let mgEntryData = {};
+
+function openMultiModal(el) {
+  const d = el.dataset;
+  const entryIds = JSON.parse(d.entryIds || '[]');
+  document.getElementById('mg-title').textContent = d.dayLabel + ' — ' + d.slotLabel;
+  document.getElementById('mg-teacher-id').value = d.teacher;
+  document.getElementById('mg-day').value         = d.day;
+  document.getElementById('mg-slot-id').value     = d.slot;
+  document.getElementById('mg-clear-teacher-id').value = d.teacher;
+  document.getElementById('mg-clear-day').value   = d.day;
+  document.getElementById('mg-clear-slot-id').value = d.slot;
+
+  // Construir lista de grupos actuales usando los datos embebidos en la celda
+  // Necesitamos los datos de cada entrada — los leemos de los elementos badge
+  // ya pintados en la celda para no hacer una petición AJAX extra.
+  // Los badges llevan data-entry-id y data-group-name como atributos (añadidos abajo en el HTML)
+  const badges = el.querySelectorAll('[data-entry-id]');
+  const list = document.getElementById('mg-groups-list');
+  list.innerHTML = '';
+  badges.forEach(badge => {
+    const eid = badge.dataset.entryId;
+    const gname = badge.dataset.groupName;
+    const deleteUrl = deleteEntryBaseUrl.replace('/0/borrar', '/' + eid + '/borrar');
+    const row = document.createElement('div');
+    row.className = 'd-flex align-items-center gap-2 mb-1';
+    row.innerHTML = `<span class="badge bg-primary flex-grow-1 text-start py-1 px-2">${gname}</span>
+      <form method="POST" action="${deleteUrl}" onsubmit="return confirm('¿Quitar este grupo del tramo?')">
+        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Quitar">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </form>`;
+    list.appendChild(row);
+  });
+
+  // Resetear el buscador de "añadir grupo"
+  clearMgGroup();
+  document.getElementById('mg-group-search').value = '';
+  document.getElementById('mg-group-sugg').style.display = 'none';
+
+  multiGroupModal.show();
+}
+
+function clearMgGroup() {
+  document.getElementById('mg-group-id').value = '';
+  document.getElementById('mg-group-chip').style.display = 'none';
+  document.getElementById('mg-add-btn').style.display = 'none';
+}
+
+makeModalAutocomplete('mg-group-search', 'mg-group-sugg', groupData, (id, name) => {
+  document.getElementById('mg-group-id').value = id;
+  document.getElementById('mg-group-chip-name').textContent = name;
+  document.getElementById('mg-group-chip').style.display = '';
+  document.getElementById('mg-add-btn').style.display = '';
 });
 
 // ── Buscador de navegación entre profesores (visible cuando se ve el horario de uno) ──

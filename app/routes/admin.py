@@ -787,10 +787,13 @@ def schedules():
     availability_periods = []
     if selected:
         entries = TeacherSchedule.query.filter_by(teacher_id=selected.id, school_year_id=year_id).all()
-        entry_map = {(e.day_of_week, e.slot_id): e for e in entries}
+        from collections import defaultdict as _defaultdict
+        entry_map = _defaultdict(list)
+        for e in entries:
+            entry_map[(e.day_of_week, e.slot_id)].append(e)
         schedule_grid = []
         for s in slots_cfg:
-            row = {"slot": s, "days": [entry_map.get((d, s["id"])) for d in range(5)]}
+            row = {"slot": s, "days": [entry_map.get((d, s["id"]), []) for d in range(5)]}
             schedule_grid.append(row)
 
         from app.models.availability import AvailabilityPeriod
@@ -921,10 +924,13 @@ def room_schedules():
     schedule_grid = None
     if selected:
         entries = TeacherSchedule.query.filter_by(room_id=selected.id, school_year_id=year_id).all()
-        entry_map = {(e.day_of_week, e.slot_id): e for e in entries}
+        from collections import defaultdict as _defaultdict
+        entry_map = _defaultdict(list)
+        for e in entries:
+            entry_map[(e.day_of_week, e.slot_id)].append(e)
         schedule_grid = []
         for s in slots_cfg:
-            row = {"slot": s, "days": [entry_map.get((d, s["id"])) for d in range(5)]}
+            row = {"slot": s, "days": [entry_map.get((d, s["id"]), []) for d in range(5)]}
             schedule_grid.append(row)
 
     return render_template(
@@ -952,11 +958,11 @@ def schedule_clone_cell():
     src_day     = int(request.form["src_day"])
     src_slot_id = int(request.form["src_slot_id"])
 
-    source = TeacherSchedule.query.filter_by(
+    sources = TeacherSchedule.query.filter_by(
         teacher_id=teacher_id, day_of_week=src_day, slot_id=src_slot_id,
         school_year_id=year_id,
-    ).first()
-    if not source:
+    ).all()
+    if not sources:
         flash("El tramo origen ya no existe.", "warning")
         return redirect(url_for("admin.schedules", teacher_id=teacher_id))
 
@@ -967,17 +973,12 @@ def schedule_clone_cell():
             d, s = map(int, t.split(":"))
         except ValueError:
             continue
-        existing = TeacherSchedule.query.filter_by(
+        # Borrar las entradas actuales del destino y reemplazar con las del origen
+        TeacherSchedule.query.filter_by(
             teacher_id=teacher_id, day_of_week=d, slot_id=s,
             school_year_id=year_id,
-        ).first()
-        if existing:
-            existing.is_guard_slot = source.is_guard_slot
-            existing.group_id      = source.group_id
-            existing.room_id       = source.room_id
-            existing.subject_id    = source.subject_id
-            existing.notes         = source.notes
-        else:
+        ).delete(synchronize_session=False)
+        for source in sources:
             db.session.add(TeacherSchedule(
                 teacher_id=teacher_id, day_of_week=d, slot_id=s,
                 school_year_id=year_id,
@@ -1007,13 +1008,12 @@ def schedule_set_cell():
     slot_id    = int(request.form["slot_id"])
     action     = request.form["action"]  # "clear" | "guard" | "group"
 
-    existing = TeacherSchedule.query.filter_by(
+    # Borrar TODAS las entradas de este tramo para empezar desde cero
+    TeacherSchedule.query.filter_by(
         teacher_id=teacher_id, day_of_week=day, slot_id=slot_id,
         school_year_id=year_id,
-    ).first()
-    if existing:
-        db.session.delete(existing)
-        db.session.flush()
+    ).delete(synchronize_session=False)
+    db.session.flush()
 
     room_id = request.form.get("room_id", type=int) or None
     notes   = request.form.get("notes", "").strip() or None
@@ -1044,6 +1044,51 @@ def schedule_set_cell():
             ))
 
     db.session.commit()
+    return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+
+@admin_bp.route("/horarios/entrada/<int:entry_id>/borrar", methods=["POST"])
+@login_required
+def schedule_entry_delete(entry_id):
+    """Elimina una entrada concreta de un tramo multi-grupo."""
+    entry = TeacherSchedule.query.get_or_404(entry_id)
+    if not _can_edit_schedule(entry.teacher_id):
+        return redirect(url_for("dashboard.index"))
+    teacher_id = entry.teacher_id
+    db.session.delete(entry)
+    db.session.commit()
+    return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+
+
+@admin_bp.route("/horarios/añadir-grupo-celda", methods=["POST"])
+@login_required
+def schedule_add_group_to_cell():
+    """Añade un grupo adicional a un tramo que ya tiene otras entradas."""
+    teacher_id = int(request.form["teacher_id"])
+    if not _can_edit_schedule(teacher_id):
+        return redirect(url_for("dashboard.index"))
+    from app.utils.school_year import get_current_school_year
+    year_id = get_current_school_year().id
+    day      = int(request.form["day"])
+    slot_id  = int(request.form["slot_id"])
+    group_id = request.form.get("group_id", type=int) or None
+    subject_id = request.form.get("subject_id", type=int) or None
+    room_id  = request.form.get("room_id", type=int) or None
+    if not group_id and not subject_id:
+        return redirect(url_for("admin.schedules", teacher_id=teacher_id))
+    # No añadir si ya existe esa combinación (profesor+grupo+día+tramo)
+    already = TeacherSchedule.query.filter_by(
+        teacher_id=teacher_id, group_id=group_id,
+        day_of_week=day, slot_id=slot_id, school_year_id=year_id,
+    ).first()
+    if not already:
+        group = Group.query.get(group_id) if group_id else None
+        db.session.add(TeacherSchedule(
+            teacher_id=teacher_id, day_of_week=day, slot_id=slot_id,
+            school_year_id=year_id, is_guard_slot=bool(group and group.guard_type == "guard"),
+            group_id=group_id, subject_id=subject_id, room_id=room_id,
+        ))
+        db.session.commit()
     return redirect(url_for("admin.schedules", teacher_id=teacher_id))
 
 
@@ -1651,11 +1696,17 @@ def data_load_preview():
     changed_entries = []
     unchanged = 0
     unresolved = []
-    seen_new_keys = {}  # (teacher_id, day_idx, slot) -> entry ya añadida a new_entries
+    seen_csv_keys = set()  # (teacher_abbr, group_abbr, day, slot) — elimina duplicados exactos del CSV
 
     DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
 
     for raw in rows:
+        # Ignorar filas completamente duplicadas en el CSV (mismo prof+grupo+día+tramo)
+        csv_key = (raw.teacher_abbr, raw.group_abbr, raw.day_of_week, raw.slot_number)
+        if csv_key in seen_csv_keys:
+            continue
+        seen_csv_keys.add(csv_key)
+
         teacher = teacher_map.get(raw.teacher_abbr)
         if not teacher:
             unresolved.append(f"Profesor: {raw.teacher_abbr}")
@@ -1672,9 +1723,10 @@ def data_load_preview():
             room_map[raw.room_abbr] = room
 
         day_idx = raw.day_of_week - 1   # 0-based para TeacherSchedule
+        # Buscar si ya existe una entrada para este profesor+grupo+día+tramo concretos
         existing = TeacherSchedule.query.filter_by(
-            teacher_id=teacher.id, day_of_week=day_idx,
-            slot_id=raw.slot_number, school_year_id=year.id,
+            teacher_id=teacher.id, group_id=group.id if group else None,
+            day_of_week=day_idx, slot_id=raw.slot_number, school_year_id=year.id,
         ).first()
 
         entry = {
@@ -1689,25 +1741,11 @@ def data_load_preview():
         }
 
         if not existing:
-            key = (teacher.id, day_idx, raw.slot_number)
-            prev = seen_new_keys.get(key)
-            if prev:
-                unresolved.append(
-                    f"Conflicto: {teacher.full_name} tiene más de una clase nueva el {entry['day']} "
-                    f"tramo {entry['slot']} (aulas: {prev['room'] or '—'} / {entry['room'] or '—'}) "
-                    f"— revisa el CSV o el horario manualmente."
-                )
-                continue
-            seen_new_keys[key] = entry
             new_entries.append(entry)
         else:
             changes = {}
-            new_gid = group.id if group else None
             new_sid = subject.id if subject else None
             new_rid = room.id if room else None
-            if existing.group_id != new_gid:
-                old = Group.query.get(existing.group_id) if existing.group_id else None
-                changes["grupo"] = {"old": old.name if old else "", "new": entry["group"]}
             if existing.subject_id != new_sid:
                 old = Subject.query.get(existing.subject_id) if existing.subject_id else None
                 changes["materia"] = {"old": old.name if old else "", "new": entry["subject"]}
@@ -1757,7 +1795,7 @@ def data_load_create_schedules():
 
     created = updated = rooms_created = 0
     errors = []
-    created_keys = set()  # (teacher_id, day_idx, slot) ya añadidas en este lote
+    created_keys = set()  # (teacher_id, group_id, day_idx, slot) — evita duplicados exactos del CSV
 
     DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
 
@@ -1782,13 +1820,9 @@ def data_load_create_schedules():
         day_idx = raw.day_of_week - 1
 
         if raw.id in raw_ids_new:
-            key = (teacher.id, day_idx, raw.slot_number)
+            # Clave por (profesor, grupo, día, tramo) para descartar duplicados exactos del CSV
+            key = (teacher.id, group.id if group else None, day_idx, raw.slot_number)
             if key in created_keys:
-                day_label = DAYS[day_idx] if 0 <= day_idx < 5 else str(raw.day_of_week)
-                errors.append(
-                    f"Conflicto: {teacher.full_name} tiene más de una clase nueva el "
-                    f"{day_label} tramo {raw.slot_number} — se omite (aula: {raw.room_abbr or '—'})."
-                )
                 continue
             created_keys.add(key)
             db.session.add(TeacherSchedule(

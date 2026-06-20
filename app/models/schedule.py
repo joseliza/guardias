@@ -27,6 +27,4 @@ class TeacherSchedule(db.Model):
     room = db.relationship("Room", foreign_keys=[room_id])
     school_year = db.relationship("SchoolYear", foreign_keys=[school_year_id])
 
-    __table_args__ = (
-        db.UniqueConstraint("teacher_id", "day_of_week", "slot_id", "school_year_id", name="uq_schedule"),
-    )
+    __table_args__ = ()
