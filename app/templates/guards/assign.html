@@ -52,7 +52,10 @@
       </div>
       <div class="mb-3">
         <label class="form-label">Minutos efectivos de guardia</label>
-        <input type="number" name="effective_minutes" class="form-control" value="60" min="1" max="60" required>
+        <input type="number" name="effective_minutes" id="effective_minutes"
+               class="form-control" value="{{ suggested_minutes }}"
+               min="1" max="{{ slot_total }}" required>
+        <div id="minutes-feedback" class="form-text mt-1"></div>
       </div>
       <div class="mb-3">
         <label class="form-label">Notas</label>
@@ -67,4 +70,33 @@
     </form>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const input    = document.getElementById('effective_minutes');
+  const feedback = document.getElementById('minutes-feedback');
+  const remaining = {{ remaining_minutes }};
+  const total     = {{ slot_total }};
+  const assigned  = {{ existing_minutes }};
+
+  function update() {
+    const val = parseInt(input.value) || 0;
+    if (val > remaining) {
+      feedback.className = 'form-text text-danger';
+      feedback.textContent = `Máximo disponible: ${remaining} min (tramo de ${total} min, ${assigned} ya asignados).`;
+    } else if (val < remaining) {
+      feedback.className = 'form-text text-warning';
+      feedback.textContent = `Quedarán ${remaining - val} min del tramo sin cubrir.`;
+    } else {
+      feedback.className = 'form-text text-success';
+      feedback.textContent = 'El tramo quedará cubierto al completo.';
+    }
+  }
+
+  input.addEventListener('input', update);
+  update();
+})();
+</script>
 {% endblock %}

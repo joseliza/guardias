@@ -94,10 +94,20 @@ def assign(guard_id):
     # Destino de vuelta: "my_guard" desde la página del profesor, "dashboard" por defecto
     back = request.args.get("back") or request.form.get("back", "dashboard")
 
+    total_min = _slot_duration(slot) if slot else 60
+    existing_records = guard.records.order_by(GuardRecord.id).all()
+    existing_minutes = sum(r.effective_minutes for r in existing_records)
+    remaining_minutes = max(0, total_min - existing_minutes)
+    suggested_minutes = total_min // (len(existing_records) + 1)
+
     if request.method == "POST":
         teacher_id = int(request.form["teacher_id"])
-        effective_minutes = int(request.form.get("effective_minutes", 60))
+        effective_minutes = int(request.form.get("effective_minutes", suggested_minutes))
         notes = request.form.get("notes", "")
+
+        if effective_minutes > remaining_minutes:
+            flash(f"Los minutos se han ajustado al máximo disponible: {remaining_minutes} min.", "warning")
+            effective_minutes = remaining_minutes
 
         clash = (GuardRecord.query
                  .join(Guard)
@@ -111,16 +121,23 @@ def assign(guard_id):
             flash(f"Aviso: {teacher_name} ya está asignado/a a otra guardia en este tramo "
                   f"(grupos juntos). La asignación se ha registrado igualmente.", "warning")
 
+        group = Group.query.get(guard.group_id)
+        multiplier = group.difficulty_multiplier if group else 1.0
+        pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
+        teacher = User.query.get(teacher_id)
+        points = round((effective_minutes / 60) * multiplier * pph, 2) \
+            if (points_system_enabled() and teacher and teacher.scores_points) else 0.0
+
         db.session.add(GuardRecord(
             guard_id=guard.id,
             teacher_id=teacher_id,
-            effective_minutes=0,
+            effective_minutes=effective_minutes,
             notes=notes,
-            points_awarded=0.0,
+            points_awarded=points,
         ))
         guard.status = "covered"
-        db.session.flush()
-        _recalculate_guard_records(guard, slot)
+        if teacher and teacher.scores_points:
+            award_guard_points(teacher_id, points)
         db.session.commit()
         flash("Guardia registrada correctamente.", "success")
 
@@ -130,7 +147,11 @@ def assign(guard_id):
 
     return render_template("guards/assign.html", guard=guard, slot=slot,
                            primary=primary, ex_guard=ex_guard,
-                           secondary=secondary, back=back)
+                           secondary=secondary, back=back,
+                           slot_total=total_min,
+                           suggested_minutes=suggested_minutes,
+                           remaining_minutes=remaining_minutes,
+                           existing_minutes=existing_minutes)
 
 
 @guards_bp.route("/<int:guard_id>/registrar", methods=["GET", "POST"])
