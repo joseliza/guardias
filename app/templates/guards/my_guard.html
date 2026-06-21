@@ -126,5 +126,12 @@
 document.getElementById('date-picker').addEventListener('change', function() {
   if (this.value) window.location.href = '{{ url_for("guards.my_guard") }}?fecha=' + this.value;
 });
+(function() {
+  var fp = document.getElementById('date-picker')._flatpickr;
+  if (fp && fp.altInput) {
+    fp.altInput.style.backgroundColor = '{{ "#d4edda" if is_today else "#f8d7da" }}';
+    fp.altInput.style.borderColor = '{{ "#28a745" if is_today else "#dc3545" }}';
+  }
+})();
 </script>
 {% endblock %}
