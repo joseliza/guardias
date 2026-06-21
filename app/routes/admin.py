@@ -924,13 +924,24 @@ def room_schedules():
     schedule_grid = None
     if selected:
         entries = TeacherSchedule.query.filter_by(room_id=selected.id, school_year_id=year_id).all()
-        from collections import defaultdict as _defaultdict
+        from collections import defaultdict as _defaultdict, OrderedDict as _OD
         entry_map = _defaultdict(list)
         for e in entries:
             entry_map[(e.day_of_week, e.slot_id)].append(e)
+
+        def _group_cell(raw):
+            seen = _OD()
+            for e in raw:
+                key = (e.teacher_id, e.subject_id)
+                if key not in seen:
+                    seen[key] = {"teacher": e.teacher, "subject": e.subject, "groups": [], "notes": e.notes}
+                if e.group:
+                    seen[key]["groups"].append(e.group)
+            return list(seen.values())
+
         schedule_grid = []
         for s in slots_cfg:
-            row = {"slot": s, "days": [entry_map.get((d, s["id"]), []) for d in range(5)]}
+            row = {"slot": s, "days": [_group_cell(entry_map.get((d, s["id"]), [])) for d in range(5)]}
             schedule_grid.append(row)
 
     free_rooms = busy_rooms = None

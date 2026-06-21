@@ -342,6 +342,9 @@ document.querySelectorAll('input[type="date"]').forEach(function(el) {
         th.style.zIndex = '9';
         var bg = window.getComputedStyle(th).backgroundColor;
         th.style.backgroundColor = (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') ? '#f8f9fa' : bg;
+        // border-collapse:collapse hace desaparecer el borde inferior del th sticky;
+        // sustituirlo por box-shadow evita el solapamiento visual con la primera fila.
+        th.style.boxShadow = 'inset 0 -1px 0 var(--bs-border-color, #dee2e6)';
       });
     });
   }

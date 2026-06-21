@@ -63,12 +63,12 @@
       {% endif %}
     </div>
 
-    <div class="table-responsive js-internal-scroll">
+    <div id="teacher-sched-scroll" class="js-internal-scroll" style="overflow:auto;-webkit-overflow-scrolling:touch">
       <table class="table table-bordered table-sm align-middle text-center mb-0" style="min-width:600px">
-        <thead class="table-light">
+        <thead class="table-light" style="position:sticky;top:0;z-index:10">
           <tr>
-            <th style="width:110px">Tramo</th>
-            {% for day in days %}<th>{{ day }}</th>{% endfor %}
+            <th style="width:110px;box-shadow:inset 0 -1px 0 var(--bs-border-color,#dee2e6)">Tramo</th>
+            {% for day in days %}<th style="box-shadow:inset 0 -1px 0 var(--bs-border-color,#dee2e6)">{{ day }}</th>{% endfor %}
           </tr>
         </thead>
         <tbody>
@@ -579,6 +579,25 @@
 
 {% endblock %}
 {% block scripts %}
+<script>
+(function() {
+  var scroll = document.getElementById('teacher-sched-scroll');
+  if (!scroll) return;
+  function resize() {
+    var navbar  = document.querySelector('.navbar.sticky-top');
+    var stickyH = document.querySelector('.sticky-page-header');
+    var cardHdr = scroll.previousElementSibling;
+    var cardFtr = scroll.nextElementSibling;
+    var navH = navbar  ? navbar.offsetHeight  : 56;
+    var hdrH = stickyH ? stickyH.offsetHeight : 50;
+    var cHdr = cardHdr ? cardHdr.offsetHeight : 60;
+    var cFtr = cardFtr ? cardFtr.offsetHeight : 40;
+    scroll.style.maxHeight = Math.max(200, window.innerHeight - navH - hdrH - cHdr - cFtr - 24) + 'px';
+  }
+  resize();
+  window.addEventListener('resize', resize);
+})();
+</script>
 <script>
 (function() {
   var inp  = document.getElementById('teacher-search');

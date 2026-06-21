@@ -71,12 +71,12 @@
       <a href="{{ url_for('admin.room_schedules') }}" class="btn btn-sm btn-outline-secondary ms-auto"><i class="bi bi-x-lg"></i></a>
     </div>
 
-    <div class="table-responsive js-internal-scroll">
+    <div id="room-sched-scroll" class="js-internal-scroll" style="overflow:auto;-webkit-overflow-scrolling:touch">
       <table class="table table-bordered table-sm align-middle text-center mb-0" style="min-width:600px">
-        <thead class="table-light">
+        <thead class="table-light" id="room-sched-thead" style="position:sticky;top:0;z-index:10">
           <tr>
-            <th style="width:110px">Tramo</th>
-            {% for day in days %}<th>{{ day }}</th>{% endfor %}
+            <th style="width:110px;box-shadow:inset 0 -1px 0 var(--bs-border-color,#dee2e6)">Tramo</th>
+            {% for day in days %}<th style="box-shadow:inset 0 -1px 0 var(--bs-border-color,#dee2e6)">{{ day }}</th>{% endfor %}
           </tr>
         </thead>
         <tbody>
@@ -99,19 +99,22 @@
               <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
             </td>
             {% for cell_entries in row.days %}
-            <td class="py-2{% if cell_entries %} bg-primary-subtle{% endif %}" style="min-width:110px">
+            <td class="py-1{% if cell_entries %} bg-primary-subtle{% endif %}" style="min-width:110px">
               {% if cell_entries %}
-                {% for entry in cell_entries %}
-                <div class="{% if not loop.first %}mt-2 pt-2 border-top border-primary-subtle{% endif %}">
-                  <span class="badge bg-primary">{{ entry.teacher.surname }}, {{ entry.teacher.name }}</span>
-                  {% if entry.group %}
-                  <div class="small text-muted mt-1"><i class="bi bi-people"></i> {{ entry.group.name }}</div>
+                {% for grp in cell_entries %}
+                <div class="{% if not loop.first %}mt-1 pt-1 border-top border-2 border-primary{% endif %}">
+                  <span class="badge bg-primary" style="white-space:normal;word-break:break-word">{{ grp.teacher.surname }}, {{ grp.teacher.name }}</span>
+                  {% if grp.subject %}
+                  <div class="small text-muted mt-1"><i class="bi bi-book"></i> {{ grp.subject.name }}</div>
                   {% endif %}
-                  {% if entry.subject %}
-                  <div class="small text-muted mt-1"><i class="bi bi-book"></i> {{ entry.subject.name }}</div>
+                  {% if grp.groups %}
+                  <div class="small text-muted mt-1">
+                    <i class="bi bi-people"></i>
+                    {% for g in grp.groups %}<span class="badge bg-secondary bg-opacity-75 me-1">{{ g.name }}</span>{% endfor %}
+                  </div>
                   {% endif %}
-                  {% if entry.notes %}
-                  <div class="small text-muted mt-1"><i class="bi bi-pencil"></i> {{ entry.notes }}</div>
+                  {% if grp.notes %}
+                  <div class="small text-muted mt-1"><i class="bi bi-pencil"></i> {{ grp.notes }}</div>
                   {% endif %}
                 </div>
                 {% endfor %}
@@ -230,6 +233,28 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
+<script>
+// Ajusta la altura del scroll del horario de aula para que el thead se quede
+// fijo en la parte superior y el tbody tenga su propio desplazamiento.
+(function() {
+  var scroll = document.getElementById('room-sched-scroll');
+  if (!scroll) return;
+  function resize() {
+    var navbar  = document.querySelector('.navbar.sticky-top');
+    var stickyH = document.querySelector('.sticky-page-header');
+    var cardHdr = scroll.previousElementSibling; // div con info del aula
+    var cardFtr = scroll.nextElementSibling;     // div con estadísticas
+    var navH    = navbar  ? navbar.offsetHeight  : 56;
+    var hdrH    = stickyH ? stickyH.offsetHeight : 50;
+    var cHdr    = cardHdr ? cardHdr.offsetHeight : 60;
+    var cFtr    = cardFtr ? cardFtr.offsetHeight : 40;
+    var extra   = 24; // margen de seguridad
+    scroll.style.maxHeight = Math.max(200, window.innerHeight - navH - hdrH - cHdr - cFtr - extra) + 'px';
+  }
+  resize();
+  window.addEventListener('resize', resize);
+})();
+</script>
 <script>
 (function() {
   var inp  = document.getElementById('room-search');
