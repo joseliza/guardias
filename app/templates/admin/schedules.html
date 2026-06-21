@@ -157,7 +157,7 @@
                 {% elif is_multi %}
                 {# Celda multi-grupo: mostrar todos los badges con datos para el modal #}
                 {% for e in cell_entries %}
-                  {% if e.group %}<span class="badge bg-primary me-1 mb-1" data-entry-id="{{ e.id }}" data-group-name="{{ e.group.name }}">{{ e.group.name }}</span>{% endif %}
+                  {% if e.group %}<span class="badge bg-primary me-1 mb-1" data-entry-id="{{ e.id }}" data-group-name="{{ e.group.name }}">{{ e.group.name }}{% if e.group.abbreviation %} <small style="font-size:.7em;opacity:.8">{{ e.group.abbreviation }}</small>{% endif %}</span>{% endif %}
                 {% endfor %}
                 {% set common_subject = cell_entries[0].subject %}
                 {% set common_room = cell_entries[0].room %}
@@ -171,7 +171,7 @@
                 {# Celda de un único grupo #}
                 {% set cur_subject = first.subject if first.subject else None %}
                 {% if first.group %}
-                <span class="badge bg-primary">{{ first.group.name }}</span>
+                <span class="badge bg-primary">{{ first.group.name }}{% if first.group.abbreviation %} <small style="font-size:.7em;opacity:.8">{{ first.group.abbreviation }}</small>{% endif %}</span>
                 {% if cur_subject %}
                 <div class="small text-muted mt-1"><i class="bi bi-book"></i> {{ cur_subject.name }}</div>
                 {% endif %}

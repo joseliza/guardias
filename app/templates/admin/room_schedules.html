@@ -110,7 +110,7 @@
                   {% if grp.groups %}
                   <div class="small text-muted mt-1">
                     <i class="bi bi-people"></i>
-                    {% for g in grp.groups %}<span class="badge bg-secondary bg-opacity-75 me-1">{{ g.name }}</span>{% endfor %}
+                    {% for g in grp.groups %}<span class="badge bg-secondary bg-opacity-75 me-1">{{ g.name }}{% if g.abbreviation %} <small style="font-size:.7em;opacity:.8">{{ g.abbreviation }}</small>{% endif %}</span>{% endfor %}
                   </div>
                   {% endif %}
                   {% if grp.notes %}
