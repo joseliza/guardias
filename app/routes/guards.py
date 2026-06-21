@@ -5,7 +5,7 @@ personal 'Mi guardia' y el historial de puntos con exportación CSV.
 El helper _can_manage_slot() permite que profesores de guardia actúen sobre
 su propio tramo sin necesidad de rol directivo.
 """
-from datetime import date
+from datetime import date, datetime
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify
 from flask_login import login_required, current_user
 from app.extensions import db
@@ -354,15 +354,48 @@ def auto_assign_slot(date_str, slot_id):
 @guards_bp.route("/<int:guard_id>/sin-cobertura", methods=["POST"])
 @login_required
 def mark_no_cover(guard_id):
-    """Marca la guardia como cubierta sin asignar profesor (no necesita cobertura)."""
+    """Marca la guardia como no necesita cobertura.
+    Si ya estaba cubierta, ajusta los minutos de cada registro al tiempo real
+    transcurrido desde el inicio del tramo y recalcula los puntos en consecuencia."""
     if current_user.role not in ("management", "display"):
         flash("Sin permiso.", "danger")
         return redirect(url_for("dashboard.index"))
     guard = Guard.query.get_or_404(guard_id)
+
+    records = guard.records.order_by(GuardRecord.id).all()
+    if records:
+        slots_cfg = current_app.config["TIME_SLOTS"]
+        slot = next((s for s in slots_cfg if s["id"] == guard.slot_id), None)
+        slot_total = _slot_duration(slot) if slot else 60
+
+        # Minutos transcurridos desde el inicio del tramo hasta ahora
+        elapsed = slot_total  # por defecto: tramo completo (guardia de otro día)
+        if slot and guard.date == date.today():
+            sh, sm = map(int, slot["start"].split(":"))
+            slot_start = datetime.now().replace(hour=sh, minute=sm, second=0, microsecond=0)
+            elapsed = int((datetime.now() - slot_start).total_seconds() / 60)
+            elapsed = max(0, min(elapsed, slot_total))
+
+        points_on = points_system_enabled()
+        group = db.session.get(Group, guard.group_id) if points_on else None
+        multiplier = group.difficulty_multiplier if group else 1.0
+        pph = current_app.config.get("POINTS_PER_HOUR", 1.0) if points_on else 1.0
+
+        for rec in records:
+            new_minutes = min(elapsed, rec.effective_minutes)
+            if points_on:
+                teacher = db.session.get(User, rec.teacher_id)
+                new_points = round((new_minutes / 60) * multiplier * pph, 2) if teacher and teacher.scores_points else 0.0
+                if teacher:
+                    teacher.points = round(teacher.points - rec.points_awarded + new_points, 2)
+                rec.points_awarded = new_points
+            rec.effective_minutes = new_minutes
+
     guard.status = "covered"
     db.session.commit()
+    back_fecha = request.form.get("back_fecha", guard.date.isoformat())
     flash("Guardia marcada como no necesita cobertura.", "success")
-    return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()) + f"#slot-{guard.slot_id}")
+    return redirect(url_for("dashboard.index", fecha=back_fecha) + f"#slot-{guard.slot_id}")
 
 
 @guards_bp.route("/registro/<int:record_id>/eliminar", methods=["POST"])
