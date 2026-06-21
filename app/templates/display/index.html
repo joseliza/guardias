@@ -240,7 +240,7 @@
                   <form method="POST" action="{{ url_for('display.assign', guard_id=guard.id) }}">
                     <div class="modal-body">
                       <div class="mb-3">
-                        <label class="form-label">Profesor disponible {% if points_enabled %}<small class="text-muted">(ordenado por puntos)</small>{% endif %}</label>
+                        <label class="form-label">Profesor disponible {% if points_visible_to_teachers %}<small class="text-muted">(ordenado por puntos)</small>{% endif %}</label>
                         <select name="teacher_id" class="form-select" required>
                           {% set avail = available_by_slot.get(slot.id, ([], [], [], {})) %}
                           {% set prim = avail[0] if avail is iterable and avail | length > 0 else [] %}
@@ -248,17 +248,17 @@
                           {% set sec  = avail[2] if avail is iterable and avail | length > 2 else [] %}
                           {% if prim %}
                           <optgroup label="— Guardia asignada —">
-                            {% for t in prim %}<option value="{{ t.id }}">{{ t.display_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
+                            {% for t in prim %}<option value="{{ t.id }}">{{ t.display_name }}{% if points_visible_to_teachers %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
                           </optgroup>
                           {% endif %}
                           {% if ex %}
                           <optgroup label="— Guardia EX (actividad extraescolar) —">
-                            {% for t in ex %}<option value="{{ t.id }}">{{ t.display_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
+                            {% for t in ex %}<option value="{{ t.id }}">{{ t.display_name }}{% if points_visible_to_teachers %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
                           </optgroup>
                           {% endif %}
                           {% if sec %}
                           <optgroup label="— Libres en este tramo —">
-                            {% for t in sec %}<option value="{{ t.id }}">{{ t.display_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
+                            {% for t in sec %}<option value="{{ t.id }}">{{ t.display_name }}{% if points_visible_to_teachers %} — {{ t.points }} pts{% endif %}</option>{% endfor %}
                           </optgroup>
                           {% endif %}
                           {% if not prim and not ex and not sec %}

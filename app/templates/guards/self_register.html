@@ -10,9 +10,6 @@
 <p class="text-muted mb-0">Tramo: <strong>{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</strong> — Grupo: <strong>{{ guard.group.name if guard.group else '—' }}</strong></p>
 </div>
 
-{% if points_enabled and guard.group and guard.group.high_difficulty %}
-<div class="alert alert-info"><i class="bi bi-star-fill text-warning"></i> Grupo de <strong>alta dificultad</strong> — se aplicará multiplicador x{{ guard.group.difficulty_multiplier }} en los puntos.</div>
-{% endif %}
 
 <div class="card">
   <div class="card-body">

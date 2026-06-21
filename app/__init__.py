@@ -115,7 +115,7 @@ def create_app():
                 }
         except Exception:
             pass
-        return {"points_enabled": True, "points_visible_to_teachers": True}
+        return {"points_enabled": False, "points_visible_to_teachers": False}
 
     @app.context_processor
     def inject_school_year():
