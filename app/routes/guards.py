@@ -96,18 +96,13 @@ def assign(guard_id):
 
     total_min = _slot_duration(slot) if slot else 60
     existing_records = guard.records.order_by(GuardRecord.id).all()
-    existing_minutes = sum(r.effective_minutes for r in existing_records)
-    remaining_minutes = max(0, total_min - existing_minutes)
-    suggested_minutes = total_min // (len(existing_records) + 1)
+    n_existing = len(existing_records)
+    suggested_minutes = total_min // (n_existing + 1)
 
     if request.method == "POST":
         teacher_id = int(request.form["teacher_id"])
-        effective_minutes = int(request.form.get("effective_minutes", suggested_minutes))
+        effective_minutes = min(int(request.form.get("effective_minutes", suggested_minutes)), total_min)
         notes = request.form.get("notes", "")
-
-        if effective_minutes > remaining_minutes:
-            flash(f"Los minutos se han ajustado al máximo disponible: {remaining_minutes} min.", "warning")
-            effective_minutes = remaining_minutes
 
         clash = (GuardRecord.query
                  .join(Guard)
@@ -138,6 +133,25 @@ def assign(guard_id):
         guard.status = "covered"
         if teacher and teacher.scores_points:
             award_guard_points(teacher_id, points)
+
+        # Redistribuir los minutos sobrantes entre los registros previos
+        if existing_records:
+            leftover = max(0, total_min - effective_minutes)
+            n_ex = len(existing_records)
+            base_ex = leftover // n_ex
+            extra_ex = leftover % n_ex
+            points_on = points_system_enabled()
+            for i, rec in enumerate(existing_records):
+                new_min = base_ex + (1 if i < extra_ex else 0)
+                old_pts = rec.points_awarded
+                t_rec = db.session.get(User, rec.teacher_id)
+                new_pts = round((new_min / 60) * multiplier * pph, 2) \
+                    if (points_on and t_rec and t_rec.scores_points) else 0.0
+                if points_on and t_rec:
+                    t_rec.points = round(t_rec.points - old_pts + new_pts, 2)
+                rec.effective_minutes = new_min
+                rec.points_awarded = new_pts
+
         db.session.commit()
         flash("Guardia registrada correctamente.", "success")
 
@@ -150,8 +164,7 @@ def assign(guard_id):
                            secondary=secondary, back=back,
                            slot_total=total_min,
                            suggested_minutes=suggested_minutes,
-                           remaining_minutes=remaining_minutes,
-                           existing_minutes=existing_minutes)
+                           n_existing=n_existing)
 
 
 @guards_bp.route("/<int:guard_id>/registrar", methods=["GET", "POST"])

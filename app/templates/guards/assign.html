@@ -27,21 +27,21 @@
           {% if primary %}
           <optgroup label="— Profesores de guardia asignada —">
             {% for t in primary %}
-            <option value="{{ t.id }}">{{ t.display_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>
+            <option value="{{ t.id }}">{{ t.display_name }}{% if points_visible_to_teachers %} — {{ t.points }} pts{% endif %}</option>
             {% endfor %}
           </optgroup>
           {% endif %}
           {% if ex_guard %}
           <optgroup label="— Profesores de guardia por actividad extraescolar —">
             {% for t in ex_guard %}
-            <option value="{{ t.id }}">{{ t.display_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>
+            <option value="{{ t.id }}">{{ t.display_name }}{% if points_visible_to_teachers %} — {{ t.points }} pts{% endif %}</option>
             {% endfor %}
           </optgroup>
           {% endif %}
           {% if secondary %}
           <optgroup label="— Libres en este tramo (sin clase) —">
             {% for t in secondary %}
-            <option value="{{ t.id }}">{{ t.display_name }}{% if points_enabled %} — {{ t.points }} pts{% endif %}</option>
+            <option value="{{ t.id }}">{{ t.display_name }}{% if points_visible_to_teachers %} — {{ t.points }} pts{% endif %}</option>
             {% endfor %}
           </optgroup>
           {% endif %}
@@ -75,23 +75,35 @@
 {% block scripts %}
 <script>
 (function () {
-  const input    = document.getElementById('effective_minutes');
-  const feedback = document.getElementById('minutes-feedback');
-  const remaining = {{ remaining_minutes }};
+  const input     = document.getElementById('effective_minutes');
+  const feedback  = document.getElementById('minutes-feedback');
   const total     = {{ slot_total }};
-  const assigned  = {{ existing_minutes }};
+  const suggested = {{ suggested_minutes }};
+  const nExisting = {{ n_existing }};
 
   function update() {
     const val = parseInt(input.value) || 0;
-    if (val > remaining) {
+    if (val > total) {
       feedback.className = 'form-text text-danger';
-      feedback.textContent = `Máximo disponible: ${remaining} min (tramo de ${total} min, ${assigned} ya asignados).`;
-    } else if (val < remaining) {
-      feedback.className = 'form-text text-warning';
-      feedback.textContent = `Quedarán ${remaining - val} min del tramo sin cubrir.`;
+      feedback.textContent = `Excede el tramo (máximo ${total} min).`;
+    } else if (nExisting > 0) {
+      const leftover = total - val;
+      const perExisting = Math.floor(leftover / nExisting);
+      if (val === suggested) {
+        feedback.className = 'form-text text-success';
+        feedback.textContent = `Reparto equitativo: ${val} min para este profesor, ${perExisting} min para ${nExisting === 1 ? 'el profesor ya asignado' : 'cada uno de los ' + nExisting + ' ya asignados'}.`;
+      } else {
+        feedback.className = 'form-text text-warning';
+        feedback.textContent = `Los ${nExisting} prof. ya asignados quedarán con ${perExisting} min (${leftover} min repartidos entre ellos).`;
+      }
     } else {
-      feedback.className = 'form-text text-success';
-      feedback.textContent = 'El tramo quedará cubierto al completo.';
+      if (val < total) {
+        feedback.className = 'form-text text-warning';
+        feedback.textContent = `Quedarán ${total - val} min del tramo sin cubrir.`;
+      } else {
+        feedback.className = 'form-text text-success';
+        feedback.textContent = 'El tramo quedará cubierto al completo.';
+      }
     }
   }
 
