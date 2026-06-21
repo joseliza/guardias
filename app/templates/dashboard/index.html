@@ -287,8 +287,9 @@
                     <i class="bi bi-person-plus"></i> {% if guard.status == 'covered' %}Reasignar{% else %}Asignar{% endif %}
                   </a>
                   {% if guard.status in ('pending', 'covered') and (current_user.is_management or is_display_user) %}
+                  {% set _confirm_msg = '¿Quitar al profesor de guardia ahora? Se le acreditarán los minutos que haya estado cubriendo.' if guard.status == 'covered' else '¿Confirmas que esta guardia no necesita cobertura?' %}
                   <form method="POST" action="{{ url_for('guards.mark_no_cover', guard_id=guard.id) }}"
-                        onsubmit="return confirm('{% if guard.status == \"covered\" %}¿Quitar al profesor de guardia ahora? Se le acreditarán los minutos que haya estado cubriendo.{% else %}¿Confirmas que esta guardia no necesita cobertura?{% endif %}')">
+                        onsubmit="return confirm({{ _confirm_msg|tojson }})">
                     <input type="hidden" name="back_fecha" value="{{ target_date.isoformat() }}">
                     <button class="btn btn-sm btn-outline-secondary w-100">
                       <i class="bi bi-slash-circle"></i> No nec. cubrir
