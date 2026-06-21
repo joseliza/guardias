@@ -407,9 +407,7 @@ document.querySelectorAll('input[type="date"]').forEach(function(el) {
   var SESSION_KEY = 'guardias_fecha';
   var TODAY = new Date().toISOString().slice(0, 10);
   var urlFecha = new URLSearchParams(window.location.search).get('fecha');
-  if (urlFecha) {
-    sessionStorage.setItem(SESSION_KEY, urlFecha);
-  }
+  sessionStorage.setItem(SESSION_KEY, urlFecha || TODAY);
   var stored = sessionStorage.getItem(SESSION_KEY);
   if (stored && stored !== TODAY) {
     document.querySelectorAll('[data-date-nav]').forEach(function(el) {
