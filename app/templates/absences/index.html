@@ -65,7 +65,16 @@
         {% for a in item.absences %}
         <tr>
           <td>{{ a.teacher.display_name }}</td>
-          <td class="text-muted" style="overflow-wrap:break-word">{{ a.reason or '—' }}</td>
+          <td style="overflow-wrap:break-word">
+            {% if current_user.is_management and is_editable %}
+            <span class="editable-comment text-muted small"
+                  data-absence-id="{{ a.id }}"
+                  title="Clic para editar comentario"
+                  style="cursor:pointer;border-bottom:1px dashed #adb5bd;">{{ a.reason or '—' }}</span>
+            {% else %}
+            <small class="text-muted">{{ a.reason or '—' }}</small>
+            {% endif %}
+          </td>
           <td>
             {% if a.status == 'returned' %}
             <span class="badge bg-success">Reincorporado</span>
@@ -204,6 +213,45 @@ document.getElementById('modalPdfViewer').addEventListener('hidden.bs.modal', fu
 document.getElementById('date-picker').addEventListener('change', function() {
   if (this.value) window.location.href = '{{ url_for("absences.index") }}?fecha=' + this.value;
 });
+
+{% if current_user.is_management and is_editable %}
+// ── Edición inline de comentarios de ausencia ────────────────────────────────
+(function() {
+  document.querySelectorAll('.editable-comment').forEach(function(span) {
+    span.addEventListener('click', function() {
+      if (span.querySelector('input')) return;
+      const absenceId = span.dataset.absenceId;
+      const current = span.textContent.trim() === '—' ? '' : span.textContent.trim();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = current;
+      input.className = 'form-control form-control-sm';
+      input.style.minWidth = '160px';
+      span.textContent = '';
+      span.appendChild(input);
+      input.focus();
+
+      function save() {
+        const text = input.value.trim();
+        fetch('/ausencias/' + absenceId + '/comentario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        })
+        .then(r => r.json())
+        .then(() => { span.textContent = text || '—'; })
+        .catch(() => { span.textContent = current || '—'; });
+      }
+
+      input.addEventListener('blur', save);
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { span.textContent = current || '—'; }
+      });
+    });
+  });
+})();
+{% endif %}
 {% if prompt_absences %}
 document.addEventListener('DOMContentLoaded', function() {
   new bootstrap.Modal(document.getElementById('modalAskTasks')).show();
