@@ -1,7 +1,7 @@
 """
 Modelos RecreoZone y RecreoAssignment.
 RecreoZone: zonas del patio supervisadas durante el recreo (catálogo fijo del instituto).
-RecreoAssignment: asignación semanal zona→profesor con rotación automática o manual.
+RecreoAssignment: asignación diaria zona→profesor con rotación automática o manual.
 """
 from app.extensions import db
 
@@ -28,8 +28,8 @@ class RecreoAssignment(db.Model):
     __tablename__ = "recreo_assignments"
 
     id = db.Column(db.Integer, primary_key=True)
-    # Lunes de la semana a la que corresponde esta asignación
-    week_start = db.Column(db.Date, nullable=False)
+    # Fecha concreta del día (lunes a viernes) al que corresponde esta asignación
+    assignment_date = db.Column(db.Date, nullable=False)
     zone_id = db.Column(db.Integer, db.ForeignKey("recreo_zones.id"), nullable=False)
     teacher_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     school_year_id = db.Column(db.Integer, db.ForeignKey("school_years.id"), nullable=False)
@@ -40,6 +40,6 @@ class RecreoAssignment(db.Model):
     school_year = db.relationship("SchoolYear", foreign_keys=[school_year_id])
 
     __table_args__ = (
-        db.UniqueConstraint("week_start", "zone_id", name="uq_recreo_week_zone"),
-        db.UniqueConstraint("week_start", "teacher_id", name="uq_recreo_week_teacher"),
+        db.UniqueConstraint("assignment_date", "zone_id", name="uq_recreo_day_zone"),
+        db.UniqueConstraint("assignment_date", "teacher_id", name="uq_recreo_day_teacher"),
     )

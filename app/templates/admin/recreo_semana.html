@@ -36,7 +36,7 @@
 </div>
 {% else %}
 
-{# Botón generar automático #}
+{# Leyenda y botón generar #}
 <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
   <div>
     {% if has_assignments %}
@@ -56,50 +56,58 @@
   </form>
 </div>
 
-{# Tabla: filas = profesores, columna = zona asignada #}
+{# Cuadrícula: filas = profesores, columnas = días Lun–Vie #}
 <form method="POST" action="{{ url_for('recreo.editar', week_start_str=week_start.isoformat()) }}">
-<div class="card">
-  <div class="card-body p-0">
-    <table class="table table-hover mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>Profesor/a</th>
-          <th>Zona asignada</th>
-          <th style="width:6rem"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
-        <tr>
-          <td class="fw-semibold align-middle">
-            <i class="bi bi-person text-secondary me-1"></i>{{ row.teacher.full_name }}
-          </td>
-          <td class="align-middle">
-            <select name="teacher_{{ row.teacher.id }}" class="form-select form-select-sm" style="max-width:260px">
-              <option value="">— Sin zona —</option>
-              {% for z in zones %}
-              <option value="{{ z.id }}" {% if row.zone and row.zone.id == z.id %}selected{% endif %}>
-                {{ z.name }}
-              </option>
-              {% endfor %}
-            </select>
-          </td>
-          <td class="align-middle">
-            {% if row.assignment %}
-              {% if row.is_manual %}
-                <span class="badge bg-warning text-dark">Manual</span>
-              {% else %}
-                <span class="badge bg-primary">Auto</span>
-              {% endif %}
-            {% elif row.auto_zone %}
-              <span class="text-muted small">→ {{ row.auto_zone.name }}</span>
-            {% endif %}
-          </td>
-        </tr>
+<div class="table-responsive">
+  <table class="table table-bordered table-hover table-sm mb-0 align-middle" style="min-width:750px">
+    <thead class="table-light">
+      <tr>
+        <th style="min-width:160px">Profesor/a</th>
+        {% set day_names = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] %}
+        {% for d in days %}
+        <th class="text-center" style="min-width:150px">
+          {{ day_names[loop.index0] }}<br>
+          <span class="fw-normal text-muted" style="font-size:.8rem">{{ d | fecha_es('%d/%m') }}</span>
+        </th>
         {% endfor %}
-      </tbody>
-    </table>
-  </div>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="fw-semibold">
+          <i class="bi bi-person text-secondary me-1"></i>{{ row.teacher.full_name }}
+        </td>
+        {% for d in days %}
+        {% set cell = row.days[d] %}
+        <td class="p-1">
+          <select name="teacher_{{ row.teacher.id }}_{{ d.isoformat() }}"
+                  class="form-select form-select-sm w-100">
+            <option value="">— Sin zona —</option>
+            {% for z in zones %}
+            <option value="{{ z.id }}"
+              {% if cell.zone and cell.zone.id == z.id %}selected{% endif %}>
+              {{ z.name }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="mt-1">
+            {% if cell.assignment %}
+              {% if cell.is_manual %}
+                <span class="badge bg-warning text-dark" style="font-size:.6rem">Manual</span>
+              {% else %}
+                <span class="badge bg-primary" style="font-size:.6rem">Auto</span>
+              {% endif %}
+            {% elif cell.auto_zone %}
+              <span class="text-muted" style="font-size:.7rem">→ {{ cell.auto_zone.name }}</span>
+            {% endif %}
+          </div>
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 <div class="d-flex justify-content-end mt-2">
   <button type="submit" class="btn btn-primary">

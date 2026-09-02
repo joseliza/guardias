@@ -1,6 +1,6 @@
 """
 Blueprint de guardias de recreo. Gestiona el catálogo de zonas y las
-asignaciones semanales zona→profesor con rotación automática o manual.
+asignaciones diarias zona→profesor con rotación automática o manual.
 """
 from datetime import date, timedelta
 from flask import Blueprint, render_template, redirect, url_for, flash, request
@@ -15,7 +15,7 @@ from app.utils.school_year import get_current_school_year
 
 recreo_bp = Blueprint("recreo", __name__, url_prefix="/admin/recreo")
 
-# Lunes de referencia para calcular el offset de rotación semanal
+# Lunes de referencia para calcular el offset de rotación diaria
 _ROTATION_REF = date(2000, 1, 3)
 
 
@@ -49,24 +49,23 @@ def _eligible_teachers(year_id):
     )
 
 
-def _auto_assignments(week_start: date, zones, teachers):
-    """Devuelve {zone_id: teacher} para la rotación automática de esa semana."""
+def _auto_assignments(d: date, zones, teachers):
+    """Devuelve {zone_id: teacher} para la rotación automática del día concreto d."""
     if not teachers or not zones:
         return {}
-    week_offset = (week_start - _ROTATION_REF).days // 7
+    day_offset = (d - _ROTATION_REF).days
     return {
-        zone.id: teachers[(i + week_offset) % len(teachers)]
+        zone.id: teachers[(i + day_offset) % len(teachers)]
         for i, zone in enumerate(zones)
     }
 
 
 def get_recreo_for_date(d: date):
     """Devuelve lista de (zone, teacher) para la fecha dada. Usado por dashboard y display."""
-    week_start = _monday_of(d)
     year = get_current_school_year()
     assignments = (
         RecreoAssignment.query
-        .filter_by(week_start=week_start, school_year_id=year.id)
+        .filter_by(assignment_date=d, school_year_id=year.id)
         .join(RecreoZone, RecreoAssignment.zone_id == RecreoZone.id)
         .order_by(RecreoZone.display_order, RecreoZone.name)
         .all()
@@ -147,7 +146,8 @@ def semana():
     except ValueError:
         week_start = _monday_of(date.today())
 
-    week_end = week_start + timedelta(days=4)
+    days = [week_start + timedelta(days=i) for i in range(5)]
+    week_end = days[-1]
     prev_week = week_start - timedelta(weeks=1)
     next_week = week_start + timedelta(weeks=1)
 
@@ -155,35 +155,55 @@ def semana():
     zones = RecreoZone.query.filter_by(active=True).order_by(RecreoZone.display_order, RecreoZone.name).all()
     teachers = _eligible_teachers(year.id)
 
-    existing = RecreoAssignment.query.filter_by(week_start=week_start, school_year_id=year.id).all()
-    assigned_by_teacher = {a.teacher_id: a for a in existing}
-    auto = _auto_assignments(week_start, zones, teachers)  # {zone_id: teacher}
-    zones_by_id = {z.id: z for z in zones}
-    auto_by_teacher = {t.id: zones_by_id[zid] for zid, t in auto.items() if zid in zones_by_id}
+    # Cargar todas las asignaciones de la semana de una sola consulta
+    all_assignments = RecreoAssignment.query.filter(
+        RecreoAssignment.assignment_date.in_(days),
+        RecreoAssignment.school_year_id == year.id,
+    ).all()
+    # {(teacher_id, date): assignment}
+    assigned = {(a.teacher_id, a.assignment_date): a for a in all_assignments}
+
+    # Auto-rotación por día: {date: {teacher_id: zone}}
+    auto_by_day = {}
+    for d in days:
+        auto_day = _auto_assignments(d, zones, teachers)  # {zone_id: teacher}
+        auto_by_day[d] = {t.id: zones_by_id_lookup(zones, zid) for zid, t in auto_day.items()}
 
     rows = []
     for t in teachers:
-        assgn = assigned_by_teacher.get(t.id)
-        rows.append({
-            "teacher": t,
-            "assignment": assgn,
-            "zone": assgn.zone if assgn else None,
-            "auto_zone": auto_by_teacher.get(t.id),
-            "is_manual": assgn.is_manual if assgn else False,
-        })
+        day_cells = {}
+        for d in days:
+            assgn = assigned.get((t.id, d))
+            auto_zone = auto_by_day[d].get(t.id)
+            day_cells[d] = {
+                "assignment": assgn,
+                "zone": assgn.zone if assgn else None,
+                "auto_zone": auto_zone,
+                "is_manual": assgn.is_manual if assgn else False,
+            }
+        rows.append({"teacher": t, "days": day_cells})
 
     return render_template(
         "admin/recreo_semana.html",
         week_start=week_start,
         week_end=week_end,
+        days=days,
         prev_week=prev_week,
         next_week=next_week,
         rows=rows,
         zones=zones,
         teachers=teachers,
-        has_assignments=bool(assigned_by_teacher),
+        has_assignments=bool(all_assignments),
         year=year,
     )
+
+
+def zones_by_id_lookup(zones, zone_id):
+    """Devuelve el objeto zone dado su id, buscando en la lista."""
+    for z in zones:
+        if z.id == zone_id:
+            return z
+    return None
 
 
 @recreo_bp.route("/generar/<week_start_str>", methods=["POST"])
@@ -200,33 +220,36 @@ def generar(week_start_str):
     year = get_current_school_year()
     zones = RecreoZone.query.filter_by(active=True).order_by(RecreoZone.display_order, RecreoZone.name).all()
     teachers = _eligible_teachers(year.id)
-    auto = _auto_assignments(week_start, zones, teachers)
 
-    if not auto:
+    if not zones or not teachers:
         flash("No hay zonas activas o profesores elegibles (grupo G-Rec en recreo).", "warning")
         return redirect(url_for("recreo.semana", semana=week_start_str))
 
-    # Borrar sólo las asignaciones automáticas; respetar las manuales
-    existing = RecreoAssignment.query.filter_by(week_start=week_start, school_year_id=year.id).all()
-    manual_zone_ids = {a.zone_id for a in existing if a.is_manual}
-    for a in existing:
-        if not a.is_manual:
-            db.session.delete(a)
-    db.session.flush()
+    days = [week_start + timedelta(days=i) for i in range(5)]
 
-    for zone_id, teacher in auto.items():
-        if zone_id in manual_zone_ids:
-            continue
-        db.session.add(RecreoAssignment(
-            week_start=week_start,
-            zone_id=zone_id,
-            teacher_id=teacher.id,
-            school_year_id=year.id,
-            is_manual=False,
-        ))
+    for d in days:
+        auto = _auto_assignments(d, zones, teachers)
+        existing = RecreoAssignment.query.filter_by(
+            assignment_date=d, school_year_id=year.id
+        ).all()
+        manual_zone_ids = {a.zone_id for a in existing if a.is_manual}
+        for a in existing:
+            if not a.is_manual:
+                db.session.delete(a)
+        db.session.flush()
+        for zone_id, teacher in auto.items():
+            if zone_id in manual_zone_ids:
+                continue
+            db.session.add(RecreoAssignment(
+                assignment_date=d,
+                zone_id=zone_id,
+                teacher_id=teacher.id,
+                school_year_id=year.id,
+                is_manual=False,
+            ))
 
     db.session.commit()
-    flash("Asignación automática generada.", "success")
+    flash("Asignación automática generada para toda la semana.", "success")
     return redirect(url_for("recreo.semana", semana=week_start_str))
 
 
@@ -244,36 +267,42 @@ def editar(week_start_str):
     year = get_current_school_year()
     zones = RecreoZone.query.filter_by(active=True).order_by(RecreoZone.display_order, RecreoZone.name).all()
     teachers = _eligible_teachers(year.id)
-    auto = _auto_assignments(week_start, zones, teachers)  # {zone_id: teacher}
-    zones_by_id = {z.id: z for z in zones}
-    auto_by_teacher = {t.id: zones_by_id[zid] for zid, t in auto.items() if zid in zones_by_id}
+    days = [week_start + timedelta(days=i) for i in range(5)]
 
-    RecreoAssignment.query.filter_by(week_start=week_start, school_year_id=year.id).delete()
+    # Borrar todas las asignaciones de la semana y reconstruir
+    RecreoAssignment.query.filter(
+        RecreoAssignment.assignment_date.in_(days),
+        RecreoAssignment.school_year_id == year.id,
+    ).delete(synchronize_session=False)
     db.session.flush()
 
-    seen_zones = set()
-    for t in teachers:
-        zid_str = request.form.get(f"teacher_{t.id}")
-        if not zid_str:
-            continue
-        try:
-            zid = int(zid_str)
-        except ValueError:
-            continue
-        if zid in seen_zones:
-            flash("Una zona no puede tener dos profesores a la vez.", "danger")
-            db.session.rollback()
-            return redirect(url_for("recreo.semana", semana=week_start_str))
-        seen_zones.add(zid)
-        auto_zone = auto_by_teacher.get(t.id)
-        is_manual = auto_zone is None or auto_zone.id != zid
-        db.session.add(RecreoAssignment(
-            week_start=week_start,
-            zone_id=zid,
-            teacher_id=t.id,
-            school_year_id=year.id,
-            is_manual=is_manual,
-        ))
+    for d in days:
+        auto = _auto_assignments(d, zones, teachers)  # {zone_id: teacher}
+        auto_by_teacher = {t.id: z_id for z_id, t in auto.items()}
+        seen_zones = set()
+        for t in teachers:
+            field = f"teacher_{t.id}_{d.isoformat()}"
+            zid_str = request.form.get(field)
+            if not zid_str:
+                continue
+            try:
+                zid = int(zid_str)
+            except ValueError:
+                continue
+            if zid in seen_zones:
+                flash(f"Una zona no puede tener dos profesores el mismo día ({d.strftime('%d/%m')}).", "danger")
+                db.session.rollback()
+                return redirect(url_for("recreo.semana", semana=week_start_str))
+            seen_zones.add(zid)
+            auto_zone_id = auto_by_teacher.get(t.id)
+            is_manual = auto_zone_id is None or auto_zone_id != zid
+            db.session.add(RecreoAssignment(
+                assignment_date=d,
+                zone_id=zid,
+                teacher_id=t.id,
+                school_year_id=year.id,
+                is_manual=is_manual,
+            ))
 
     db.session.commit()
     flash("Asignación semanal guardada.", "success")
