@@ -34,8 +34,7 @@
         <div class="col-md-3">
           <label class="form-label">Rol</label>
           <select name="role" class="form-select" {% if is_protected_admin %}disabled title="El rol del administrador del sistema no puede cambiarse"{% endif %}>
-            <option value="teacher" {% if teacher and teacher.role=='teacher' %}selected{% endif %}>Profesorado</option>
-            <option value="extracurricular" {% if teacher and teacher.role=='extracurricular' %}selected{% endif %}>Extraescolares</option>
+            <option value="teacher" {% if not teacher or teacher.role=='teacher' %}selected{% endif %}>Profesorado</option>
             <option value="management" {% if teacher and teacher.role=='management' %}selected{% endif %}>Management</option>
             <option value="display" {% if teacher and teacher.role=='display' %}selected{% endif %}>Pantalla sala profesores</option>
           </select>
@@ -51,6 +50,12 @@
             <label class="form-check-label" for="receive_emails">Recibe correos</label>
           </div>
           {% endif %}
+          <div class="form-check" id="extracurricular-access-wrapper" style="display:none">
+            <input type="checkbox" class="form-check-input" name="extracurricular_access" id="extracurricular_access" {% if teacher and teacher.extracurricular_access %}checked{% endif %}>
+            <label class="form-check-label" for="extracurricular_access">
+              Acceso a sección Extraescolares
+            </label>
+          </div>
           <div class="form-check" id="track-points-wrapper" style="display:none">
             <input type="checkbox" class="form-check-input" name="track_points" id="track_points" {% if teacher and teacher.track_points %}checked{% endif %}>
             <label class="form-check-label" for="track_points">
@@ -200,15 +205,20 @@
   const roleSelect = document.querySelector('select[name="role"]');
   const trackWrapper = document.getElementById('track-points-wrapper');
   const devAccessWrapper = document.getElementById('dev-access-wrapper');
-  function toggleTrackPoints() {
+  const extraWrapper = document.getElementById('extracurricular-access-wrapper');
+  function toggleRoleFlags() {
     const isManagement = roleSelect.value === 'management';
+    const isTeacher = roleSelect.value === 'teacher';
     trackWrapper.style.display = isManagement ? '' : 'none';
     if (devAccessWrapper) {
       devAccessWrapper.style.display = isManagement ? '' : 'none';
     }
+    if (extraWrapper) {
+      extraWrapper.style.display = isTeacher ? '' : 'none';
+    }
   }
-  roleSelect.addEventListener('change', toggleTrackPoints);
-  toggleTrackPoints();
+  roleSelect.addEventListener('change', toggleRoleFlags);
+  toggleRoleFlags();
 
   {% if teacher %}
   const subData = [

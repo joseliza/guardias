@@ -75,7 +75,7 @@
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('dashboard.index') }}" data-date-nav><i class="bi bi-house"></i> Inicio</a>
         </li>
-        {% if current_user.role not in ('display', 'extracurricular') %}
+        {% if current_user.role != 'display' %}
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('guards.my_guard') }}" data-date-nav><i class="bi bi-shield-check"></i> Mi guardia</a>
         </li>
@@ -195,7 +195,7 @@
             {% endif %}
           </a>
           <ul class="dropdown-menu dropdown-menu-end">
-            {% if current_user.role not in ('management', 'display', 'extracurricular') and points_visible_to_teachers %}
+            {% if current_user.scores_points and points_visible_to_teachers %}
             <li><a class="dropdown-item" href="{{ url_for('guards.my_points') }}"><i class="bi bi-star-half"></i> Mis puntos</a></li>
             <li><hr class="dropdown-divider"></li>
             {% endif %}

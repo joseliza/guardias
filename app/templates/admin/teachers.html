@@ -127,7 +127,10 @@
           <td>{{ t.full_name }}</td>
           <td><span class="badge bg-light text-dark border">{{ t.abbreviation or '—' }}</span></td>
           <td>{{ t.email }}</td>
-          <td><span class="badge bg-secondary">{{ t.role }}</span></td>
+          <td>
+            <span class="badge bg-secondary">{{ t.role }}</span>
+            {% if t.extracurricular_access %}<span class="badge bg-info text-dark ms-1">extraescolar</span>{% endif %}
+          </td>
           {% if points_enabled %}<td>{{ '—' if t.role in ('management', 'display') else t.points }}</td>{% endif %}
           <td><span class="badge bg-{{ 'success' if t.active else 'danger' }}">{{ 'Sí' if t.active else 'No' }}</span></td>
           <td>

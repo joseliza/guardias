@@ -16,11 +16,13 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(100), nullable=False)
     surname = db.Column(db.String(100), nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    # roles: teacher, extracurricular, management, display
+    # roles: teacher, management, display
     role = db.Column(db.String(30), nullable=False, default="teacher")
     active = db.Column(db.Boolean, default=True, nullable=False)
     # Puntos acumulados en el curso actual
     points = db.Column(db.Float, default=0.0, nullable=False)
+    # Si True, tiene acceso a la sección de actividades extraescolares (solo para teacher)
+    extracurricular_access = db.Column(db.Boolean, default=False, nullable=False)
     # Solo relevante para management: si True, acumula puntos como profesor normal
     track_points = db.Column(db.Boolean, default=False, nullable=False)
     # Solo relevante para management: si True, ve la sección "Desarrollo" en Configuración
@@ -90,7 +92,7 @@ class User(UserMixin, db.Model):
 
     @property
     def is_extracurricular(self):
-        return self.role in ("extracurricular", "management")
+        return self.role == "management" or self.extracurricular_access
 
     @property
     def scores_points(self):

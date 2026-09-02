@@ -156,6 +156,7 @@ def teacher_create():
             surname=request.form["surname"].strip(),
             abbreviation=request.form.get("abbreviation", "").strip() or None,
             role=role,
+            extracurricular_access=request.form.get("extracurricular_access") == "on" and role == "teacher",
             track_points=request.form.get("track_points") == "on" and role == "management",
             dev_access=(current_user.dev_access and request.form.get("dev_access") == "on"
                         and role == "management"),
@@ -208,6 +209,7 @@ def teacher_edit(tid):
         else:
             teacher.role = request.form.get("role", "teacher")
             teacher.active = request.form.get("active") == "on"
+            teacher.extracurricular_access = request.form.get("extracurricular_access") == "on" and teacher.role == "teacher"
             teacher.track_points = request.form.get("track_points") == "on" and teacher.role == "management"
             if current_user.dev_access:
                 teacher.dev_access = request.form.get("dev_access") == "on" and teacher.role == "management"
@@ -1610,7 +1612,7 @@ def _dl_prereqs(year_id):
 
     drive_teachers_count = User.query.filter(
         User.school_year_id == year_id,
-        User.role.in_(["teacher", "management", "extracurricular"]),
+        User.role.in_(["teacher", "management"]),
     ).count()
 
     rows = RawScheduleRow.query.filter_by(school_year_id=year_id).all()
