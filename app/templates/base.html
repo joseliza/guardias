@@ -79,6 +79,8 @@
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('guards.my_guard') }}" data-date-nav><i class="bi bi-shield-check"></i> Mi guardia</a>
         </li>
+        {% endif %}
+        {% if current_user.is_management %}
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('absences.index') }}" data-date-nav><i class="bi bi-calendar-x"></i> Ausencias</a>
         </li>

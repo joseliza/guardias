@@ -27,6 +27,9 @@ absences_bp = Blueprint("absences", __name__, url_prefix="/ausencias")
 @absences_bp.route("/")
 @login_required
 def index():
+    if not current_user.is_management:
+        return redirect(url_for("dashboard.index"))
+
     from collections import defaultdict
     from datetime import timedelta
 
