@@ -254,6 +254,7 @@ def create_app():
     from app.routes.display import display_bp
     from app.routes.presence import presence_bp
     from app.routes.impersonate import impersonate_bp
+    from app.routes.recreo import recreo_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -265,6 +266,7 @@ def create_app():
     app.register_blueprint(display_bp)
     app.register_blueprint(presence_bp)
     app.register_blueprint(impersonate_bp)
+    app.register_blueprint(recreo_bp)
 
     if not scheduler.running:
         scheduler.start()

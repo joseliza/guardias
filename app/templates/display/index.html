@@ -141,10 +141,32 @@
       {% set pending = slot_guards | selectattr('status','eq','pending') | list %}
 
       {% if slot.is_break %}
-      <div id="slot-{{ slot.id }}" class="card mb-2 border-0 bg-light">
-        <div class="card-body py-2 text-muted text-center small">
-          <i class="bi bi-cup-hot"></i> Recreo · {{ slot.start }}–{{ slot.end }}
+      <div id="slot-{{ slot.id }}" class="card mb-2 border-0 shadow-sm">
+        <div class="card-header py-2 bg-warning bg-opacity-25">
+          <strong><i class="bi bi-cup-hot"></i> Recreo</strong>
+          <small class="ms-2 text-muted">{{ slot.start }}–{{ slot.end }}</small>
         </div>
+        {% if recreo_assignments %}
+        {# Modo texto — estructura lista para modo gráfico futuro #}
+        {% block recreo_display %}
+        <div class="card-body py-2 px-3">
+          <div class="row g-2">
+            {% for zone, teacher in recreo_assignments %}
+            <div class="col-6 col-md-4">
+              <div class="border rounded px-2 py-1 small">
+                <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;">
+                  <i class="bi bi-geo-alt-fill"></i> {{ zone.name }}
+                </div>
+                <div class="fw-semibold">{{ teacher.full_name if teacher else '—' }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endblock %}
+        {% else %}
+        <div class="card-body py-2 text-muted text-center small">Sin asignación de recreo para esta semana.</div>
+        {% endif %}
       </div>
 
       {% else %}

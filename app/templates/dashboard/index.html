@@ -131,9 +131,33 @@
 
     {% if s.is_break %}
     <div id="slot-{{ s.id }}" class="slot-card card mb-2 border-0 bg-light{% if not is_editable %} past-time-slot{% endif %}" data-slot-id="{{ s.id }}">
+      {% if recreo_assignments %}
+      <div class="card-header py-2 d-flex justify-content-between align-items-center bg-light border-bottom">
+        <span class="text-muted small"><i class="bi bi-cup-hot"></i> <strong>Recreo</strong> · {{ s.start }}–{{ s.end }}</span>
+        {% if current_user.is_management %}
+        <a href="{{ url_for('recreo.semana') }}" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.75rem;">
+          <i class="bi bi-pencil"></i> Editar
+        </a>
+        {% endif %}
+      </div>
+      <div class="card-body py-2 px-3">
+        <div class="d-flex flex-wrap gap-2">
+          {% for zone, teacher in recreo_assignments %}
+          <span class="badge rounded-pill {% if teacher and teacher.id == current_user.id %}bg-primary{% else %}bg-secondary{% endif %} d-flex align-items-center gap-1 px-2 py-1" style="font-size:.8rem;font-weight:500;">
+            <i class="bi bi-geo-alt-fill"></i>
+            {{ zone.name }}: <span class="fw-normal ms-1">{{ teacher.display_name if teacher else '—' }}</span>
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
       <div class="card-body py-2 text-muted text-center small">
         <i class="bi bi-cup-hot"></i> Recreo · {{ s.start }}–{{ s.end }} (30 min)
+        {% if current_user.is_management %}
+        · <a href="{{ url_for('recreo.semana') }}" class="text-muted">Asignar zonas</a>
+        {% endif %}
       </div>
+      {% endif %}
     </div>
 
     {% else %}

@@ -274,6 +274,9 @@ def index():
                     ],
                 })
 
+    from app.routes.recreo import get_recreo_for_date
+    recreo_assignments = get_recreo_for_date(target_date) if day_idx < 5 else []
+
     gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
 
     from datetime import datetime as _dt
@@ -317,4 +320,5 @@ def index():
         past_slot_ids=past_slot_ids,
         is_display_user=is_display_user,
         absent_ids_by_slot=absent_ids_by_slot,
+        recreo_assignments=recreo_assignments,
     )

@@ -61,6 +61,9 @@ def index():
                 "task_id": task.id,
             })
 
+    from app.routes.recreo import get_recreo_for_date
+    recreo_assignments = get_recreo_for_date(today) if today.weekday() < 5 else []
+
     return render_template(
         "display/index.html",
         today=today,
@@ -70,6 +73,7 @@ def index():
         absences=absences,
         available_by_slot=available_by_slot,
         tasks_by_slot=tasks_by_slot,
+        recreo_assignments=recreo_assignments,
     )
 
 

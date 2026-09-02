@@ -12,6 +12,7 @@ from .availability import AvailabilityPeriod, AvailabilityPeriodGroup, Availabil
 from .chat import ChatMessage
 from .subject import Subject
 from .raw_schedule import RawScheduleRow
+from .recreo import RecreoZone, RecreoAssignment
 
 __all__ = [
     "db",
@@ -32,4 +33,6 @@ __all__ = [
     "ChatMessage",
     "Subject",
     "RawScheduleRow",
+    "RecreoZone",
+    "RecreoAssignment",
 ]
