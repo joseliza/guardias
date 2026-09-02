@@ -42,8 +42,8 @@
     {% if has_assignments %}
     <span class="text-muted small">
       <i class="bi bi-info-circle"></i>
-      Las zonas con <span class="badge bg-primary" style="font-size:.65rem">Auto</span> fueron asignadas por rotación;
-      <span class="badge bg-warning text-dark" style="font-size:.65rem">Manual</span> indica edición manual.
+      <span class="badge bg-primary" style="font-size:.65rem">Auto</span> = rotación automática;
+      <span class="badge bg-warning text-dark" style="font-size:.65rem">Manual</span> = zona cambiada manualmente.
     </span>
     {% else %}
     <span class="text-muted small"><i class="bi bi-info-circle"></i> Semana sin asignar todavía.</span>
@@ -56,30 +56,30 @@
   </form>
 </div>
 
-{# Tabla de asignaciones / formulario de edición manual #}
+{# Tabla: filas = profesores, columna = zona asignada #}
 <form method="POST" action="{{ url_for('recreo.editar', week_start_str=week_start.isoformat()) }}">
 <div class="card">
   <div class="card-body p-0">
     <table class="table table-hover mb-0">
       <thead class="table-light">
         <tr>
-          <th>Zona</th>
-          <th>Profesor/a asignado/a</th>
-          <th style="width:5rem"></th>
+          <th>Profesor/a</th>
+          <th>Zona asignada</th>
+          <th style="width:6rem"></th>
         </tr>
       </thead>
       <tbody>
         {% for row in rows %}
         <tr>
           <td class="fw-semibold align-middle">
-            <i class="bi bi-geo-alt text-secondary me-1"></i>{{ row.zone.name }}
+            <i class="bi bi-person text-secondary me-1"></i>{{ row.teacher.full_name }}
           </td>
           <td class="align-middle">
-            <select name="zone_{{ row.zone.id }}" class="form-select form-select-sm" style="max-width:260px">
-              <option value="">— Sin asignar —</option>
-              {% for t in teachers %}
-              <option value="{{ t.id }}" {% if row.teacher and row.teacher.id == t.id %}selected{% endif %}>
-                {{ t.full_name }}
+            <select name="teacher_{{ row.teacher.id }}" class="form-select form-select-sm" style="max-width:260px">
+              <option value="">— Sin zona —</option>
+              {% for z in zones %}
+              <option value="{{ z.id }}" {% if row.zone and row.zone.id == z.id %}selected{% endif %}>
+                {{ z.name }}
               </option>
               {% endfor %}
             </select>
@@ -91,8 +91,8 @@
               {% else %}
                 <span class="badge bg-primary">Auto</span>
               {% endif %}
-            {% elif row.auto_teacher %}
-              <span class="text-muted small">→ {{ row.auto_teacher.display_name }}</span>
+            {% elif row.auto_zone %}
+              <span class="text-muted small">→ {{ row.auto_zone.name }}</span>
             {% endif %}
           </td>
         </tr>

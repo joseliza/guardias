@@ -38,7 +38,8 @@
               <i class="bi bi-pencil"></i>
             </button>
             <form method="POST" action="{{ url_for('recreo.zona_delete', zid=z.id) }}"
-                  onsubmit="return confirm('¿Eliminar la zona {{ z.name | replace(\"'\", \"\\'\") }}?')">
+                  onsubmit="return confirm('¿Eliminar la zona «' + this.dataset.name + '»?')"
+                  data-name="{{ z.name | e }}">
               <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></button>
             </form>
           </td>

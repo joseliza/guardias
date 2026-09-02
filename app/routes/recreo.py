@@ -155,20 +155,20 @@ def semana():
     zones = RecreoZone.query.filter_by(active=True).order_by(RecreoZone.display_order, RecreoZone.name).all()
     teachers = _eligible_teachers(year.id)
 
-    existing = {
-        a.zone_id: a
-        for a in RecreoAssignment.query.filter_by(week_start=week_start, school_year_id=year.id).all()
-    }
-    auto = _auto_assignments(week_start, zones, teachers)
+    existing = RecreoAssignment.query.filter_by(week_start=week_start, school_year_id=year.id).all()
+    assigned_by_teacher = {a.teacher_id: a for a in existing}
+    auto = _auto_assignments(week_start, zones, teachers)  # {zone_id: teacher}
+    zones_by_id = {z.id: z for z in zones}
+    auto_by_teacher = {t.id: zones_by_id[zid] for zid, t in auto.items() if zid in zones_by_id}
 
     rows = []
-    for z in zones:
-        assgn = existing.get(z.id)
+    for t in teachers:
+        assgn = assigned_by_teacher.get(t.id)
         rows.append({
-            "zone": z,
+            "teacher": t,
             "assignment": assgn,
-            "teacher": assgn.teacher if assgn else None,
-            "auto_teacher": auto.get(z.id),
+            "zone": assgn.zone if assgn else None,
+            "auto_zone": auto_by_teacher.get(t.id),
             "is_manual": assgn.is_manual if assgn else False,
         })
 
@@ -181,7 +181,7 @@ def semana():
         rows=rows,
         zones=zones,
         teachers=teachers,
-        has_assignments=bool(existing),
+        has_assignments=bool(assigned_by_teacher),
         year=year,
     )
 
@@ -243,30 +243,36 @@ def editar(week_start_str):
 
     year = get_current_school_year()
     zones = RecreoZone.query.filter_by(active=True).order_by(RecreoZone.display_order, RecreoZone.name).all()
+    teachers = _eligible_teachers(year.id)
+    auto = _auto_assignments(week_start, zones, teachers)  # {zone_id: teacher}
+    zones_by_id = {z.id: z for z in zones}
+    auto_by_teacher = {t.id: zones_by_id[zid] for zid, t in auto.items() if zid in zones_by_id}
 
     RecreoAssignment.query.filter_by(week_start=week_start, school_year_id=year.id).delete()
     db.session.flush()
 
-    seen_teachers = set()
-    for z in zones:
-        tid_str = request.form.get(f"zone_{z.id}")
-        if not tid_str:
+    seen_zones = set()
+    for t in teachers:
+        zid_str = request.form.get(f"teacher_{t.id}")
+        if not zid_str:
             continue
         try:
-            tid = int(tid_str)
+            zid = int(zid_str)
         except ValueError:
             continue
-        if tid in seen_teachers:
-            flash("Un profesor no puede estar en dos zonas a la vez.", "danger")
+        if zid in seen_zones:
+            flash("Una zona no puede tener dos profesores a la vez.", "danger")
             db.session.rollback()
             return redirect(url_for("recreo.semana", semana=week_start_str))
-        seen_teachers.add(tid)
+        seen_zones.add(zid)
+        auto_zone = auto_by_teacher.get(t.id)
+        is_manual = auto_zone is None or auto_zone.id != zid
         db.session.add(RecreoAssignment(
             week_start=week_start,
-            zone_id=z.id,
-            teacher_id=tid,
+            zone_id=zid,
+            teacher_id=t.id,
             school_year_id=year.id,
-            is_manual=True,
+            is_manual=is_manual,
         ))
 
     db.session.commit()
