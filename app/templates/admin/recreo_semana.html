@@ -58,8 +58,9 @@
 
 {# Cuadrícula: filas = profesores, columnas = días Lun–Vie #}
 <form method="POST" action="{{ url_for('recreo.editar', week_start_str=week_start.isoformat()) }}">
-<div class="table-responsive">
-  <table class="table table-bordered table-hover table-sm mb-0 align-middle" style="min-width:750px">
+<div class="card">
+  <div class="card-body p-0">
+  <table class="table table-bordered table-hover table-sm mb-0 align-middle">
     <thead class="table-light">
       <tr>
         <th style="min-width:160px">Profesor/a</th>
@@ -83,7 +84,8 @@
         <td class="p-1">
           <select name="teacher_{{ row.teacher.id }}_{{ d.isoformat() }}"
                   class="form-select form-select-sm w-100">
-            <option value="">— Sin zona —</option>
+            <option value=""       {% if not cell.assignment %}selected{% endif %}>No asignada</option>
+            <option value="none"   {% if cell.assignment and not cell.zone %}selected{% endif %}>Sin guardia</option>
             {% for z in zones %}
             <option value="{{ z.id }}"
               {% if cell.zone and cell.zone.id == z.id %}selected{% endif %}>
@@ -92,12 +94,14 @@
             {% endfor %}
           </select>
           <div class="mt-1">
-            {% if cell.assignment %}
+            {% if cell.assignment and cell.zone %}
               {% if cell.is_manual %}
                 <span class="badge bg-warning text-dark" style="font-size:.6rem">Manual</span>
               {% else %}
                 <span class="badge bg-primary" style="font-size:.6rem">Auto</span>
               {% endif %}
+            {% elif cell.assignment and not cell.zone %}
+              <span class="badge bg-secondary" style="font-size:.6rem">Sin guardia</span>
             {% elif cell.auto_zone %}
               <span class="text-muted" style="font-size:.7rem">→ {{ cell.auto_zone.name }}</span>
             {% endif %}
@@ -108,6 +112,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 <div class="d-flex justify-content-end mt-2">
   <button type="submit" class="btn btn-primary">
@@ -118,3 +123,4 @@
 
 {% endif %}
 {% endblock %}
+

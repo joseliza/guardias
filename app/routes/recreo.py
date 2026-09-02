@@ -65,7 +65,11 @@ def get_recreo_for_date(d: date):
     year = get_current_school_year()
     assignments = (
         RecreoAssignment.query
-        .filter_by(assignment_date=d, school_year_id=year.id)
+        .filter(
+            RecreoAssignment.assignment_date == d,
+            RecreoAssignment.school_year_id == year.id,
+            RecreoAssignment.zone_id.isnot(None),
+        )
         .join(RecreoZone, RecreoAssignment.zone_id == RecreoZone.id)
         .order_by(RecreoZone.display_order, RecreoZone.name)
         .all()
@@ -232,7 +236,9 @@ def generar(week_start_str):
         existing = RecreoAssignment.query.filter_by(
             assignment_date=d, school_year_id=year.id
         ).all()
-        manual_zone_ids = {a.zone_id for a in existing if a.is_manual}
+        # Profesores marcados explícitamente como "Sin guardia" ese día
+        sin_guardia_ids = {a.teacher_id for a in existing if a.zone_id is None}
+        manual_zone_ids = {a.zone_id for a in existing if a.is_manual and a.zone_id is not None}
         for a in existing:
             if not a.is_manual:
                 db.session.delete(a)
@@ -240,6 +246,8 @@ def generar(week_start_str):
         for zone_id, teacher in auto.items():
             if zone_id in manual_zone_ids:
                 continue
+            if teacher.id in sin_guardia_ids:
+                continue  # no asignar zona a quien está marcado como sin guardia
             db.session.add(RecreoAssignment(
                 assignment_date=d,
                 zone_id=zone_id,
@@ -284,7 +292,19 @@ def editar(week_start_str):
             field = f"teacher_{t.id}_{d.isoformat()}"
             zid_str = request.form.get(field)
             if not zid_str:
+                continue  # "No asignada" — no se guarda nada
+
+            if zid_str == "none":
+                # "Sin guardia" explícito — se guarda con zone_id=NULL
+                db.session.add(RecreoAssignment(
+                    assignment_date=d,
+                    zone_id=None,
+                    teacher_id=t.id,
+                    school_year_id=year.id,
+                    is_manual=True,
+                ))
                 continue
+
             try:
                 zid = int(zid_str)
             except ValueError:

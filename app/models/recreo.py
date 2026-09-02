@@ -30,7 +30,8 @@ class RecreoAssignment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # Fecha concreta del día (lunes a viernes) al que corresponde esta asignación
     assignment_date = db.Column(db.Date, nullable=False)
-    zone_id = db.Column(db.Integer, db.ForeignKey("recreo_zones.id"), nullable=False)
+    # NULL indica que el profesor está explícitamente marcado como 'Sin guardia' ese día
+    zone_id = db.Column(db.Integer, db.ForeignKey("recreo_zones.id"), nullable=True)
     teacher_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     school_year_id = db.Column(db.Integer, db.ForeignKey("school_years.id"), nullable=False)
     # True si fue editada manualmente sobre la rotación automática
