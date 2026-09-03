@@ -13,7 +13,7 @@ from app.models.user import User
 from app.models.schedule import TeacherSchedule
 from app.models.group import Group
 from app.models.school_year import SchoolYear
-from app.utils import _MESES
+from app.utils import _MESES, fecha_es
 from app.utils.school_year import get_current_school_year
 
 recreo_bp = Blueprint("recreo", __name__, url_prefix="/admin/recreo")
@@ -494,11 +494,86 @@ def informe():
     )
 
 
+def _fecha_dia(d):
+    """Formatea una fecha como 'Lunes 08/09/2025' (fecha_es no soporta %m/%d/%Y numéricos combinados)."""
+    return f"{fecha_es(d, '%A').capitalize()} {d.strftime('%d/%m/%Y')}"
+
+
+def _build_recreo_pdf(scope, label, institute_name, *, teacher=None, entries=None, days=None):
+    """Genera el PDF del informe de guardias de recreo y devuelve un BytesIO."""
+    import io
+    from fpdf import FPDF
+    from fpdf.fonts import FontFace
+
+    FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    heading_style = FontFace(emphasis="B", fill_color=(240, 240, 240))
+
+    pdf = FPDF()
+    pdf.add_font("dv", "", FONT)
+    pdf.add_font("dv", "B", FONT_B)
+    pdf.add_page()
+
+    pdf.set_font("dv", "B", 16)
+    pdf.cell(0, 10, institute_name, ln=True, align="C")
+    pdf.set_font("dv", "", 12)
+    pdf.cell(0, 7, "Guardias de recreo — zonas asignadas", ln=True, align="C")
+    pdf.set_font("dv", "", 10)
+    pdf.set_text_color(90, 90, 90)
+    pdf.cell(0, 6, label, ln=True, align="C")
+    pdf.set_text_color(0, 0, 0)
+    if scope == "individual":
+        pdf.set_font("dv", "B", 12)
+        pdf.cell(0, 8, teacher.full_name, ln=True, align="C")
+    pdf.ln(2)
+    pdf.set_draw_color(180, 180, 180)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(4)
+
+    pdf.set_font("dv", "", 10)
+
+    if scope == "individual":
+        if not entries:
+            pdf.cell(0, 8, "No hay guardias de recreo asignadas a este profesor en el periodo seleccionado.")
+        else:
+            with pdf.table(col_widths=(60, 90, 40), headings_style=heading_style) as table:
+                header = table.row()
+                for h in ("Fecha", "Zona del patio", "Tipo"):
+                    header.cell(h)
+                for e in entries:
+                    row = table.row()
+                    row.cell(_fecha_dia(e["date"]))
+                    row.cell(e["zone"].name)
+                    row.cell("Manual" if e["is_manual"] else "Rotación automática")
+    else:
+        if not days:
+            pdf.cell(0, 8, "No hay guardias de recreo asignadas en el periodo seleccionado.")
+        else:
+            for day in days:
+                pdf.set_font("dv", "B", 11)
+                pdf.set_fill_color(230, 230, 230)
+                pdf.cell(0, 7, _fecha_dia(day["date"]), ln=True, fill=True)
+                pdf.set_font("dv", "", 10)
+                with pdf.table(col_widths=(70, 90, 30)) as table:
+                    for zone, day_teacher, is_manual in day["entries"]:
+                        row = table.row()
+                        row.cell(zone.name)
+                        row.cell(day_teacher.full_name)
+                        row.cell("(manual)" if is_manual else "")
+                pdf.ln(2)
+
+    return io.BytesIO(bytes(pdf.output()))
+
+
 @recreo_bp.route("/informe/imprimir")
 @login_required
 def informe_pdf():
     if not _require_management():
         return redirect(url_for("dashboard.index"))
+
+    from flask import make_response
+    from werkzeug.utils import secure_filename
+    from app.routes.admin import _get_institute_name
 
     scope = request.args.get("scope", "general")
     if scope not in ("general", "individual"):
@@ -512,13 +587,14 @@ def informe_pdf():
             return redirect(url_for("recreo.informe", **request.args.to_dict()))
         teacher = User.query.get_or_404(teacher_id)
         entries = _build_report_individual(teacher_id, desde, hasta)
-        return render_template(
-            "admin/recreo_print.html",
-            scope="individual", teacher=teacher, entries=entries, label=label,
-        )
+        buf = _build_recreo_pdf("individual", label, _get_institute_name(), teacher=teacher, entries=entries)
+        filename = f"recreo_{secure_filename(teacher.full_name)}_{desde.isoformat()}_{hasta.isoformat()}.pdf"
+    else:
+        days_data = _build_report_general(desde, hasta)
+        buf = _build_recreo_pdf("general", label, _get_institute_name(), days=days_data)
+        filename = f"recreo_general_{desde.isoformat()}_{hasta.isoformat()}.pdf"
 
-    days_data = _build_report_general(desde, hasta)
-    return render_template(
-        "admin/recreo_print.html",
-        scope="general", days=days_data, label=label,
-    )
+    response = make_response(buf.getvalue())
+    response.headers["Content-Type"] = "application/pdf"
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    return response

@@ -58,9 +58,9 @@
       </button>
     </div>
     <div class="col-auto">
-      <button type="submit" formaction="{{ url_for('recreo.informe_pdf') }}" formtarget="_blank"
+      <button type="submit" formaction="{{ url_for('recreo.informe_pdf') }}"
               class="btn btn-primary btn-sm" {% if scope == 'individual' and not teacher_id %}disabled{% endif %}>
-        <i class="bi bi-printer"></i> Imprimir informe
+        <i class="bi bi-file-earmark-pdf"></i> Descargar PDF
       </button>
     </div>
   </form>
@@ -93,7 +93,7 @@
       <tbody>
         {% for e in summary.entries %}
         <tr>
-          <td class="small text-nowrap">{{ e.date | fecha_es('%a %d/%m/%Y') }}</td>
+          <td class="small text-nowrap">{{ e.date | fecha_es('%A %d/%m/%Y') | capitalize }}</td>
           <td class="small fw-semibold">{{ e.zone.name }}</td>
           <td class="small">
             {% if e.is_manual %}<span class="badge bg-warning text-dark" style="font-size:.6rem">Manual</span>{% endif %}
@@ -121,7 +121,7 @@
           {% for zone, teacher, is_manual in day.entries %}
           <tr>
             {% if loop.first %}
-            <td class="small fw-semibold text-nowrap" rowspan="{{ day.entries | length }}">{{ day.date | fecha_es('%a %d/%m/%Y') }}</td>
+            <td class="small fw-semibold text-nowrap" rowspan="{{ day.entries | length }}">{{ day.date | fecha_es('%A %d/%m/%Y') | capitalize }}</td>
             {% endif %}
             <td class="small">{{ zone.name }}</td>
             <td class="small">{{ teacher.full_name }}</td>
