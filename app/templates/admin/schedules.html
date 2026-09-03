@@ -74,26 +74,9 @@
         <tbody>
           {% for row in schedule_grid %}
           {% set s = row.slot %}
-          {% if s.is_break %}
-          <tr class="table-secondary">
+          <tr{% if s.is_break %} class="table-secondary"{% endif %}>
             <td class="text-start fw-semibold small text-muted">
-              <i class="bi bi-cup-hot"></i> {{ s.label }}<br>
-              <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
-            </td>
-            {% for cell_entries in row.days %}
-            <td>
-              {% if cell_entries and cell_entries[0].is_guard_slot %}
-              <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia recreo</span>
-              {% else %}
-              <span class="text-muted" style="font-size:.8rem">—</span>
-              {% endif %}
-            </td>
-            {% endfor %}
-          </tr>
-          {% else %}
-          <tr>
-            <td class="text-start fw-semibold small text-muted">
-              {{ s.label }}<br>
+              {% if s.is_break %}<i class="bi bi-cup-hot"></i> {% endif %}{{ s.label }}<br>
               <span style="font-size:.72rem">{{ s.start }}–{{ s.end }}</span>
             </td>
             {% for d in range(5) %}
@@ -153,7 +136,7 @@
                 {% endif %}>
               {% if cell_entries %}
                 {% if is_guard %}
-                <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia</span>
+                <span class="badge bg-success"><i class="bi bi-shield-check"></i> Guardia{% if s.is_break %} recreo{% endif %}</span>
                 {% elif is_multi %}
                 {# Celda multi-grupo: mostrar todos los badges con datos para el modal #}
                 {% for e in cell_entries %}
@@ -198,7 +181,6 @@
             </td>
             {% endfor %}
           </tr>
-          {% endif %}
           {% endfor %}
         </tbody>
       </table>
