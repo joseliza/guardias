@@ -21,6 +21,9 @@
       <a href="{{ url_for('admin.config', _anchor='section-recreo-zonas') }}" class="btn btn-outline-secondary btn-sm ms-2">
         <i class="bi bi-geo-alt"></i> Gestionar zonas
       </a>
+      <a href="{{ url_for('recreo.informe') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-printer"></i> Informe
+      </a>
     </div>
   </div>
 </div>
@@ -49,7 +52,10 @@
     <span class="text-muted small"><i class="bi bi-info-circle"></i> Semana sin asignar todavía.</span>
     {% endif %}
   </div>
-  <form method="POST" action="{{ url_for('recreo.generar', week_start_str=week_start.isoformat()) }}">
+  <form method="POST" action="{{ url_for('recreo.generar', week_start_str=week_start.isoformat()) }}"
+        {% if has_assignments %}
+        onsubmit="return confirm('Esta semana ya tiene guardias de recreo asignadas.\n\nSi generas de nuevo, las asignaciones automáticas se recalcularán y podrían cambiar de zona (las asignaciones manuales no se tocan). Esto puede afectar a información que ya se haya comunicado a los profesores.\n\n¿Deseas continuar?');"
+        {% endif %}>
     <button type="submit" class="btn btn-outline-success btn-sm">
       <i class="bi bi-arrow-repeat"></i> Generar automáticamente
     </button>

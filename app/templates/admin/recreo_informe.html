@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Informe de guardias de recreo{% endblock %}
+{% block main_class %}container-fluid pb-4{% endblock %}
+{% block content %}
+
+<div class="sticky-page-header" style="position:sticky;top:0;z-index:999;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.07);margin:0 -12px;padding:.5rem 12px .25rem;">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h4 class="mb-0"><i class="bi bi-file-earmark-text"></i> Informe de guardias de recreo</h4>
+    <a href="{{ back_url('recreo.semana') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i> Atrás
+    </a>
+  </div>
+
+  <form method="GET" action="{{ url_for('recreo.informe') }}" class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label small mb-1">Informe</label>
+      <select name="scope" id="scope-select" class="form-select form-select-sm">
+        <option value="general" {% if scope == 'general' %}selected{% endif %}>General (todas las zonas)</option>
+        <option value="individual" {% if scope == 'individual' %}selected{% endif %}>Profesor individual</option>
+      </select>
+    </div>
+    <div class="col-auto" id="teacher-group" style="{% if scope != 'individual' %}display:none{% endif %}">
+      <label class="form-label small mb-1">Profesor/a</label>
+      <select name="teacher_id" class="form-select form-select-sm">
+        <option value="">— Selecciona —</option>
+        {% for t in teachers %}
+        <option value="{{ t.id }}" {% if teacher_id == t.id %}selected{% endif %}>{{ t.full_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label small mb-1">Periodo</label>
+      <select name="period" id="period-select" class="form-select form-select-sm">
+        <option value="semana" {% if period == 'semana' %}selected{% endif %}>Semana</option>
+        <option value="mes" {% if period == 'mes' %}selected{% endif %}>Mes</option>
+        <option value="curso" {% if period == 'curso' %}selected{% endif %}>Curso completo</option>
+      </select>
+    </div>
+    <div class="col-auto period-field" data-period="semana" style="{% if period != 'semana' %}display:none{% endif %}">
+      <label class="form-label small mb-1">Semana</label>
+      <input type="week" name="semana" class="form-control form-control-sm" value="{{ semana_value }}">
+    </div>
+    <div class="col-auto period-field" data-period="mes" style="{% if period != 'mes' %}display:none{% endif %}">
+      <label class="form-label small mb-1">Mes</label>
+      <input type="month" name="mes" class="form-control form-control-sm" value="{{ mes_value }}">
+    </div>
+    <div class="col-auto period-field" data-period="curso" style="{% if period != 'curso' %}display:none{% endif %}">
+      <label class="form-label small mb-1">Curso</label>
+      <select name="year_id" class="form-select form-select-sm">
+        {% for y in years %}
+        <option value="{{ y.id }}" {% if selected_year_id == y.id %}selected{% endif %}>{{ y.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-clockwise"></i> Actualizar
+      </button>
+    </div>
+    <div class="col-auto">
+      <button type="submit" formaction="{{ url_for('recreo.informe_pdf') }}" formtarget="_blank"
+              class="btn btn-primary btn-sm" {% if scope == 'individual' and not teacher_id %}disabled{% endif %}>
+        <i class="bi bi-printer"></i> Imprimir informe
+      </button>
+    </div>
+  </form>
+
+  <div class="small text-muted mt-1">
+    <i class="bi bi-eye"></i> Vista previa — {{ label }}
+    {% if summary %}
+      {% if summary.kind == 'individual' %}
+        {% if summary.teacher %}· {{ summary.total }} guardia{{ 's' if summary.total != 1 }} de recreo para {{ summary.teacher.full_name }}{% endif %}
+      {% else %}
+        · {{ summary.total }} asignaciones en {{ summary.total_days }} día{{ 's' if summary.total_days != 1 }}
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+{% if scope == 'individual' and not teacher_id %}
+<div class="alert alert-info mt-3">Selecciona un profesor para ver su informe individual.</div>
+
+{% elif summary and summary.kind == 'individual' %}
+<div class="card mt-2">
+  <div class="card-body p-0">
+    {% if not summary.entries %}
+    <p class="text-muted small p-3 mb-0">Sin guardias de recreo asignadas en este periodo.</p>
+    {% else %}
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr><th>Fecha</th><th>Zona</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for e in summary.entries %}
+        <tr>
+          <td class="small text-nowrap">{{ e.date | fecha_es('%a %d/%m/%Y') }}</td>
+          <td class="small fw-semibold">{{ e.zone.name }}</td>
+          <td class="small">
+            {% if e.is_manual %}<span class="badge bg-warning text-dark" style="font-size:.6rem">Manual</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+{% elif summary and summary.kind == 'general' %}
+<div class="card mt-2">
+  <div class="card-body p-0">
+    {% if not summary.days %}
+    <p class="text-muted small p-3 mb-0">Sin asignaciones en este periodo.</p>
+    {% else %}
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr><th>Fecha</th><th>Zona</th><th>Profesor/a</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for day in summary.days %}
+          {% for zone, teacher, is_manual in day.entries %}
+          <tr>
+            {% if loop.first %}
+            <td class="small fw-semibold text-nowrap" rowspan="{{ day.entries | length }}">{{ day.date | fecha_es('%a %d/%m/%Y') }}</td>
+            {% endif %}
+            <td class="small">{{ zone.name }}</td>
+            <td class="small">{{ teacher.full_name }}</td>
+            <td class="small">{% if is_manual %}<span class="badge bg-warning text-dark" style="font-size:.6rem">Manual</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var scopeSelect = document.getElementById('scope-select');
+  var teacherGroup = document.getElementById('teacher-group');
+  var periodSelect = document.getElementById('period-select');
+  var periodFields = document.querySelectorAll('.period-field');
+
+  function syncScope() {
+    teacherGroup.style.display = scopeSelect.value === 'individual' ? '' : 'none';
+  }
+  function syncPeriod() {
+    periodFields.forEach(function(el) {
+      el.style.display = el.dataset.period === periodSelect.value ? '' : 'none';
+    });
+  }
+  scopeSelect.addEventListener('change', syncScope);
+  periodSelect.addEventListener('change', syncPeriod);
+})();
+</script>
+{% endblock %}

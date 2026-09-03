@@ -2,6 +2,7 @@
 Blueprint de guardias de recreo. Gestiona el catálogo de zonas y las
 asignaciones diarias zona→profesor con rotación automática o manual.
 """
+import calendar
 from datetime import date, timedelta
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
@@ -11,6 +12,8 @@ from app.models.recreo import RecreoZone, RecreoAssignment
 from app.models.user import User
 from app.models.schedule import TeacherSchedule
 from app.models.group import Group
+from app.models.school_year import SchoolYear
+from app.utils import _MESES
 from app.utils.school_year import get_current_school_year
 
 recreo_bp = Blueprint("recreo", __name__, url_prefix="/admin/recreo")
@@ -351,3 +354,171 @@ def editar(week_start_str):
     db.session.commit()
     flash("Asignación semanal guardada.", "success")
     return redirect(url_for("recreo.semana", semana=week_start_str))
+
+
+# ─── Informe de zonas asignadas ────────────────────────────────────────────────
+
+def _weekdays_in_range(desde, hasta):
+    """Lista de fechas de lunes a viernes entre desde y hasta, ambos inclusive."""
+    days = []
+    d = desde
+    while d <= hasta:
+        if d.weekday() < 5:
+            days.append(d)
+        d += timedelta(days=1)
+    return days
+
+
+def _period_bounds(period, args):
+    """Calcula (desde, hasta, etiqueta) del periodo del informe: semana, mes o curso."""
+    if period == "mes":
+        try:
+            y_str, m_str = args.get("mes", "").split("-")
+            y, m = int(y_str), int(m_str)
+        except (ValueError, AttributeError):
+            today = date.today()
+            y, m = today.year, today.month
+        desde = date(y, m, 1)
+        hasta = date(y, m, calendar.monthrange(y, m)[1])
+        label = f"{_MESES[m - 1].capitalize()} de {y}"
+    elif period == "curso":
+        year_id = args.get("year_id", type=int)
+        year = SchoolYear.query.get(year_id) if year_id else None
+        if not year:
+            year = get_current_school_year()
+        desde, hasta = year.start_date, year.end_date
+        label = f"Curso {year.name}"
+    else:
+        period = "semana"
+        try:
+            iso_year, iso_week = args.get("semana", "").split("-W")
+            desde = date.fromisocalendar(int(iso_year), int(iso_week), 1)
+        except (ValueError, AttributeError):
+            desde = _monday_of(date.today())
+        hasta = desde + timedelta(days=4)
+        label = f"Semana del {desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
+    return desde, hasta, label, period
+
+
+def _report_teachers():
+    """Profesores con al menos una guardia de recreo asignada alguna vez (para el selector)."""
+    return (
+        db.session.query(User)
+        .join(RecreoAssignment, RecreoAssignment.teacher_id == User.id)
+        .filter(RecreoAssignment.zone_id.isnot(None))
+        .distinct()
+        .order_by(User.surname, User.name)
+        .all()
+    )
+
+
+def _build_report_individual(teacher_id, desde, hasta):
+    days = _weekdays_in_range(desde, hasta)
+    assignments = (
+        RecreoAssignment.query
+        .filter(
+            RecreoAssignment.teacher_id == teacher_id,
+            RecreoAssignment.assignment_date.in_(days),
+            RecreoAssignment.zone_id.isnot(None),
+        )
+        .join(RecreoZone, RecreoAssignment.zone_id == RecreoZone.id)
+        .order_by(RecreoAssignment.assignment_date)
+        .all()
+    )
+    return [{"date": a.assignment_date, "zone": a.zone, "is_manual": a.is_manual} for a in assignments]
+
+
+def _build_report_general(desde, hasta):
+    days = _weekdays_in_range(desde, hasta)
+    if not days:
+        return []
+    assignments = (
+        RecreoAssignment.query
+        .filter(
+            RecreoAssignment.assignment_date.in_(days),
+            RecreoAssignment.zone_id.isnot(None),
+        )
+        .join(RecreoZone, RecreoAssignment.zone_id == RecreoZone.id)
+        .order_by(RecreoAssignment.assignment_date, RecreoZone.display_order, RecreoZone.name)
+        .all()
+    )
+    by_date = {}
+    for a in assignments:
+        by_date.setdefault(a.assignment_date, []).append((a.zone, a.teacher, a.is_manual))
+    return [{"date": d, "entries": by_date[d]} for d in days if d in by_date]
+
+
+@recreo_bp.route("/informe")
+@login_required
+def informe():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+
+    scope = request.args.get("scope", "general")
+    if scope not in ("general", "individual"):
+        scope = "general"
+    teacher_id = request.args.get("teacher_id", type=int)
+    period_in = request.args.get("period", "semana")
+
+    desde, hasta, label, period = _period_bounds(period_in, request.args)
+
+    teachers = _report_teachers()
+
+    summary = None
+    if scope == "individual" and teacher_id:
+        teacher = next((t for t in teachers if t.id == teacher_id), None) or User.query.get(teacher_id)
+        entries = _build_report_individual(teacher_id, desde, hasta)
+        summary = {"kind": "individual", "teacher": teacher, "entries": entries, "total": len(entries)}
+    elif scope == "general":
+        days_data = _build_report_general(desde, hasta)
+        total = sum(len(d["entries"]) for d in days_data)
+        summary = {"kind": "general", "days": days_data, "total_days": len(days_data), "total": total}
+
+    selected_year_id = request.args.get("year_id", type=int) or get_current_school_year().id
+    iso = desde.isocalendar()
+
+    return render_template(
+        "admin/recreo_informe.html",
+        scope=scope,
+        period=period,
+        teacher_id=teacher_id,
+        desde=desde,
+        hasta=hasta,
+        label=label,
+        teachers=teachers,
+        years=SchoolYear.query.order_by(SchoolYear.start_date.desc()).all(),
+        selected_year_id=selected_year_id,
+        semana_value=f"{iso[0]}-W{iso[1]:02d}",
+        mes_value=f"{desde.year}-{desde.month:02d}",
+        summary=summary,
+    )
+
+
+@recreo_bp.route("/informe/imprimir")
+@login_required
+def informe_pdf():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+
+    scope = request.args.get("scope", "general")
+    if scope not in ("general", "individual"):
+        scope = "general"
+    teacher_id = request.args.get("teacher_id", type=int)
+    desde, hasta, label, period = _period_bounds(request.args.get("period", "semana"), request.args)
+
+    if scope == "individual":
+        if not teacher_id:
+            flash("Selecciona un profesor para el informe individual.", "danger")
+            return redirect(url_for("recreo.informe", **request.args.to_dict()))
+        teacher = User.query.get_or_404(teacher_id)
+        entries = _build_report_individual(teacher_id, desde, hasta)
+        return render_template(
+            "admin/recreo_print.html",
+            scope="individual", teacher=teacher, entries=entries, label=label,
+        )
+
+    days_data = _build_report_general(desde, hasta)
+    return render_template(
+        "admin/recreo_print.html",
+        scope="general", days=days_data, label=label,
+    )
