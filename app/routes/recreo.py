@@ -30,23 +30,45 @@ def _monday_of(d: date) -> date:
     return d - timedelta(days=d.weekday())
 
 
-def _eligible_teachers(year_id):
-    """Profesores con guardia de recreo (grupo G-Rec en slot 4) del curso activo."""
+def _eligible_teachers_by_day(year_id):
+    """Profesores con guardia de recreo (grupo G-Rec en slot 4) del curso activo,
+    agrupados por día de la semana (0=Lunes … 4=Viernes) según su horario fijo."""
     grec = Group.query.filter_by(abbreviation="G-Rec").first()
     if not grec:
-        return []
-    teacher_ids = (
-        db.session.query(TeacherSchedule.teacher_id)
+        return {}
+    rows = (
+        db.session.query(TeacherSchedule.teacher_id, TeacherSchedule.day_of_week)
         .filter_by(slot_id=4, group_id=grec.id, school_year_id=year_id)
         .distinct()
         .all()
     )
-    ids = [r[0] for r in teacher_ids]
-    return (
-        User.query.filter(User.id.in_(ids), User.active == True)
-        .order_by(User.surname, User.name)
-        .all()
-    )
+    ids_by_day = {}
+    all_ids = set()
+    for teacher_id, day_of_week in rows:
+        ids_by_day.setdefault(day_of_week, set()).add(teacher_id)
+        all_ids.add(teacher_id)
+
+    teachers_by_id = {
+        u.id: u
+        for u in User.query.filter(User.id.in_(all_ids), User.active == True).all()
+    }
+    return {
+        day_of_week: sorted(
+            (teachers_by_id[tid] for tid in ids if tid in teachers_by_id),
+            key=lambda t: (t.surname, t.name),
+        )
+        for day_of_week, ids in ids_by_day.items()
+    }
+
+
+def _teachers_union(teachers_by_day):
+    """Lista ordenada y sin duplicados de todos los profesores elegibles en la semana,
+    usada como filas de la tabla (una fila por profesor con guardia algún día)."""
+    by_id = {}
+    for day_teachers in teachers_by_day.values():
+        for t in day_teachers:
+            by_id[t.id] = t
+    return sorted(by_id.values(), key=lambda t: (t.surname, t.name))
 
 
 def _auto_assignments(d: date, zones, teachers):
@@ -77,15 +99,12 @@ def get_recreo_for_date(d: date):
     return [(a.zone, a.teacher) for a in assignments]
 
 
-# ─── Zonas ────────────────────────────────────────────────────────────────────
+# ─── Zonas ──────────────────────────────────────────────────────────────────
+# La gestión de zonas vive en Configuración → «Guardias de recreo»
+# (admin.config, sección #section-recreo-zonas).
 
-@recreo_bp.route("/zonas")
-@login_required
-def zonas():
-    if not _require_management():
-        return redirect(url_for("dashboard.index"))
-    zones = RecreoZone.query.order_by(RecreoZone.display_order, RecreoZone.name).all()
-    return render_template("admin/recreo_zonas.html", zones=zones)
+def _to_config_zonas(**kwargs):
+    return redirect(url_for("admin.config", _anchor="section-recreo-zonas", **kwargs))
 
 
 @recreo_bp.route("/zonas/nueva", methods=["POST"])
@@ -97,12 +116,12 @@ def zona_create():
     order = int(request.form.get("display_order") or 0)
     if not name:
         flash("El nombre es obligatorio.", "danger")
-        return redirect(url_for("recreo.zonas"))
+        return _to_config_zonas()
     z = RecreoZone(name=name, display_order=order)
     db.session.add(z)
     db.session.commit()
     flash(f"Zona «{z.name}» creada.", "success")
-    return redirect(url_for("recreo.zonas", highlight=z.id))
+    return _to_config_zonas(highlight=z.id)
 
 
 @recreo_bp.route("/zonas/<int:zid>/editar", methods=["POST"])
@@ -116,7 +135,7 @@ def zona_edit(zid):
     z.active = request.form.get("active") == "1"
     db.session.commit()
     flash(f"Zona «{z.name}» actualizada.", "success")
-    return redirect(url_for("recreo.zonas", highlight=z.id))
+    return _to_config_zonas(highlight=z.id)
 
 
 @recreo_bp.route("/zonas/<int:zid>/eliminar", methods=["POST"])
@@ -133,7 +152,7 @@ def zona_delete(zid):
     except IntegrityError:
         db.session.rollback()
         flash("No se puede eliminar: la zona tiene asignaciones. Desactívala en su lugar.", "danger")
-    return redirect(url_for("recreo.zonas"))
+    return _to_config_zonas()
 
 
 # ─── Asignaciones semanales ───────────────────────────────────────────────────
@@ -157,7 +176,8 @@ def semana():
 
     year = get_current_school_year()
     zones = RecreoZone.query.filter_by(active=True).order_by(RecreoZone.display_order, RecreoZone.name).all()
-    teachers = _eligible_teachers(year.id)
+    teachers_by_day = _eligible_teachers_by_day(year.id)
+    teachers = _teachers_union(teachers_by_day)
 
     # Cargar todas las asignaciones de la semana de una sola consulta
     all_assignments = RecreoAssignment.query.filter(
@@ -167,19 +187,25 @@ def semana():
     # {(teacher_id, date): assignment}
     assigned = {(a.teacher_id, a.assignment_date): a for a in all_assignments}
 
-    # Auto-rotación por día: {date: {teacher_id: zone}}
+    # Auto-rotación por día: {date: {teacher_id: zone}}, solo entre quienes tienen
+    # guardia de recreo ese día concreto según su horario fijo.
     auto_by_day = {}
+    duty_ids_by_day = {}
     for d in days:
-        auto_day = _auto_assignments(d, zones, teachers)  # {zone_id: teacher}
+        day_teachers = teachers_by_day.get(d.weekday(), [])
+        duty_ids_by_day[d] = {t.id for t in day_teachers}
+        auto_day = _auto_assignments(d, zones, day_teachers)  # {zone_id: teacher}
         auto_by_day[d] = {t.id: zones_by_id_lookup(zones, zid) for zid, t in auto_day.items()}
 
     rows = []
     for t in teachers:
         day_cells = {}
         for d in days:
+            has_duty = t.id in duty_ids_by_day[d]
             assgn = assigned.get((t.id, d))
             auto_zone = auto_by_day[d].get(t.id)
             day_cells[d] = {
+                "has_duty": has_duty,
                 "assignment": assgn,
                 "zone": assgn.zone if assgn else None,
                 "auto_zone": auto_zone,
@@ -223,16 +249,16 @@ def generar(week_start_str):
 
     year = get_current_school_year()
     zones = RecreoZone.query.filter_by(active=True).order_by(RecreoZone.display_order, RecreoZone.name).all()
-    teachers = _eligible_teachers(year.id)
+    teachers_by_day = _eligible_teachers_by_day(year.id)
 
-    if not zones or not teachers:
+    if not zones or not teachers_by_day:
         flash("No hay zonas activas o profesores elegibles (grupo G-Rec en recreo).", "warning")
         return redirect(url_for("recreo.semana", semana=week_start_str))
 
     days = [week_start + timedelta(days=i) for i in range(5)]
 
     for d in days:
-        auto = _auto_assignments(d, zones, teachers)
+        auto = _auto_assignments(d, zones, teachers_by_day.get(d.weekday(), []))
         existing = RecreoAssignment.query.filter_by(
             assignment_date=d, school_year_id=year.id
         ).all()
@@ -274,7 +300,7 @@ def editar(week_start_str):
 
     year = get_current_school_year()
     zones = RecreoZone.query.filter_by(active=True).order_by(RecreoZone.display_order, RecreoZone.name).all()
-    teachers = _eligible_teachers(year.id)
+    teachers_by_day = _eligible_teachers_by_day(year.id)
     days = [week_start + timedelta(days=i) for i in range(5)]
 
     # Borrar todas las asignaciones de la semana y reconstruir
@@ -285,25 +311,15 @@ def editar(week_start_str):
     db.session.flush()
 
     for d in days:
-        auto = _auto_assignments(d, zones, teachers)  # {zone_id: teacher}
+        day_teachers = teachers_by_day.get(d.weekday(), [])
+        auto = _auto_assignments(d, zones, day_teachers)  # {zone_id: teacher}
         auto_by_teacher = {t.id: z_id for z_id, t in auto.items()}
         seen_zones = set()
-        for t in teachers:
+        for t in day_teachers:
             field = f"teacher_{t.id}_{d.isoformat()}"
             zid_str = request.form.get(field)
             if not zid_str:
                 continue  # "No asignada" — no se guarda nada
-
-            if zid_str == "none":
-                # "Sin guardia" explícito — se guarda con zone_id=NULL
-                db.session.add(RecreoAssignment(
-                    assignment_date=d,
-                    zone_id=None,
-                    teacher_id=t.id,
-                    school_year_id=year.id,
-                    is_manual=True,
-                ))
-                continue
 
             try:
                 zid = int(zid_str)

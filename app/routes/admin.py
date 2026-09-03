@@ -15,6 +15,7 @@ from app.models.user import User
 from app.models.group import Group
 from app.models.room import Room
 from app.models.schedule import TeacherSchedule
+from app.models.recreo import RecreoZone
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -2230,6 +2231,7 @@ def config():
                          .order_by(User.surname, User.name)
                          .all())
     help_content = _read_help_content()
+    recreo_zones = RecreoZone.query.order_by(RecreoZone.display_order, RecreoZone.name).all()
 
     from app.models.school_year import SchoolYear
     from app.utils.school_year import get_current_school_year, year_dates
@@ -2248,6 +2250,7 @@ def config():
                            users=users,
                            scorable_teachers=scorable_teachers,
                            help_content=help_content,
+                           recreo_zones=recreo_zones,
                            school_years=_sy_years,
                            next_year_name=_next_year_name,
                            next_year_start=_next_year_start,

@@ -18,7 +18,7 @@
         <i class="bi bi-chevron-right"></i>
       </a>
       <a href="{{ url_for('recreo.semana') }}" class="btn btn-outline-primary btn-sm ms-1">Hoy</a>
-      <a href="{{ url_for('recreo.zonas') }}" class="btn btn-outline-secondary btn-sm ms-2">
+      <a href="{{ url_for('admin.config', _anchor='section-recreo-zonas') }}" class="btn btn-outline-secondary btn-sm ms-2">
         <i class="bi bi-geo-alt"></i> Gestionar zonas
       </a>
     </div>
@@ -27,7 +27,7 @@
 
 {% if not zones %}
 <div class="alert alert-warning mt-3">
-  No hay zonas de recreo definidas. <a href="{{ url_for('recreo.zonas') }}">Crea las zonas primero.</a>
+  No hay zonas de recreo definidas. <a href="{{ url_for('admin.config', _anchor='section-recreo-zonas') }}">Crea las zonas primero.</a>
 </div>
 {% elif not teachers %}
 <div class="alert alert-warning mt-3">
@@ -82,10 +82,10 @@
         {% for d in days %}
         {% set cell = row.days[d] %}
         <td class="p-1">
+          {% if cell.has_duty %}
           <select name="teacher_{{ row.teacher.id }}_{{ d.isoformat() }}"
                   class="form-select form-select-sm w-100">
             <option value=""       {% if not cell.assignment %}selected{% endif %}>No asignada</option>
-            <option value="none"   {% if cell.assignment and not cell.zone %}selected{% endif %}>Sin guardia</option>
             {% for z in zones %}
             <option value="{{ z.id }}"
               {% if cell.zone and cell.zone.id == z.id %}selected{% endif %}>
@@ -100,12 +100,13 @@
               {% else %}
                 <span class="badge bg-primary" style="font-size:.6rem">Auto</span>
               {% endif %}
-            {% elif cell.assignment and not cell.zone %}
-              <span class="badge bg-secondary" style="font-size:.6rem">Sin guardia</span>
             {% elif cell.auto_zone %}
               <span class="text-muted" style="font-size:.7rem">→ {{ cell.auto_zone.name }}</span>
             {% endif %}
           </div>
+          {% else %}
+          <div class="text-center text-muted" style="font-size:.8rem">—</div>
+          {% endif %}
         </td>
         {% endfor %}
       </tr>
