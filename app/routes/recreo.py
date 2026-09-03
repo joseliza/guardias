@@ -268,9 +268,11 @@ def generar(week_start_str):
         existing = RecreoAssignment.query.filter_by(
             assignment_date=d, school_year_id=year.id
         ).all()
-        # Profesores marcados explícitamente como "Sin guardia" ese día
-        sin_guardia_ids = {a.teacher_id for a in existing if a.zone_id is None}
         manual_zone_ids = {a.zone_id for a in existing if a.is_manual and a.zone_id is not None}
+        # Profesores con una fila manual ese día (en cualquier zona, o "Sin guardia"
+        # con zone_id=NULL): no se les debe asignar otra zona por rotación, o se
+        # duplicaría la fila del profesor para esa fecha y saltaría la restricción única.
+        manual_teacher_ids = {a.teacher_id for a in existing if a.is_manual}
         for a in existing:
             if not a.is_manual:
                 db.session.delete(a)
@@ -278,8 +280,8 @@ def generar(week_start_str):
         for zone_id, teacher in auto.items():
             if zone_id in manual_zone_ids:
                 continue
-            if teacher.id in sin_guardia_ids:
-                continue  # no asignar zona a quien está marcado como sin guardia
+            if teacher.id in manual_teacher_ids:
+                continue
             db.session.add(RecreoAssignment(
                 assignment_date=d,
                 zone_id=zone_id,
