@@ -72,13 +72,19 @@ def _teachers_union(teachers_by_day):
 
 
 def _auto_assignments(d: date, zones, teachers):
-    """Devuelve {zone_id: teacher} para la rotación automática del día concreto d."""
+    """Devuelve {zone_id: teacher} para la rotación automática del día concreto d.
+
+    Si hay más zonas activas que profesores elegibles ese día, las zonas
+    sobrantes quedan sin asignar en vez de repetir profesor (el módulo de la
+    rotación repetiría al mismo profesor en dos zonas y violaría la
+    restricción única assignment_date+teacher_id)."""
     if not teachers or not zones:
         return {}
     day_offset = (d - _ROTATION_REF).days
+    n = min(len(zones), len(teachers))
     return {
-        zone.id: teachers[(i + day_offset) % len(teachers)]
-        for i, zone in enumerate(zones)
+        zones[i].id: teachers[(i + day_offset) % len(teachers)]
+        for i in range(n)
     }
 
 
