@@ -546,7 +546,7 @@ def _build_recreo_pdf(scope, label, institute_name, *, teacher=None, entries=Non
         else:
             with pdf.table(col_widths=(80, 110), headings_style=heading_style) as table:
                 header = table.row()
-                for h in ("Fecha", "Zona del patio"):
+                for h in ("Fecha", "Zona"):
                     header.cell(h)
                 for e in entries:
                     row = table.row()
