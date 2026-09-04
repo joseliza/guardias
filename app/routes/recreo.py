@@ -552,7 +552,7 @@ def _build_recreo_pdf(scope, label, institute_name, *, teacher=None, entries=Non
                 pdf.set_fill_color(230, 230, 230)
                 pdf.cell(0, 7, _fecha_dia(day["date"]), ln=True, fill=True)
                 pdf.set_font("dv", "", 10)
-                with pdf.table(col_widths=(85, 105)) as table:
+                with pdf.table(col_widths=(85, 105), first_row_as_headings=False) as table:
                     for zone, day_teacher in day["entries"]:
                         row = table.row()
                         row.cell(zone.name)
