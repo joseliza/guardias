@@ -2132,7 +2132,7 @@ def teacher_bulk_welcome():
 
 # ── Configuración ─────────────────────────────────────────────────────────────
 
-MAIL_KEYS = ["MAIL_SERVER", "MAIL_PORT", "MAIL_USE_TLS", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_DEFAULT_SENDER", "MAIL_WELCOME_TEMPLATE", "MAIL_JUSTIFICATION_TEMPLATE"]
+MAIL_KEYS = ["MAIL_SERVER", "MAIL_PORT", "MAIL_USE_TLS", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_DEFAULT_SENDER", "MAIL_WELCOME_TEMPLATE", "MAIL_JUSTIFICATION_TEMPLATE", "MAIL_RECREO_TEMPLATE"]
 GENERAL_DEFAULTS = {
     "show_future_absences": False,
     "auto_justify_extracurricular": False,
@@ -2196,6 +2196,7 @@ def config():
             "MAIL_DEFAULT_SENDER":          request.form.get("MAIL_DEFAULT_SENDER", "").strip(),
             "MAIL_WELCOME_TEMPLATE":        request.form.get("MAIL_WELCOME_TEMPLATE", ""),
             "MAIL_JUSTIFICATION_TEMPLATE":  request.form.get("MAIL_JUSTIFICATION_TEMPLATE", ""),
+            "MAIL_RECREO_TEMPLATE":         request.form.get("MAIL_RECREO_TEMPLATE", ""),
         })
         updates = current
         _write_mail_config(current)
@@ -2207,6 +2208,7 @@ def config():
         current_app.config["MAIL_DEFAULT_SENDER"] = updates["MAIL_DEFAULT_SENDER"]
         current_app.config["MAIL_WELCOME_TEMPLATE"] = updates["MAIL_WELCOME_TEMPLATE"]
         current_app.config["MAIL_JUSTIFICATION_TEMPLATE"] = updates["MAIL_JUSTIFICATION_TEMPLATE"]
+        current_app.config["MAIL_RECREO_TEMPLATE"] = updates["MAIL_RECREO_TEMPLATE"]
         flash("Configuración guardada y aplicada.", "success")
         return redirect(url_for("admin.config"))
 
@@ -2402,6 +2404,21 @@ def test_email():
                 .replace("{nombre_apellidos}", current_user.natural_name)
                 .replace("{lista_faltas}", lista_ejemplo))
         subject = f"[PRUEBA] Faltas pendientes de justificación — {_get_institute_name()}"
+    elif template_type == "recreo":
+        template = cfg.get("MAIL_RECREO_TEMPLATE", "").strip()
+        if not template:
+            flash("No hay plantilla de guardias de recreo configurada.", "warning")
+            return redirect(url_for("admin.config", _anchor="section-mail"))
+        lista_ejemplo = (
+            "  • Lunes 01/06/2026 — Zona 1\n"
+            "  • Martes 02/06/2026 — Pista de albero"
+        )
+        body = (template
+                .replace("{nombre}", current_user.full_name)
+                .replace("{nombre_apellidos}", current_user.natural_name)
+                .replace("{periodo}", "Semana del 01/06/2026 al 05/06/2026")
+                .replace("{lista_zonas}", lista_ejemplo))
+        subject = f"[PRUEBA] Guardias de recreo — {_get_institute_name()}"
     else:
         body = (
             f"Este es un correo de prueba enviado desde la aplicación de guardias.\n\n"

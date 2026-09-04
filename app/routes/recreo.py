@@ -4,7 +4,7 @@ asignaciones diarias zona→profesor con rotación automática o manual.
 """
 import calendar
 from datetime import date, timedelta
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_required, current_user
 from sqlalchemy.exc import IntegrityError
 from app.extensions import db
@@ -485,6 +485,9 @@ def informe():
     selected_year_id = request.args.get("year_id", type=int) or get_current_school_year().id
     iso = desde.isocalendar()
 
+    from app.routes.admin import _read_mail_config
+    has_template = bool(_read_mail_config().get("MAIL_RECREO_TEMPLATE", "").strip())
+
     return render_template(
         "admin/recreo_informe.html",
         scope=scope,
@@ -499,12 +502,92 @@ def informe():
         semana_value=f"{iso[0]}-W{iso[1]:02d}",
         mes_value=f"{desde.year}-{desde.month:02d}",
         summary=summary,
+        has_template=has_template,
     )
+
+
+def _informe_query_args(source):
+    """Extrae de un dict tipo request.args/request.form los parámetros del filtro del informe."""
+    keys = ("scope", "teacher_id", "period", "semana", "mes", "year_id")
+    return {k: source.get(k) for k in keys if source.get(k)}
 
 
 def _fecha_dia(d):
     """Formatea una fecha como 'Lunes 08/09/2025' (fecha_es no soporta %m/%d/%Y numéricos combinados)."""
     return f"{fecha_es(d, '%A').capitalize()} {d.strftime('%d/%m/%Y')}"
+
+
+def _send_recreo_email_for_teacher(teacher, desde, hasta, label) -> bool:
+    """Envía al profesor su informe de zonas de recreo del periodo. Devuelve True si se envió."""
+    from flask_mail import Message
+    from app.extensions import mail
+    from app.routes.admin import _read_mail_config, _get_institute_name
+
+    cfg = _read_mail_config()
+    template = cfg.get("MAIL_RECREO_TEMPLATE", "").strip()
+    if not template:
+        return False
+
+    entries = _build_report_individual(teacher.id, desde, hasta)
+    if not entries:
+        return False
+
+    lista_zonas = "\n".join(f"  • {_fecha_dia(e['date'])} — {e['zone'].name}" for e in entries)
+
+    body = (template
+            .replace("{nombre}", teacher.full_name)
+            .replace("{nombre_apellidos}", teacher.natural_name)
+            .replace("{periodo}", label)
+            .replace("{lista_zonas}", lista_zonas))
+
+    mail.send(Message(
+        subject=f"Guardias de recreo — {label} — {_get_institute_name()}",
+        recipients=[teacher.email],
+        sender=current_app.config.get("MAIL_DEFAULT_SENDER"),
+        body=body,
+    ))
+    return True
+
+
+@recreo_bp.route("/informe/enviar", methods=["POST"])
+@login_required
+def informe_enviar():
+    if not _require_management():
+        return redirect(url_for("dashboard.index"))
+
+    redirect_args = _informe_query_args(request.form)
+    desde, hasta, label, _period = _period_bounds(request.form.get("period", "semana"), request.form)
+
+    ids = [int(i) for i in request.form.getlist("teacher_ids[]") if i.isdigit()]
+    if not ids:
+        flash("Selecciona al menos un profesor.", "warning")
+        return redirect(url_for("recreo.informe", **redirect_args))
+
+    from app.routes.admin import _read_mail_config
+    if not _read_mail_config().get("MAIL_RECREO_TEMPLATE", "").strip():
+        flash("No hay plantilla de correo de guardias de recreo configurada. "
+              "Ve a Admin → Configuración → Correo para definirla.", "warning")
+        return redirect(url_for("recreo.informe", **redirect_args))
+
+    teachers = User.query.filter(User.id.in_(ids), User.active == True).all()
+    ok, sin_datos, errores = 0, [], []
+    for teacher in teachers:
+        try:
+            if _send_recreo_email_for_teacher(teacher, desde, hasta, label):
+                ok += 1
+            else:
+                sin_datos.append(teacher.full_name)
+        except Exception as e:
+            errores.append(f"{teacher.full_name}: {e.__context__ or e}")
+
+    if ok:
+        flash(f"Correo enviado a {ok} profesor{'es' if ok != 1 else ''}.", "success")
+    if sin_datos:
+        flash("Sin guardias de recreo en el periodo, no se envía correo a: " + ", ".join(sin_datos), "warning")
+    for err in errores:
+        flash(f"Error al enviar el correo — {err}", "danger")
+
+    return redirect(url_for("recreo.informe", **redirect_args))
 
 
 def _build_recreo_pdf(scope, label, institute_name, *, teacher=None, entries=None, days=None):

@@ -341,6 +341,14 @@
               <textarea name="MAIL_JUSTIFICATION_TEMPLATE" class="form-control font-monospace" rows="6"
                         placeholder="Estimado/a {nombre},&#10;&#10;Le comunicamos que tiene registrada una falta de asistencia el {fecha} ({tramo}).&#10;Motivo: {motivo}&#10;&#10;Le rogamos que aporte la documentación justificativa.">{{ mail_config.get('MAIL_JUSTIFICATION_TEMPLATE', '') }}</textarea>
             </div>
+            <div class="col-12">
+              <label class="form-label">
+                Plantilla correo de guardias de recreo
+                <small class="text-muted">— variables: <code>{nombre}</code> (Apellidos, Nombre), <code>{nombre_apellidos}</code> (Nombre Apellidos), <code>{periodo}</code> (semana/mes/curso del informe), <code>{lista_zonas}</code> (listado de zonas asignadas en el periodo)</small>
+              </label>
+              <textarea name="MAIL_RECREO_TEMPLATE" class="form-control font-monospace" rows="6"
+                        placeholder="Estimado/a {nombre},&#10;&#10;Estas son tus guardias de recreo — {periodo}:&#10;&#10;{lista_zonas}">{{ mail_config.get('MAIL_RECREO_TEMPLATE', '') }}</textarea>
+            </div>
           </div>
           <div class="mt-3 d-flex gap-2 align-items-center">
             <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
@@ -364,6 +372,7 @@
                     <option value="smtp">Solo verificar SMTP (sin plantilla)</option>
                     <option value="welcome">Plantilla de bienvenida</option>
                     <option value="justification">Plantilla de justificación de faltas</option>
+                    <option value="recreo">Plantilla de guardias de recreo</option>
                   </select>
                 </div>
                 <div class="col-md-2">
