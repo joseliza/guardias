@@ -94,12 +94,30 @@ migrations/         # Alembic (Flask-Migrate)
 | `extracurricular` | Gestión de actividades extraescolares |
 | `display` | Vista de pantalla sala de profesores (solo lectura) |
 
-## Despliegue en producción
+## Flujo de desarrollo
+
+- **`desarrollo`** — rama de trabajo diario. Todos los commits se hacen aquí, incluido trabajo a medias.
+- **`main`** — refleja únicamente lo verificado y listo para producción.
+
+Antes de fusionar a `main`, se verifica el cambio en local levantando la app con Docker Compose (mismo `Dockerfile` que producción):
 
 ```bash
-rsync -av --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' \
-          --exclude='.env' --exclude='.claude' \
-          ./ usuario@servidor:/ruta/guardias/
+git checkout desarrollo
+# ... commits ...
+docker compose up -d --build   # verificar el cambio
 
-ssh usuario@servidor "cd /ruta/guardias && docker compose up -d --build"
+git checkout main
+git merge desarrollo           # normalmente fast-forward
+git push
 ```
+
+## Despliegue en producción
+
+El servidor mantiene un clon git real del repositorio (autenticado con una deploy key de solo lectura). Desplegar consiste en:
+
+```bash
+git push                                                    # (ya hecho arriba, sube main)
+ssh usuario@servidor "bash /ruta/guardias/scripts/deploy.sh"
+```
+
+`scripts/deploy.sh` hace `git fetch` + `git reset --hard origin/main`, reconstruye la imagen Docker solo si cambiaron `Dockerfile`/`requirements.txt`/`docker-compose.yml` (si no, reinicia el contenedor) y verifica el commit desplegado y el código HTTP.
