@@ -399,6 +399,15 @@ def _period_bounds(period, args):
     return desde, hasta, label, period
 
 
+def _period_filename_part(period, desde, hasta):
+    """Fragmento del nombre de fichero que indica el tipo de periodo (semanal/mensual/curso)."""
+    if period == "mes":
+        return f"mensual_{desde.strftime('%Y-%m')}"
+    if period == "curso":
+        return f"curso_{desde.year}-{hasta.year}"
+    return f"semanal_{desde.isoformat()}"
+
+
 def _report_teachers():
     """Profesores con al menos una guardia de recreo asignada alguna vez (para el selector)."""
     return (
@@ -577,6 +586,7 @@ def informe_pdf():
         scope = "general"
     teacher_id = request.args.get("teacher_id", type=int)
     desde, hasta, label, period = _period_bounds(request.args.get("period", "semana"), request.args)
+    period_part = _period_filename_part(period, desde, hasta)
 
     if scope == "individual":
         if not teacher_id:
@@ -585,11 +595,11 @@ def informe_pdf():
         teacher = User.query.get_or_404(teacher_id)
         entries = _build_report_individual(teacher_id, desde, hasta)
         buf = _build_recreo_pdf("individual", label, _get_institute_name(), teacher=teacher, entries=entries)
-        filename = f"recreo_{secure_filename(teacher.full_name)}_{desde.isoformat()}_{hasta.isoformat()}.pdf"
+        filename = f"recreo_{secure_filename(teacher.full_name)}_{period_part}.pdf"
     else:
         days_data = _build_report_general(desde, hasta)
         buf = _build_recreo_pdf("general", label, _get_institute_name(), days=days_data)
-        filename = f"recreo_general_{desde.isoformat()}_{hasta.isoformat()}.pdf"
+        filename = f"recreo_general_{period_part}.pdf"
 
     response = make_response(buf.getvalue())
     response.headers["Content-Type"] = "application/pdf"
