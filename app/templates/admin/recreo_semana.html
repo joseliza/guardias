@@ -42,13 +42,7 @@
 {# Leyenda y botón generar #}
 <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
   <div>
-    {% if has_assignments %}
-    <span class="text-muted small">
-      <i class="bi bi-info-circle"></i>
-      <span class="badge bg-primary" style="font-size:.65rem">Auto</span> = rotación automática;
-      <span class="badge bg-warning text-dark" style="font-size:.65rem">Manual</span> = zona cambiada manualmente.
-    </span>
-    {% else %}
+    {% if not has_assignments %}
     <span class="text-muted small"><i class="bi bi-info-circle"></i> Semana sin asignar todavía.</span>
     {% endif %}
   </div>
@@ -100,13 +94,7 @@
             {% endfor %}
           </select>
           <div class="mt-1">
-            {% if cell.assignment and cell.zone %}
-              {% if cell.is_manual %}
-                <span class="badge bg-warning text-dark" style="font-size:.6rem">Manual</span>
-              {% else %}
-                <span class="badge bg-primary" style="font-size:.6rem">Auto</span>
-              {% endif %}
-            {% elif cell.auto_zone %}
+            {% if not cell.assignment and cell.auto_zone %}
               <span class="text-muted" style="font-size:.7rem">→ {{ cell.auto_zone.name }}</span>
             {% endif %}
           </div>

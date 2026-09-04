@@ -218,7 +218,6 @@ def semana():
                 "assignment": assgn,
                 "zone": assgn.zone if assgn else None,
                 "auto_zone": auto_zone,
-                "is_manual": assgn.is_manual if assgn else False,
             }
         rows.append({"teacher": t, "days": day_cells})
 
@@ -425,7 +424,7 @@ def _build_report_individual(teacher_id, desde, hasta):
         .order_by(RecreoAssignment.assignment_date)
         .all()
     )
-    return [{"date": a.assignment_date, "zone": a.zone, "is_manual": a.is_manual} for a in assignments]
+    return [{"date": a.assignment_date, "zone": a.zone} for a in assignments]
 
 
 def _build_report_general(desde, hasta):
@@ -444,7 +443,7 @@ def _build_report_general(desde, hasta):
     )
     by_date = {}
     for a in assignments:
-        by_date.setdefault(a.assignment_date, []).append((a.zone, a.teacher, a.is_manual))
+        by_date.setdefault(a.assignment_date, []).append((a.zone, a.teacher))
     return [{"date": d, "entries": by_date[d]} for d in days if d in by_date]
 
 
@@ -536,15 +535,14 @@ def _build_recreo_pdf(scope, label, institute_name, *, teacher=None, entries=Non
         if not entries:
             pdf.cell(0, 8, "No hay guardias de recreo asignadas a este profesor en el periodo seleccionado.")
         else:
-            with pdf.table(col_widths=(60, 90, 40), headings_style=heading_style) as table:
+            with pdf.table(col_widths=(80, 110), headings_style=heading_style) as table:
                 header = table.row()
-                for h in ("Fecha", "Zona del patio", "Tipo"):
+                for h in ("Fecha", "Zona del patio"):
                     header.cell(h)
                 for e in entries:
                     row = table.row()
                     row.cell(_fecha_dia(e["date"]))
                     row.cell(e["zone"].name)
-                    row.cell("Manual" if e["is_manual"] else "Rotación automática")
     else:
         if not days:
             pdf.cell(0, 8, "No hay guardias de recreo asignadas en el periodo seleccionado.")
@@ -554,12 +552,11 @@ def _build_recreo_pdf(scope, label, institute_name, *, teacher=None, entries=Non
                 pdf.set_fill_color(230, 230, 230)
                 pdf.cell(0, 7, _fecha_dia(day["date"]), ln=True, fill=True)
                 pdf.set_font("dv", "", 10)
-                with pdf.table(col_widths=(70, 90, 30)) as table:
-                    for zone, day_teacher, is_manual in day["entries"]:
+                with pdf.table(col_widths=(85, 105)) as table:
+                    for zone, day_teacher in day["entries"]:
                         row = table.row()
                         row.cell(zone.name)
                         row.cell(day_teacher.full_name)
-                        row.cell("(manual)" if is_manual else "")
                 pdf.ln(2)
 
     return io.BytesIO(bytes(pdf.output()))
