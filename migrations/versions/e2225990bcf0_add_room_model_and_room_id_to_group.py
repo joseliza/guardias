@@ -21,6 +21,7 @@ def upgrade():
     op.create_table('rooms',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=50), nullable=False),
+    sa.Column('description', sa.String(length=200), nullable=True),
     sa.Column('active', sa.Boolean(), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')

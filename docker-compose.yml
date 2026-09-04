@@ -32,6 +32,7 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_DEFAULT_SENDER: ${MAIL_DEFAULT_SENDER:-}
       INSTITUTE_NAME: ${INSTITUTE_NAME:-IES}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@ies.es}
       TZ: Europe/Madrid
     ports:
       - "5050:5000"

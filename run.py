@@ -17,16 +17,17 @@ with app.app_context():
         from app.models.user import User as _U
         from app.extensions import db as _db
         from werkzeug.security import generate_password_hash as _gph
-        if not _U.query.filter_by(email="admin@ies.es").first():
+        _admin_email = app.config["ADMIN_EMAIL"]
+        if not _U.query.filter_by(email=_admin_email).first():
             _db.session.add(_U(
-                email="admin@ies.es", name="Admin", surname="Sistema",
+                email=_admin_email, name="Admin", surname="Sistema",
                 role="management", dev_access=True,
                 password_hash=_gph("admin1234"),
             ))
             _db.session.commit()
             import logging
             logging.getLogger(__name__).warning(
-                "Tabla users vacía al arrancar: admin@ies.es recreado con contraseña admin1234"
+                f"Tabla users vacía al arrancar: {_admin_email} recreado con contraseña admin1234"
             )
     except Exception:
         pass

@@ -19,7 +19,10 @@ from app.models.recreo import RecreoZone
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
-PROTECTED_ADMIN_EMAIL = "admin@ies.es"
+
+def _protected_admin_email():
+    """Email del admin del sistema protegido contra borrado/renombrado, configurable via ADMIN_EMAIL."""
+    return current_app.config["ADMIN_EMAIL"]
 
 
 def _require_management():
@@ -196,11 +199,11 @@ def teacher_edit(tid):
         if existing and existing.id != teacher.id:
             flash("Ya existe un usuario con ese correo electrónico.", "danger")
             return redirect(request.url)
-        is_protected_admin = teacher.email == PROTECTED_ADMIN_EMAIL
+        is_protected_admin = teacher.email == _protected_admin_email()
         teacher.name = request.form["name"].strip()
         teacher.surname = request.form["surname"].strip()
         if is_protected_admin:
-            teacher.email = PROTECTED_ADMIN_EMAIL
+            teacher.email = _protected_admin_email()
         else:
             teacher.email = email
         teacher.abbreviation = request.form.get("abbreviation", "").strip() or None
@@ -265,7 +268,7 @@ def teacher_delete(tid):
     if not _require_management():
         return redirect(url_for("dashboard.index"))
     teacher = User.query.get_or_404(tid)
-    if teacher.email == PROTECTED_ADMIN_EMAIL:
+    if teacher.email == _protected_admin_email():
         flash("El usuario administrador del sistema no puede ser eliminado.", "danger")
         return redirect(url_for("admin.teacher_edit", tid=tid))
     if teacher.id == current_user.id:
@@ -364,7 +367,7 @@ def teacher_bulk_delete():
         ids = []
 
     ids = [i for i in ids if i != current_user.id]
-    protected = User.query.filter_by(email=PROTECTED_ADMIN_EMAIL).first()
+    protected = User.query.filter_by(email=_protected_admin_email()).first()
     if protected and protected.id in ids:
         ids = [i for i in ids if i != protected.id]
         flash("El usuario administrador del sistema no puede ser eliminado y fue excluido de la selección.", "warning")

@@ -40,7 +40,7 @@ class Config:
     COURSE_START     = _points_cfg.get("course_start", "")
 
     INSTITUTE_NAME = os.getenv("INSTITUTE_NAME", "IES")
-    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@instituto.es")
+    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@ies.es")
 
     GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
