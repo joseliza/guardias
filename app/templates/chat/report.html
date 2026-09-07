@@ -18,7 +18,7 @@
           <option value="">— Rango manual —</option>
           {% for y in years %}
           <option value="{{ y.id }}" data-start="{{ y.start_date.isoformat() }}" data-end="{{ y.end_date.isoformat() }}"
-                  {% if request.args.get('year_id', type=int) == y.id %}selected{% endif %}>{{ y.name }}</option>
+                  {% if request.args.get('year_id', '')|int == y.id %}selected{% endif %}>{{ y.name }}</option>
           {% endfor %}
         </select>
       </div>
