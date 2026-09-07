@@ -72,9 +72,8 @@
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.12; }
 }
-.blink-guard-alert small.text-success {
+.blink-guard-alert .guard-name {
   animation: guardBlink 0.85s ease-in-out infinite;
-  cursor: pointer;
   border-radius: 3px;
   padding: 0 2px;
 }
@@ -143,7 +142,7 @@
       <div class="card-body py-2 px-3">
         <div class="d-flex flex-wrap gap-2">
           {% for zone, teacher in recreo_assignments %}
-          <span class="badge rounded-pill {% if teacher and teacher.id == current_user.id %}bg-primary{% else %}bg-secondary{% endif %} d-flex align-items-center gap-1 px-2 py-1" style="font-size:.8rem;font-weight:500;">
+          <span class="badge rounded-pill {% if teacher and teacher.id == current_user.id %}bg-warning text-dark{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} d-flex align-items-center gap-1 px-2 py-1" style="font-size:.8rem;font-weight:500;">
             <i class="bi bi-geo-alt-fill"></i>
             {{ zone.name }}: <span class="fw-normal ms-1">{{ teacher.display_name if teacher else '—' }}</span>
           </span>
@@ -239,27 +238,44 @@
                 {% if guard %}
                   {% set records = guard.records.all() | sort(attribute='id') %}
                   {% if guard.status == 'covered' and records %}
+                  {% set any_confirmed = records | selectattr('confirmed') | list %}
                   <div class="guard-records-list" data-guard-id="{{ guard.id }}" style="min-width:140px">
-                  <span class="badge bg-success d-block text-center mb-1">Cubierta</span>
+                  <span class="badge {{ 'bg-success' if any_confirmed else 'bg-warning text-dark' }} d-block text-center mb-1">
+                    {{ 'Cubierta' if any_confirmed else 'Asignada · sin confirmar' }}
+                  </span>
                   {% set slot_parts = s.start.split(':') %}
                   {% set ns = namespace(cur = slot_parts[0]|int * 60 + slot_parts[1]|int) %}
                   {% for rec in records %}
                   {% set rec_start = ns.cur %}
                   {% set rec_end = ns.cur + rec.effective_minutes %}
                   {% set ns.cur = rec_end %}
+                  {% set can_confirm = current_user.id == rec.teacher_id or current_user.is_management or is_display_user %}
                   <div class="d-flex align-items-center gap-1 guard-record-item" data-record-id="{{ rec.id }}"
+                       data-confirmed="{{ 'true' if rec.confirmed else 'false' }}"
                        {% if is_today and blink_guard_alert %}data-rec-start="{{ rec_start }}" data-rec-end="{{ rec_end }}"{% endif %}>
                     {% if can_manage and records | length > 1 %}
                     <span class="text-muted" style="cursor:grab;line-height:1;" title="Arrastrar para reordenar">
                       <i class="bi bi-grip-vertical"></i>
                     </span>
                     {% endif %}
-                    <small class="text-success fw-semibold">
-                      <i class="bi bi-person-check"></i> {{ rec.teacher.display_name }}
-                      <span class="badge bg-success-subtle text-success-emphasis ms-1" style="font-size:.7rem;">
-                        {{ rec_start | mins_to_hhmm }}–{{ rec_end | mins_to_hhmm }} · {{ rec.effective_minutes }} min
-                      </span>
+                    {% if not rec.confirmed and can_confirm %}
+                    <form method="POST" action="{{ url_for('guards.confirm_record', record_id=rec.id, back='dashboard') }}" class="d-inline">
+                      <button type="submit" class="btn btn-link btn-sm p-0 text-success fw-semibold text-decoration-none guard-name"
+                              title="Pulsa para confirmar que estás cubriendo esta guardia">
+                        <i class="bi bi-person-check"></i> {{ rec.teacher.display_name }}
+                      </button>
+                    </form>
+                    {% else %}
+                    <small class="text-success fw-semibold guard-name">
+                      <i class="bi bi-{{ 'patch-check-fill' if rec.confirmed else 'person-check' }}"></i> {{ rec.teacher.display_name }}
                     </small>
+                    {% endif %}
+                    {% if not rec.confirmed %}
+                    <span class="badge bg-warning text-dark" style="font-size:.65rem;">Sin confirmar</span>
+                    {% endif %}
+                    <span class="badge bg-success-subtle text-success-emphasis ms-1" style="font-size:.7rem;">
+                      {{ rec_start | mins_to_hhmm }}–{{ rec_end | mins_to_hhmm }} · {{ rec.effective_minutes }} min
+                    </span>
                     {% if can_manage %}
                     <form method="POST" action="{{ url_for('guards.remove_record', record_id=rec.id) }}"
                           onsubmit="return confirm('¿Quitar a {{ rec.teacher.display_name }} de esta guardia?')">
@@ -293,6 +309,10 @@
                   <span class="badge bg-danger d-block text-center">Pendiente</span>
                   {% endif %}
                   </div>
+                  {% elif guard.status == 'uncovered' %}
+                  <span class="badge bg-danger d-block text-center" style="min-width:120px" title="Nadie confirmó la guardia antes de que terminara el tramo">
+                    <i class="bi bi-exclamation-triangle"></i> No cubierta
+                  </span>
                   {% else %}
                   <span class="badge bg-secondary d-block text-center" style="min-width:120px">
                     {% if guard.status == 'returned' %}Reincorporado{% else %}{{ guard.status }}{% endif %}
@@ -1149,9 +1169,12 @@ markCurrentSlot(); // re-evalúa el blink ya con la solapa inicial activada
 
 {% if is_today and blink_guard_alert %}
 // ── Parpadeo de aviso al inicio de guardia ───────────────────────────────────
+// El profesor (o dirección/pantalla) debe pulsar su nombre para confirmar que
+// está cubriendo la guardia: solo eso detiene el parpadeo (y otorga los
+// puntos, en servidor). Ya no depende de localStorage: el estado confirmado
+// viene del servidor (data-confirmed) y se actualiza para todos vía
+// Socket.IO (evento 'guard_updated' → location.reload()).
 (function() {
-  const todayIso = '{{ target_date.isoformat() }}';
-
   function checkBlinks() {
     const now = new Date();
     const nowMins = now.getHours() * 60 + now.getMinutes();
@@ -1160,24 +1183,8 @@ markCurrentSlot(); // re-evalúa el blink ya con la solapa inicial activada
       const recStart  = parseInt(item.dataset.recStart);
       const recEnd    = parseInt(item.dataset.recEnd);
       const inWindow  = nowMins >= recStart && nowMins < recEnd;
-      const key       = 'guard_blink_' + item.dataset.recordId + '_' + todayIso;
-      const dismissed = !!localStorage.getItem(key);
-
-      if (inWindow && !dismissed) {
-        if (!item.classList.contains('blink-guard-alert')) {
-          item.classList.add('blink-guard-alert');
-          const nameEl = item.querySelector('small.text-success');
-          if (nameEl) {
-            nameEl.title = 'Clic para detener el aviso';
-            nameEl.addEventListener('click', function() {
-              item.classList.remove('blink-guard-alert');
-              localStorage.setItem(key, '1');
-            }, { once: true });
-          }
-        }
-      } else {
-        item.classList.remove('blink-guard-alert');
-      }
+      const confirmed = item.dataset.confirmed === 'true';
+      item.classList.toggle('blink-guard-alert', inWindow && !confirmed);
     });
   }
 

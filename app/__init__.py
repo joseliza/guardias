@@ -273,4 +273,17 @@ def create_app():
     from app.utils.mail_digest import reload_schedule
     reload_schedule(app)
 
+    from app.utils.guards import expire_unconfirmed_guards
+    try:
+        scheduler.remove_job("expire_unconfirmed_guards")
+    except Exception:
+        pass
+    scheduler.add_job(
+        expire_unconfirmed_guards,
+        "interval",
+        id="expire_unconfirmed_guards",
+        minutes=5,
+        args=[app],
+    )
+
     return app

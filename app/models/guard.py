@@ -1,8 +1,11 @@
 """
 Modelos Guard y GuardRecord.
-Guard: guardia generada por una ausencia (grupo sin profesor, estado pending/covered/returned).
+Guard: guardia generada por una ausencia (grupo sin profesor, estado pending/covered/uncovered).
 GuardRecord: asignación concreta de un profesor a una guardia, con minutos efectivos y puntos.
 Un Guard puede tener varios GuardRecord (grupos juntos o refuerzo).
+Los puntos de un GuardRecord solo se otorgan al confirmar (campo `confirmed`): hasta
+que el profesor (o dirección/pantalla en su nombre) pulsa su nombre al llegar el
+tramo, la guardia no cuenta como realmente cubierta a efectos de puntuación.
 """
 from datetime import datetime
 from app.extensions import db
@@ -57,5 +60,10 @@ class GuardRecord(db.Model):
     effective_minutes = db.Column(db.Integer, nullable=False, default=60)
     notes = db.Column(db.String(300), nullable=True)
     # Puntos calculados: minutos * multiplicador_dificultad_grupo / 60
+    # Se mantiene en 0.0 hasta que se confirma (ver `confirmed`).
     points_awarded = db.Column(db.Float, default=0.0, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # El profesor (o dirección/pantalla) debe confirmar pulsando su nombre
+    # cuando llega el tramo; solo entonces se otorgan los puntos.
+    confirmed = db.Column(db.Boolean, default=False, nullable=False)
+    confirmed_at = db.Column(db.DateTime, nullable=True)

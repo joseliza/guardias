@@ -4,6 +4,10 @@ táctil las guardias del día con controles para asignar, reasignar, eliminar
 asignaciones, marcar incorporaciones y añadir tareas. Los cambios se reflejan
 en tiempo real en todas las pantallas mediante el evento Socket.IO
 `guard_updated` (ver app/utils/realtime.py).
+
+Como en el resto del sistema, asignar aquí no otorga puntos: el profesor (o
+alguien con permiso, desde esta misma pantalla) debe confirmar pulsando su
+nombre cuando llegue el tramo (ver guards.confirm_record).
 """
 from datetime import date
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, abort
@@ -14,8 +18,8 @@ from app.models.absence import Absence
 from app.models.task import Task
 from app.models.group import Group
 from app.models.user import User
-from app.utils.points import award_guard_points
 from app.utils.guards import get_available_teachers_for_slot
+from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
 
 display_bp = Blueprint("display", __name__, url_prefix="/pantalla")
 
@@ -64,6 +68,8 @@ def index():
     from app.routes.recreo import get_recreo_for_date
     recreo_assignments = get_recreo_for_date(today) if today.weekday() < 5 else []
 
+    gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
+
     return render_template(
         "display/index.html",
         today=today,
@@ -74,6 +80,7 @@ def index():
         available_by_slot=available_by_slot,
         tasks_by_slot=tasks_by_slot,
         recreo_assignments=recreo_assignments,
+        blink_guard_alert=gcfg.get("blink_guard_alert", False),
     )
 
 
@@ -86,20 +93,16 @@ def assign(guard_id):
     effective_minutes = int(request.form.get("effective_minutes", 60))
     notes = request.form.get("notes", "")
 
-    group = Group.query.get(guard.group_id)
-    multiplier = group.difficulty_multiplier if group else 1.0
-    points = round((effective_minutes / 60) * multiplier, 2)
-
     record = GuardRecord(
         guard_id=guard.id,
         teacher_id=teacher_id,
         effective_minutes=effective_minutes,
         notes=notes,
-        points_awarded=points,
+        points_awarded=0.0,
     )
     db.session.add(record)
     guard.status = "covered"
-    award_guard_points(teacher_id, points)
+    # Sin puntos hasta que se confirme pulsando el nombre (guards.confirm_record).
     db.session.commit()
 
     return redirect(url_for("display.index"))
@@ -112,9 +115,10 @@ def remove_record(record_id):
     record = GuardRecord.query.get_or_404(record_id)
     guard = record.guard
 
-    teacher = User.query.get(record.teacher_id)
-    if teacher:
-        teacher.points = round(teacher.points - record.points_awarded, 2)
+    if record.confirmed:
+        teacher = User.query.get(record.teacher_id)
+        if teacher:
+            teacher.points = round(teacher.points - record.points_awarded, 2)
 
     db.session.delete(record)
     db.session.flush()

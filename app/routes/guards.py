@@ -4,6 +4,14 @@ a guardias, la eliminación de asignaciones con reversión de puntos, la página
 personal 'Mi guardia' y el historial de puntos con exportación CSV.
 El helper _can_manage_slot() permite que profesores de guardia actúen sobre
 su propio tramo sin necesidad de rol directivo.
+
+Los puntos de un GuardRecord no se otorgan al asignar, sino al confirmar
+(confirm_record): hasta que el profesor pulsa su nombre al llegar el tramo
+(o dirección/pantalla lo hace en su nombre), `points_awarded` se mantiene en
+0.0 y no se toca `teacher.points`. Por eso las funciones que redistribuyen
+minutos/puntos entre registros (_recalculate_guard_records, reorder_records,
+remove_record, mark_no_cover) solo ajustan teacher.points para los registros
+ya confirmados.
 """
 from datetime import date, datetime
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify
@@ -31,7 +39,9 @@ def _slot_duration(slot):
 def _recalculate_guard_records(guard, slot):
     """Redistribuye los minutos del tramo a partes iguales entre todos los records.
     Si no divide exactamente, los primeros profesores reciben un minuto extra.
-    Si el sistema de puntuación está desactivado, no recalcula ni toca puntos."""
+    Los puntos (y el saldo del profesor) solo se recalculan para records ya
+    confirmados; los pendientes de confirmar se quedan en points_awarded=0.0
+    y su valor real se calculará al confirmar."""
     records = guard.records.order_by(GuardRecord.id).all()
     if not records:
         return
@@ -49,7 +59,7 @@ def _recalculate_guard_records(guard, slot):
     for i, rec in enumerate(records):
         new_minutes = base + (1 if i < extra else 0)
         rec.effective_minutes = new_minutes
-        if points_on:
+        if points_on and rec.confirmed:
             teacher = db.session.get(User, rec.teacher_id)
             new_points = round((new_minutes / 60) * multiplier * pph, 2) if teacher and teacher.scores_points else 0.0
             if teacher:
@@ -120,19 +130,17 @@ def assign(guard_id):
         multiplier = group.difficulty_multiplier if group else 1.0
         pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
         teacher = User.query.get(teacher_id)
-        points = round((effective_minutes / 60) * multiplier * pph, 2) \
-            if (points_system_enabled() and teacher and teacher.scores_points) else 0.0
 
         db.session.add(GuardRecord(
             guard_id=guard.id,
             teacher_id=teacher_id,
             effective_minutes=effective_minutes,
             notes=notes,
-            points_awarded=points,
+            points_awarded=0.0,
         ))
         guard.status = "covered"
-        if teacher and teacher.scores_points:
-            award_guard_points(teacher_id, points)
+        # Los puntos no se otorgan aquí: el profesor debe confirmar pulsando
+        # su nombre cuando llegue el tramo (ver guards.confirm_record).
 
         # Redistribuir los minutos sobrantes entre los registros previos
         if existing_records:
@@ -143,14 +151,15 @@ def assign(guard_id):
             points_on = points_system_enabled()
             for i, rec in enumerate(existing_records):
                 new_min = base_ex + (1 if i < extra_ex else 0)
-                old_pts = rec.points_awarded
-                t_rec = db.session.get(User, rec.teacher_id)
-                new_pts = round((new_min / 60) * multiplier * pph, 2) \
-                    if (points_on and t_rec and t_rec.scores_points) else 0.0
-                if points_on and t_rec:
-                    t_rec.points = round(t_rec.points - old_pts + new_pts, 2)
                 rec.effective_minutes = new_min
-                rec.points_awarded = new_pts
+                if points_on and rec.confirmed:
+                    old_pts = rec.points_awarded
+                    t_rec = db.session.get(User, rec.teacher_id)
+                    new_pts = round((new_min / 60) * multiplier * pph, 2) \
+                        if (t_rec and t_rec.scores_points) else 0.0
+                    if t_rec:
+                        t_rec.points = round(t_rec.points - old_pts + new_pts, 2)
+                    rec.points_awarded = new_pts
 
         db.session.commit()
         flash("Guardia registrada correctamente.", "success")
@@ -178,25 +187,20 @@ def self_register(guard_id):
         effective_minutes = int(request.form.get("effective_minutes", 60))
         notes = request.form.get("notes", "")
 
-        group = Group.query.get(guard.group_id)
-        multiplier = group.difficulty_multiplier if group else 1.0
-        pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
-        points = round((effective_minutes / 60) * multiplier * pph, 2) \
-            if (points_system_enabled() and current_user.scores_points) else 0
-
         record = GuardRecord(
             guard_id=guard.id,
             teacher_id=current_user.id,
             effective_minutes=effective_minutes,
             notes=notes,
-            points_awarded=points,
+            points_awarded=0.0,
         )
         db.session.add(record)
         guard.status = "covered"
-        if current_user.scores_points:
-            award_guard_points(current_user.id, points)
+        # Igual que cualquier otra asignación: no se otorgan puntos hasta que
+        # se confirme pulsando el nombre cuando llegue el tramo.
         db.session.commit()
-        flash("Guardia registrada.", "success")
+        flash("Guardia registrada. Cuando llegue el tramo, pulsa tu nombre en el "
+              "panel para confirmar que la estás cubriendo.", "success")
         return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()) + f"#slot-{guard.slot_id}")
 
     return render_template("guards/self_register.html", guard=guard, slot=slot)
@@ -314,16 +318,20 @@ def reorder_records(guard_id):
     # Revertir puntos actuales antes del swap para no desajustar contadores
     points_on = points_system_enabled()
     for rec in records_by_id:
-        if points_on:
+        if points_on and rec.confirmed:
             teacher = db.session.get(User, rec.teacher_id)
             if teacher:
                 teacher.points = round(teacher.points - rec.points_awarded, 2)
         rec.points_awarded = 0.0
 
-    # Asignar teacher_ids en el nuevo orden sobre los registros ordenados por id
+    # Asignar teacher_ids en el nuevo orden sobre los registros ordenados por id.
+    # Como cambia de manos quién cubre cada franja, hay que exigir una nueva
+    # confirmación: no tendría sentido heredar la confirmación del profesor anterior.
     new_teacher_ids = [records_map[rid].teacher_id for rid in new_order_ids]
     for rec, new_tid in zip(records_by_id, new_teacher_ids):
         rec.teacher_id = new_tid
+        rec.confirmed = False
+        rec.confirmed_at = None
 
     db.session.flush()
     slots_cfg = current_app.config["TIME_SLOTS"]
@@ -383,7 +391,7 @@ def mark_no_cover(guard_id):
 
         for rec in records:
             new_minutes = min(elapsed, rec.effective_minutes)
-            if points_on:
+            if points_on and rec.confirmed:
                 teacher = db.session.get(User, rec.teacher_id)
                 new_points = round((new_minutes / 60) * multiplier * pph, 2) if teacher and teacher.scores_points else 0.0
                 if teacher:
@@ -408,7 +416,7 @@ def remove_record(record_id):
         flash("Sin permiso.", "danger")
         return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()))
 
-    if points_system_enabled():
+    if points_system_enabled() and record.confirmed:
         teacher = db.session.get(User, record.teacher_id)
         if teacher:
             teacher.points = round(teacher.points - record.points_awarded, 2)
@@ -431,6 +439,51 @@ def remove_record(record_id):
     if back == "my_guard":
         return redirect(url_for("guards.my_guard") + f"#slot-{guard.slot_id}")
     return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()) + f"#slot-{guard.slot_id}")
+
+
+def _redirect_back(back, guard):
+    if back == "display":
+        return redirect(url_for("display.index") + f"#slot-{guard.slot_id}")
+    if back == "my_guard":
+        return redirect(url_for("guards.my_guard") + f"#slot-{guard.slot_id}")
+    return redirect(url_for("dashboard.index", fecha=guard.date.isoformat()) + f"#slot-{guard.slot_id}")
+
+
+@guards_bp.route("/registro/<int:record_id>/confirmar", methods=["POST"])
+@login_required
+def confirm_record(record_id):
+    """Confirma que el profesor está cubriendo la guardia: solo entonces se
+    otorgan los puntos. Puede confirmar el propio profesor asignado, o
+    dirección/pantalla en su nombre (p. ej. desde la pantalla de sala)."""
+    record = GuardRecord.query.get_or_404(record_id)
+    guard = record.guard
+    back = request.form.get("back", "dashboard")
+
+    if not (current_user.id == record.teacher_id or current_user.role in ("management", "display")):
+        flash("Sin permiso para confirmar esta guardia.", "danger")
+        return _redirect_back(back, guard)
+
+    if guard.status == "uncovered":
+        flash("Esta guardia ya se marcó como no cubierta: no se puede confirmar.", "danger")
+        return _redirect_back(back, guard)
+
+    if not record.confirmed:
+        group = Group.query.get(guard.group_id)
+        multiplier = group.difficulty_multiplier if group else 1.0
+        pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
+        teacher = db.session.get(User, record.teacher_id)
+        points = round((record.effective_minutes / 60) * multiplier * pph, 2) \
+            if (points_system_enabled() and teacher and teacher.scores_points) else 0.0
+
+        record.points_awarded = points
+        record.confirmed = True
+        record.confirmed_at = datetime.utcnow()
+        if teacher and teacher.scores_points:
+            award_guard_points(record.teacher_id, points)
+        db.session.commit()
+        flash("Guardia confirmada.", "success")
+
+    return _redirect_back(back, guard)
 
 
 @guards_bp.route("/mi-guardia")

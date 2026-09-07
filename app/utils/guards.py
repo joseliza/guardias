@@ -5,13 +5,16 @@ get_available_teachers_for_slot: devuelve tres pools (guardia asignada, guardia 
   excluyendo ausentes.
 auto_assign_pending_guards: asigna automáticamente profesores del pool primario
   y, si no son suficientes, del pool EX a cada guardia pendiente del tramo.
+expire_unconfirmed_guards: tarea periódica (APScheduler) que pasa a "uncovered"
+  las guardias cuyo tramo ya terminó sin que ningún profesor asignado haya
+  confirmado pulsando su nombre (ver guards.confirm_record).
 """
-from datetime import date
+from datetime import date, datetime
 from app.models.user import User
 from app.models.schedule import TeacherSchedule
 from app.models.absence import Absence
 import random as _random
-from app.utils import guard_assign_mode, points_system_enabled
+from app.utils import guard_assign_mode
 from app.utils.school_year import get_current_school_year
 
 
@@ -215,7 +218,6 @@ def auto_assign_pending_guards(target_date: date, slot_id: int) -> dict:
     from app.extensions import db
     from app.models.guard import Guard, GuardRecord
     from app.models.group import Group
-    from app.utils.points import award_guard_points
 
     from app.models.activity import ExtraActivity
 
@@ -272,25 +274,52 @@ def auto_assign_pending_guards(target_date: date, slot_id: int) -> dict:
             unassigned += 1
             continue
 
-        group = Group.query.get(guard.group_id)
-        multiplier = group.difficulty_multiplier if group else 1.0
-        from flask import current_app
-        pph = current_app.config.get("POINTS_PER_HOUR", 1.0)
-        points = round(multiplier * pph, 2) \
-            if (points_system_enabled() and teacher.scores_points) else 0
-
         db.session.add(GuardRecord(
             guard_id=guard.id,
             teacher_id=teacher.id,
             effective_minutes=60,
             notes="Asignación automática",
-            points_awarded=points,
+            points_awarded=0.0,
         ))
         guard.status = "covered"
-        if teacher.scores_points:
-            award_guard_points(teacher.id, points)
+        # Sin puntos hasta que el profesor confirme pulsando su nombre.
         used_teacher_ids.add(teacher.id)
         assigned += 1
 
     db.session.commit()
     return {"assigned": assigned, "pending": unassigned}
+
+
+def expire_unconfirmed_guards(app):
+    """Pasa a 'uncovered' las guardias de hoy (o de días anteriores, por si el
+    proceso estuvo caído) cuyo tramo ya terminó y de las que ningún profesor
+    asignado confirmó pulsando su nombre. Pensada para ejecutarse periódicamente
+    desde el scheduler de la aplicación (ver app/__init__.py)."""
+    with app.app_context():
+        from app.extensions import db
+        from app.models.guard import Guard
+
+        now = datetime.now()
+        today = now.date()
+        slots_cfg = app.config["TIME_SLOTS"]
+        slot_end_by_id = {s["id"]: s["end"] for s in slots_cfg}
+
+        candidates = Guard.query.filter(Guard.status == "covered", Guard.date <= today).all()
+        changed = False
+        for guard in candidates:
+            end_str = slot_end_by_id.get(guard.slot_id)
+            if not end_str:
+                continue
+            eh, em = map(int, end_str.split(":"))
+            slot_end = datetime.combine(guard.date, datetime.min.time()).replace(hour=eh, minute=em)
+            if now <= slot_end:
+                continue
+            if any(rec.confirmed for rec in guard.records):
+                continue
+            guard.status = "uncovered"
+            changed = True
+
+        if changed:
+            db.session.commit()
+        else:
+            db.session.rollback()

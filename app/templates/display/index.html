@@ -55,6 +55,17 @@
     [data-slot-tab].current-time-slot.blink {
       animation: currentSlotTabBlink 0.9s ease-in-out infinite;
     }
+    {% if blink_guard_alert %}
+    @keyframes guardBlink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.12; }
+    }
+    .blink-guard-alert .guard-name {
+      animation: guardBlink 0.85s ease-in-out infinite;
+      border-radius: 3px;
+      padding: 0 2px;
+    }
+    {% endif %}
 
     /* ── Guard rows ── */
     .guard-row { padding: .5rem .75rem; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
@@ -153,11 +164,11 @@
           <div class="row g-2">
             {% for zone, teacher in recreo_assignments %}
             <div class="col-6 col-md-4">
-              <div class="border rounded px-2 py-1 small">
-                <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;">
+              <div class="border border-warning-subtle rounded px-2 py-1 small bg-warning-subtle">
+                <div class="text-warning-emphasis" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;">
                   <i class="bi bi-geo-alt-fill"></i> {{ zone.name }}
                 </div>
-                <div class="fw-semibold">{{ teacher.full_name if teacher else '—' }}</div>
+                <div class="fw-semibold text-warning-emphasis">{{ teacher.full_name if teacher else '—' }}</div>
               </div>
             </div>
             {% endfor %}
@@ -202,17 +213,38 @@
               </span>
               {% endif %}
 
+              {% set any_confirmed = guard.records | selectattr('confirmed') | list %}
               {% if guard.status == 'returned' %}
                 <span class="badge bg-secondary"><i class="bi bi-box-arrow-in-right"></i> Reincorporado</span>
-              {% elif guard.status == 'covered' %}
+              {% elif guard.status == 'uncovered' %}
+                <span class="badge bg-danger"><i class="bi bi-exclamation-triangle"></i> No cubierta (sin confirmar a tiempo)</span>
+              {% elif guard.status == 'covered' and any_confirmed %}
                 <span class="badge bg-success"><i class="bi bi-check-circle"></i> Cubierta</span>
+              {% elif guard.status == 'covered' %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Asignada · sin confirmar</span>
               {% else %}
                 <span class="badge bg-danger"><i class="bi bi-exclamation-circle"></i> Pendiente</span>
               {% endif %}
 
+              {% set slot_parts = slot.start.split(':') %}
+              {% set ns = namespace(cur = slot_parts[0]|int * 60 + slot_parts[1]|int) %}
               {% for r in guard.records %}
-              <span class="d-inline-flex align-items-center gap-1 text-primary" style="font-size:.88rem;">
-                <i class="bi bi-person"></i> {{ r.teacher.display_name }} ({{ r.effective_minutes }} min)
+              <span class="d-inline-flex align-items-center gap-1 text-primary guard-record-item" style="font-size:.88rem;"
+                    data-record-id="{{ r.id }}" data-confirmed="{{ 'true' if r.confirmed else 'false' }}"
+                    {% if blink_guard_alert %}data-rec-start="{{ ns.cur }}" data-rec-end="{{ ns.cur + r.effective_minutes }}"{% endif %}>
+                {% set ns.cur = ns.cur + r.effective_minutes %}
+                {% if not r.confirmed and guard.status != 'returned' %}
+                <form method="POST" action="{{ url_for('guards.confirm_record', record_id=r.id, back='display') }}" class="d-inline">
+                  <button type="submit" class="btn btn-link btn-sm p-0 text-primary fw-semibold text-decoration-none guard-name"
+                          title="Pulsa para confirmar que está cubriendo esta guardia">
+                    <i class="bi bi-person"></i> {{ r.teacher.display_name }}
+                  </button>
+                </form>
+                <span class="badge bg-warning text-dark" style="font-size:.65rem;">Sin confirmar</span>
+                {% else %}
+                <span class="guard-name"><i class="bi bi-{{ 'patch-check-fill text-success' if r.confirmed else 'person' }}"></i> {{ r.teacher.display_name }}</span>
+                {% endif %}
+                ({{ r.effective_minutes }} min)
                 {% if guard.status != 'returned' %}
                 <form method="POST" action="{{ url_for('display.remove_record', record_id=r.id) }}" class="d-inline"
                       onsubmit="return confirm('¿Eliminar asignación de {{ r.teacher.display_name }}?')">
@@ -558,6 +590,29 @@
     });
   });
 })();
+
+{% if blink_guard_alert %}
+// ── Parpadeo de aviso al inicio de guardia ───────────────────────────────────
+// Igual que en el panel personal: solo confirmar (pulsando el nombre) detiene
+// el parpadeo y otorga los puntos, en servidor. El estado confirmado llega
+// desde el servidor (data-confirmed) y se actualiza para todos vía
+// Socket.IO ('guard_updated' → location.reload(), más abajo).
+(function() {
+  function checkGuardBlinks() {
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    document.querySelectorAll('.guard-record-item[data-rec-start]').forEach(item => {
+      const recStart  = parseInt(item.dataset.recStart);
+      const recEnd    = parseInt(item.dataset.recEnd);
+      const inWindow  = nowMins >= recStart && nowMins < recEnd;
+      const confirmed = item.dataset.confirmed === 'true';
+      item.classList.toggle('blink-guard-alert', inWindow && !confirmed);
+    });
+  }
+  checkGuardBlinks();
+  setInterval(checkGuardBlinks, 30000);
+})();
+{% endif %}
 
 const socket = io();
 

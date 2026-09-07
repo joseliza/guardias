@@ -56,8 +56,12 @@
         {% if guard.room %}
         <span class="text-muted"><i class="bi bi-door-open"></i> {{ guard.room.name }}</span>
         {% endif %}
-        {% if guard.status == 'covered' %}
+        {% if guard.status == 'covered' and guard.records | selectattr('confirmed') | list %}
         <span class="badge bg-success">Cubierta</span>
+        {% elif guard.status == 'covered' %}
+        <span class="badge bg-warning text-dark">Asignada · sin confirmar</span>
+        {% elif guard.status == 'uncovered' %}
+        <span class="badge bg-danger">No cubierta</span>
         {% elif guard.status == 'returned' %}
         <span class="badge bg-secondary">Reincorporado</span>
         {% elif guard.group_id and guard.group_id in activity_group_ids %}
@@ -73,8 +77,9 @@
       {# Profesores asignados con botón de eliminar #}
       {% for record in guard.records %}
       <div class="d-flex align-items-center gap-2 mb-1">
-        <span><i class="bi bi-person-check text-success"></i> {{ record.teacher.display_name }}
+        <span><i class="bi bi-{{ 'patch-check-fill text-success' if record.confirmed else 'person text-muted' }}"></i> {{ record.teacher.display_name }}
           <small class="text-muted">({{ record.effective_minutes }} min)</small>
+          {% if not record.confirmed %}<span class="badge bg-warning text-dark" style="font-size:.65rem;">Sin confirmar</span>{% endif %}
         </span>
         <form method="POST" action="{{ url_for('guards.remove_record', record_id=record.id) }}" class="d-inline">
           <input type="hidden" name="back" value="my_guard">
