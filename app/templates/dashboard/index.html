@@ -512,11 +512,13 @@
         <div class="card-header d-flex justify-content-between align-items-center py-2" style="flex-shrink:0;">
           <span><i class="bi bi-list-task"></i> Tareas del día</span>
           <div class="d-flex align-items-center gap-1">
+            {% if tasks_by_slot %}
             <a href="{{ url_for('absences.day_download', date_str=target_date.isoformat(), inline=1) }}"
                onclick="return openPdfPopup(this.href)" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.7rem;"
                title="Ver PDF de todas las tareas del día">
               <i class="bi bi-file-earmark-pdf text-danger"></i> Día
             </a>
+            {% endif %}
             <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
                     data-bs-toggle="collapse" data-bs-target="#tasks-panel-dash">
               <i class="bi bi-chevron-up"></i>
