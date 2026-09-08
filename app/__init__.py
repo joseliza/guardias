@@ -165,6 +165,34 @@ def create_app():
         return {"teachers_see_group_schedules": False}
 
     @app.context_processor
+    def inject_task_prompt():
+        """Aviso de tareas pendientes tras registrar una ausencia: se computa aquí
+        (no en la vista de ausencias) para que se muestre en cualquier página,
+        incluido el panel principal al que se redirige a los profesores sin
+        perfil directivo."""
+        from flask import session as _session
+        try:
+            if current_user.is_authenticated:
+                prompt_ids = _session.get("task_prompt_ids", [])
+                if prompt_ids:
+                    from app.models.absence import Absence as _Absence
+                    _pq = _Absence.query.filter(_Absence.id.in_(prompt_ids))
+                    if not current_user.is_management:
+                        _pq = _pq.filter(_Absence.teacher_id == current_user.id)
+                    prompt_absences = [{"absence": a, "has_tasks": a.tasks.count() > 0}
+                                       for a in _pq.all()]
+                    if prompt_absences and not all(p["has_tasks"] for p in prompt_absences):
+                        slots_cfg = app.config["TIME_SLOTS"]
+                        return {
+                            "prompt_absences": prompt_absences,
+                            "prompt_slot_map": {s["id"]: s for s in slots_cfg},
+                        }
+                    _session.pop("task_prompt_ids", None)
+        except Exception:
+            pass
+        return {"prompt_absences": [], "prompt_slot_map": {}}
+
+    @app.context_processor
     def inject_presence_cfg():
         try:
             if current_user.is_authenticated:

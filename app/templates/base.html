@@ -466,6 +466,64 @@ document.querySelectorAll('input[type="date"]').forEach(function(el) {
 </div>
 {% endif %}
 
+{% if current_user.is_authenticated and prompt_absences %}
+{% set pending_count = prompt_absences | selectattr('has_tasks', 'equalto', False) | list | length %}
+<div class="modal fade" id="modalAskTasks" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          Ausencia registrada — deja tareas para el grupo
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        {% if pending_count < prompt_absences | length %}
+        <div class="alert alert-success py-2 mb-3 small">
+          <i class="bi bi-check-circle"></i>
+          {{ prompt_absences | length - pending_count }} de {{ prompt_absences | length }} tramo{{ 's' if prompt_absences | length != 1 }} con tareas añadidas.
+        </div>
+        {% endif %}
+        <div class="d-flex flex-column gap-2">
+          {% for p in prompt_absences %}
+          {% set a = p.absence %}
+          {% set s = prompt_slot_map.get(a.slot_id, {}) %}
+          <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2
+                       {{ 'border-success bg-success-subtle' if p.has_tasks else 'border-warning' }}">
+            <div>
+              <span class="fw-semibold">{{ s.get('label', 'Tramo ' ~ a.slot_id) }}</span>
+              <small class="text-muted ms-1">{{ s.get('start','') }}–{{ s.get('end','') }}</small>
+              <br><small class="text-muted">{{ a.date.strftime('%d/%m/%Y') }} · {{ a.teacher.display_name }}</small>
+            </div>
+            {% if p.has_tasks %}
+            <a href="{{ url_for('absences.tasks', absence_id=a.id) }}" class="btn btn-sm btn-outline-success ms-3">
+              <i class="bi bi-check-lg"></i> Añadir más
+            </a>
+            {% else %}
+            <a href="{{ url_for('absences.tasks', absence_id=a.id) }}" class="btn btn-sm btn-warning ms-3">
+              <i class="bi bi-exclamation-triangle"></i> Añadir tareas
+            </a>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a href="{{ url_for('absences.dismiss_task_prompt') }}" class="btn btn-outline-secondary">
+          <i class="bi bi-x-lg"></i> Descartar aviso
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  new bootstrap.Modal(document.getElementById('modalAskTasks')).show();
+});
+</script>
+{% endif %}
+
 {% if current_user.is_authenticated and current_user.is_management and not impersonating %}
 <script>
 (function() {

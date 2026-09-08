@@ -45,11 +45,6 @@ def index():
     prev_date   = target_date - timedelta(days=1)
     next_date   = target_date + timedelta(days=1)
 
-    # Modal de advertencia de tareas — persiste en sesión hasta descartar o completar
-    if request.args.get("dismiss_tasks"):
-        session.pop("task_prompt_ids", None)
-        return redirect(url_for("absences.index", fecha=target_date.isoformat()))
-
     from app.routes.admin import _read_mail_config, GENERAL_DEFAULTS
     _gcfg = {**GENERAL_DEFAULTS, **_read_mail_config().get("GENERAL", {})}
     _see_all = _gcfg.get("teachers_see_all_absences", True)
@@ -73,18 +68,6 @@ def index():
         for sid in sorted(by_slot.keys())
     ]
 
-    prompt_ids = session.get("task_prompt_ids", [])
-    prompt_absences = []
-    if prompt_ids:
-        _pq = Absence.query.filter(Absence.id.in_(prompt_ids))
-        if not current_user.is_management:
-            _pq = _pq.filter(Absence.teacher_id == current_user.id)
-        for a in _pq.all():
-            prompt_absences.append({"absence": a, "has_tasks": a.tasks.count() > 0})
-        if not prompt_absences or all(p["has_tasks"] for p in prompt_absences):
-            session.pop("task_prompt_ids", None)
-            prompt_absences = []
-
     now_t = datetime.now().time()
     active_slot_ids = set()
     past_slot_ids = set()
@@ -107,8 +90,16 @@ def index():
                            target_date=target_date, prev_date=prev_date,
                            next_date=next_date, is_today=is_today, is_editable=is_editable,
                            past_slot_ids=past_slot_ids,
-                           prompt_absences=prompt_absences,
                            active_slot_ids=active_slot_ids)
+
+
+@absences_bp.route("/descartar-tareas")
+@login_required
+def dismiss_task_prompt():
+    """Descarta el aviso de tareas pendientes (accesible a cualquier usuario,
+    no solo a directivos, ya que el aviso puede aparecer en el panel principal)."""
+    session.pop("task_prompt_ids", None)
+    return redirect(request.referrer or url_for("dashboard.index"))
 
 
 @absences_bp.route("/nueva", methods=["GET", "POST"])
