@@ -185,16 +185,16 @@
         <div class="card-header py-2 d-flex justify-content-between align-items-center
           {% if pending %}bg-danger text-white
           {% elif slot_guards %}bg-success text-white
-          {% elif slot.active %}bg-primary text-white
+          {% elif slot.id == current_slot_id %}bg-primary text-white
           {% else %}bg-light{% endif %}">
           <span>
             <strong>{{ slot.label }}</strong>
             <small class="ms-2 opacity-75">{{ slot.start }}–{{ slot.end }}</small>
-            {% if slot.active %}<span class="badge bg-white text-primary ms-2" style="font-size:.65rem;">Activo</span>{% endif %}
+            {% if slot.id == current_slot_id %}<span class="badge bg-white text-primary ms-2" style="font-size:.65rem;">Activo</span>{% endif %}
           </span>
           <a href="{{ url_for('display.print_slot', date_str=today.isoformat(), slot_id=slot.id) }}"
              target="_blank"
-             class="btn btn-sm {% if pending or slot_guards or slot.active %}btn-light{% else %}btn-outline-secondary{% endif %} py-0 px-2"
+             class="btn btn-sm {% if pending or slot_guards or slot.id == current_slot_id %}btn-light{% else %}btn-outline-secondary{% endif %} py-0 px-2"
              style="font-size:.75rem;">
             <i class="bi bi-printer"></i> Imprimir
           </a>

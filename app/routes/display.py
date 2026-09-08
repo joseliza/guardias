@@ -38,6 +38,19 @@ def index():
     slots = [s for s in current_app.config["TIME_SLOTS"] if not s["is_break"]]
     all_slots = current_app.config["TIME_SLOTS"]
 
+    from datetime import datetime as _dt
+    now_t = _dt.now().time()
+    current_slot_id = None
+    for s in slots:
+        try:
+            s_start = _dt.strptime(s["start"], "%H:%M").time()
+            s_end = _dt.strptime(s["end"], "%H:%M").time()
+            if s_start <= now_t < s_end:
+                current_slot_id = s["id"]
+                break
+        except (KeyError, ValueError):
+            pass
+
     guards = Guard.query.filter_by(date=today).order_by(Guard.slot_id).all()
     # Solo ausencias de profesores del curso vigente (las filas archivadas de
     # cursos anteriores pueden conservar ausencias antiguas).
@@ -81,6 +94,7 @@ def index():
         tasks_by_slot=tasks_by_slot,
         recreo_assignments=recreo_assignments,
         blink_guard_alert=gcfg.get("blink_guard_alert", False),
+        current_slot_id=current_slot_id,
     )
 
 
