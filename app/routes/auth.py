@@ -16,6 +16,8 @@ auth_bp = Blueprint("auth", __name__)
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
+        if current_user.role == "display":
+            return redirect(url_for("display.index"))
         return redirect(url_for("dashboard.index"))
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
@@ -24,7 +26,7 @@ def login():
         if user and user.check_password(password):
             login_user(user, remember=True)
             if user.role == "display":
-                return redirect(url_for("dashboard.index"))
+                return redirect(url_for("display.index"))
             next_page = request.args.get("next")
             return redirect(next_page or url_for("dashboard.index"))
         flash("Email o contraseña incorrectos.", "danger")

@@ -466,7 +466,7 @@ document.querySelectorAll('input[type="date"]').forEach(function(el) {
 </div>
 {% endif %}
 
-{% if current_user.is_authenticated and prompt_absences %}
+{% if current_user.is_authenticated and prompt_absences and request.endpoint != 'absences.tasks' %}
 {% set pending_count = prompt_absences | selectattr('has_tasks', 'equalto', False) | list | length %}
 <div class="modal fade" id="modalAskTasks" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog">

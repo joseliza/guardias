@@ -507,11 +507,17 @@ def tasks(absence_id):
 
     if request.method == "POST":
         group_id = int(request.form["group_id"])
-        description = request.form["description"]
+        description = request.form["description"].strip()
+        file = request.files.get("attachment")
+        has_pdf = bool(file and file.filename.lower().endswith(".pdf"))
+
+        if not description and not has_pdf:
+            flash("Escribe una descripción o adjunta un PDF.", "warning")
+            return redirect(url_for("absences.tasks", absence_id=absence.id))
+
         task = Task(absence_id=absence.id, group_id=group_id, description=description)
 
-        file = request.files.get("attachment")
-        if file and file.filename.lower().endswith(".pdf"):
+        if has_pdf:
             task.attachment = _save_task_pdf(file)
         elif file and file.filename:
             flash("Solo se permiten archivos PDF.", "warning")
@@ -552,11 +558,18 @@ def edit_task(task_id):
         flash("No tienes acceso.", "danger")
         return redirect(url_for("absences.index"))
 
-    task.group_id = int(request.form["group_id"])
-    task.description = request.form["description"]
-
+    description = request.form["description"].strip()
     file = request.files.get("attachment")
-    if file and file.filename.lower().endswith(".pdf"):
+    has_pdf = bool(file and file.filename.lower().endswith(".pdf"))
+
+    if not description and not (has_pdf or task.attachment):
+        flash("Escribe una descripción o adjunta un PDF.", "warning")
+        return redirect(url_for("absences.tasks", absence_id=absence.id))
+
+    task.group_id = int(request.form["group_id"])
+    task.description = description
+
+    if has_pdf:
         # Reemplaza el adjunto anterior si existía
         if task.attachment:
             import os

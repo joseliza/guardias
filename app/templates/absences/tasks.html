@@ -32,12 +32,12 @@
         </div>
       </div>
       <div class="mb-3">
-        <label class="form-label">Descripción de la tarea</label>
-        <textarea name="description" class="form-control" rows="3" required></textarea>
+        <label class="form-label">Descripción de la tarea <span class="text-muted" id="desc-optional-hint" hidden>(opcional si adjuntas un PDF)</span></label>
+        <textarea name="description" id="task-description" class="form-control" rows="3" required></textarea>
       </div>
       <div class="mb-3">
         <label class="form-label">Adjunto PDF <span class="text-muted">(opcional)</span></label>
-        <input type="file" name="attachment" class="form-control" accept=".pdf">
+        <input type="file" name="attachment" id="task-attachment" class="form-control" accept=".pdf">
       </div>
       {% if other_slots %}
       <div class="mb-3">
@@ -148,11 +148,12 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Descripción</label>
-            <textarea name="description" class="form-control" rows="3" required>{{ t.description }}</textarea>
+            <textarea name="description" id="task-description-{{ t.id }}" class="form-control" rows="3"
+                      {{ '' if t.attachment else 'required' }}>{{ t.description }}</textarea>
           </div>
           <div class="mb-3">
             <label class="form-label">Reemplazar PDF <span class="text-muted">(opcional)</span></label>
-            <input type="file" name="attachment" class="form-control" accept=".pdf">
+            <input type="file" name="attachment" id="task-attachment-{{ t.id }}" class="form-control" accept=".pdf">
             {% if t.attachment %}
             <small class="text-muted">Ya tiene un PDF adjunto. Si subes uno nuevo, reemplazará al actual.</small>
             {% endif %}
@@ -262,10 +263,27 @@ document.getElementById('add-task-form').addEventListener('submit', function(e) 
 });
 initPicker('group-search', 'group-select', 'group-suggestions', defaultGroupId, defaultGroupName);
 
+// La descripción solo es obligatoria si no hay (o no se adjunta) un PDF.
+function syncDescriptionRequired(fileId, descId, hintId, alreadyHasAttachment) {
+  const fileInput = document.getElementById(fileId);
+  const descInput = document.getElementById(descId);
+  const hint = hintId ? document.getElementById(hintId) : null;
+  if (!fileInput || !descInput) return;
+  function sync() {
+    const hasFile = alreadyHasAttachment || (fileInput.files && fileInput.files.length > 0);
+    descInput.required = !hasFile;
+    if (hint) hint.hidden = !hasFile;
+  }
+  fileInput.addEventListener('change', sync);
+  sync();
+}
+syncDescriptionRequired('task-attachment', 'task-description', 'desc-optional-hint', false);
+
 // Modales de edición
 {% for t in absence.tasks %}
 initPicker('group-search-{{ t.id }}', 'group-select-{{ t.id }}', 'group-suggestions-{{ t.id }}',
            {{ t.group_id }}, {{ t.group.name | tojson }});
+syncDescriptionRequired('task-attachment-{{ t.id }}', 'task-description-{{ t.id }}', null, {{ 'true' if t.attachment else 'false' }});
 {% endfor %}
 </script>
 {% endblock %}

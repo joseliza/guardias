@@ -90,6 +90,7 @@ def index():
         guards_by_slot.setdefault(g.slot_id, []).append(g)
 
     absence_groups = {}
+    absence_group_objs = {}  # absence.id → [Group, ...] (para mostrar abreviaturas)
     absence_rooms = {}
     absence_support = {}  # absence.id → lista de profesores de apoyo
     for a in day_absences:
@@ -103,6 +104,9 @@ def index():
         group = entry.group if entry else None
         # Puede haber más de un grupo (desdoble/agrupamiento): se muestran
         # todos, aunque la guardia sea una sola (misma aula, mismo profesor).
+        absence_group_objs[a.id] = TeacherSchedule.groups_for(
+            a.teacher_id, day_idx, a.slot_id, year_id
+        )
         absence_groups[a.id] = TeacherSchedule.group_names_for(
             a.teacher_id, day_idx, a.slot_id, year_id
         )
@@ -315,6 +319,7 @@ def index():
         slots_data=slots_data,
         my_guard_slot_ids=my_guard_slot_ids,
         absence_groups=absence_groups,
+        absence_group_objs=absence_group_objs,
         absence_rooms=absence_rooms,
         absence_support=absence_support,
         chat_messages=chat_messages,

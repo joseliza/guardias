@@ -212,7 +212,13 @@
             <tr{% if can_manage and guard and guard.status in ('pending', 'covered') and absence.status != 'returned' %} class="drop-guard-row" data-guard-id="{{ guard.id }}"{% endif %}>
               <td>{{ absence.teacher.display_name }}</td>
               <td>
-                <span class="badge bg-light text-dark border">{{ absence_groups[absence.id] }}</span>
+                <span class="badge bg-light text-dark border">
+                  {%- for g in absence_group_objs.get(absence.id, []) -%}
+                  {{ g.name }}{% if g.abbreviation %} <small class="text-muted">({{ g.abbreviation }})</small>{% endif %}{{ ", " if not loop.last }}
+                  {%- else -%}
+                  {{ absence_groups[absence.id] }}
+                  {%- endfor -%}
+                </span>
                 {% if absence_rooms[absence.id] %}
                 <span class="badge bg-secondary ms-1"><i class="bi bi-door-open"></i> {{ absence_rooms[absence.id] }}</span>
                 {% endif %}

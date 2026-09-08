@@ -165,11 +165,17 @@ def add_task(absence_id):
     from app.routes.absences import _save_task_pdf
     absence = Absence.query.get_or_404(absence_id)
     group_id = int(request.form["group_id"])
-    description = request.form["description"]
+    description = request.form["description"].strip()
+    file = request.files.get("attachment")
+    has_pdf = bool(file and file.filename.lower().endswith(".pdf"))
+
+    if not description and not has_pdf:
+        flash("Escribe una descripción o adjunta un PDF.", "warning")
+        return redirect(url_for("display.index"))
+
     task = Task(absence_id=absence.id, group_id=group_id, description=description)
 
-    file = request.files.get("attachment")
-    if file and file.filename.lower().endswith(".pdf"):
+    if has_pdf:
         task.attachment = _save_task_pdf(file)
 
     db.session.add(task)

@@ -205,7 +205,13 @@
             {% for guard in slot_guards %}
             {% set guard_absence = guard.absence %}
             <div class="guard-row" id="guard-{{ guard.id }}">
-              <span class="group-name">{{ guard.group_names }}</span>
+              <span class="group-name">
+                {%- for g in guard.groups -%}
+                {{ g.name }}{% if g.abbreviation %} <small class="text-muted">({{ g.abbreviation }})</small>{% endif %}{{ ", " if not loop.last }}
+                {%- else -%}
+                —
+                {%- endfor -%}
+              </span>
 
               {% if guard.room %}
               <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle" style="font-size:.78rem;">
@@ -368,11 +374,14 @@
                     <form method="POST" action="{{ url_for('display.add_task', absence_id=guard_absence.id) }}" enctype="multipart/form-data">
                       <input type="hidden" name="group_id" value="{{ guard.group_id }}">
                       <div class="mb-2">
-                        <input type="text" name="description" class="form-control form-control-sm" placeholder="Descripción de la tarea..." required>
+                        <input type="text" name="description" id="task-description-{{ guard.id }}"
+                               class="form-control form-control-sm" placeholder="Descripción de la tarea..." required>
                       </div>
                       <div class="mb-2">
-                        <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf">
-                        <small class="text-muted">PDF opcional</small>
+                        <input type="file" name="attachment" id="task-attachment-{{ guard.id }}"
+                               class="form-control form-control-sm" accept=".pdf"
+                               onchange="document.getElementById('task-description-{{ guard.id }}').required = !this.files.length;">
+                        <small class="text-muted">PDF opcional (si adjuntas uno, la descripción deja de ser obligatoria)</small>
                       </div>
                       <button type="submit" class="btn btn-sm btn-primary">Añadir</button>
                     </form>
