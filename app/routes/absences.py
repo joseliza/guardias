@@ -406,6 +406,19 @@ def _save_task_pdf(file):
     return filename
 
 
+def _copy_task_pdf(filename):
+    """Duplica un PDF adjunto ya guardado (cada tarea necesita su propio
+    fichero para poder editarse/eliminarse sin afectar a las demás)."""
+    import shutil
+    import uuid
+    from flask import current_app
+    upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
+    original_name = filename.split('_', 1)[-1] if '_' in filename else filename
+    new_filename = f"{uuid.uuid4().hex}_{original_name}"
+    shutil.copyfile(os.path.join(upload_dir, filename), os.path.join(upload_dir, new_filename))
+    return new_filename
+
+
 @absences_bp.route("/tarea/<int:task_id>/adjunto")
 @login_required
 def task_attachment(task_id):
@@ -419,6 +432,20 @@ def task_attachment(task_id):
     return send_from_directory(upload_dir, task.attachment,
                                download_name=task.attachment.split('_', 1)[-1],
                                as_attachment=False)
+
+
+def _default_group_for_absence(absence, year_id):
+    """Grupo que le correspondería a esta ausencia según el horario fijo del
+    profesor (el mismo cálculo que se usa para preseleccionar el grupo al
+    abrir el formulario de tareas)."""
+    schedule_entry = TeacherSchedule.query.filter_by(
+        teacher_id=absence.teacher_id,
+        day_of_week=absence.date.weekday(),
+        slot_id=absence.slot_id,
+        is_guard_slot=False,
+        school_year_id=year_id,
+    ).first()
+    return schedule_entry.group if schedule_entry else None
 
 
 @absences_bp.route("/<int:absence_id>/tareas", methods=["GET", "POST"])
@@ -443,14 +470,28 @@ def tasks(absence_id):
     _yid = get_current_school_year().id
     from app.utils.school_year import get_year_groups
     groups = get_year_groups(_yid)
-    schedule_entry = TeacherSchedule.query.filter_by(
-        teacher_id=absence.teacher_id,
-        day_of_week=absence.date.weekday(),
-        slot_id=absence.slot_id,
-        is_guard_slot=False,
-        school_year_id=_yid,
-    ).first()
-    default_group_id = schedule_entry.group_id if schedule_entry else None
+    default_group = _default_group_for_absence(absence, _yid)
+    default_group_id = default_group.id if default_group else None
+
+    # Otros tramos del mismo profesor ese día con un grupo resoluble, para
+    # poder aplicarles la misma tarea de un solo golpe.
+    slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
+    other_slots = []
+    other_absences = (Absence.query
+                       .filter(Absence.teacher_id == absence.teacher_id,
+                               Absence.date == absence.date,
+                               Absence.id != absence.id)
+                       .order_by(Absence.slot_id).all())
+    for other in other_absences:
+        group = _default_group_for_absence(other, _yid)
+        if not group:
+            continue
+        slot_cfg = slots_cfg.get(other.slot_id, {})
+        other_slots.append({
+            "absence_id": other.id,
+            "slot_label": slot_cfg.get("label", f"Tramo {other.slot_id}"),
+            "group_name": group.name,
+        })
 
     if request.method == "POST":
         group_id = int(request.form["group_id"])
@@ -464,12 +505,29 @@ def tasks(absence_id):
             flash("Solo se permiten archivos PDF.", "warning")
 
         db.session.add(task)
+        db.session.flush()
+
+        apply_ids = {int(i) for i in request.form.getlist("apply_to") if i.isdigit()}
+        allowed_ids = {o["absence_id"] for o in other_slots}
+        applied = 0
+        for other_id in apply_ids & allowed_ids:
+            other = next(o for o in other_absences if o.id == other_id)
+            other_group = _default_group_for_absence(other, _yid)
+            other_task = Task(absence_id=other.id, group_id=other_group.id, description=description)
+            if task.attachment:
+                other_task.attachment = _copy_task_pdf(task.attachment)
+            db.session.add(other_task)
+            applied += 1
+
         db.session.commit()
-        flash("Tarea añadida.", "success")
+        if applied:
+            flash(f"Tarea añadida y aplicada a {applied} tramo(s) más.", "success")
+        else:
+            flash("Tarea añadida.", "success")
         return redirect(url_for("absences.tasks", absence_id=absence.id))
 
     return render_template("absences/tasks.html", absence=absence, groups=groups,
-                           default_group_id=default_group_id)
+                           default_group_id=default_group_id, other_slots=other_slots)
 
 
 @absences_bp.route("/tarea/<int:task_id>/editar", methods=["POST"])

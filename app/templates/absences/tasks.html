@@ -39,6 +39,23 @@
         <label class="form-label">Adjunto PDF <span class="text-muted">(opcional)</span></label>
         <input type="file" name="attachment" class="form-control" accept=".pdf">
       </div>
+      {% if other_slots %}
+      <div class="mb-3">
+        <label class="form-label">Aplicar también a otros tramos de hoy <span class="text-muted">(opcional)</span></label>
+        <div class="border rounded p-2">
+          {% for s in other_slots %}
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="apply_to"
+                   value="{{ s.absence_id }}" id="apply-to-{{ s.absence_id }}">
+            <label class="form-check-label" for="apply-to-{{ s.absence_id }}">
+              {{ s.slot_label }} — {{ s.group_name }}
+            </label>
+          </div>
+          {% endfor %}
+        </div>
+        <small class="text-muted">Se creará esta misma tarea (con el mismo adjunto, si lo hay) para cada tramo marcado.</small>
+      </div>
+      {% endif %}
       <hr class="my-3">
       <div class="d-flex justify-content-end gap-2">
         <a href="{{ back_url('absences.index') }}" class="btn btn-outline-secondary">
