@@ -110,9 +110,22 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
         .all()
     }
 
-    # Pool EX: profesores cuya clase queda vacía porque el grupo sale completo
-    ex_guard_ids = set()
-    for act in ExtraActivity.query.filter_by(date=target_date).all():
+    # Pool EX: profesores cuya clase queda vacía porque el/los grupo(s) que
+    # imparten en este tramo salen completos en actividad extraescolar. Si el
+    # profesor da clase a la vez a más de un grupo en este tramo (desdoble o
+    # agrupamiento) y alguno de esos grupos NO sale completo, el profesor
+    # sigue impartiendo esa clase y no debe liberarse para el pool de guardia.
+    activities_today = ExtraActivity.query.filter_by(date=target_date).all()
+    covered_group_ids = set()
+    candidate_ids = set()
+    for act in activities_today:
+        if slot_id not in act.slot_id_list:
+            continue
+        for ag in act.groups:
+            if ag.whole_group:
+                covered_group_ids.add(ag.group_id)
+
+    for act in activities_today:
         if slot_id not in act.slot_id_list:
             continue
         for ag in act.groups:
@@ -125,8 +138,25 @@ def get_available_teachers_for_slot(target_date: date, slot_id: int):
                 is_guard_slot=False,
                 school_year_id=year_id,
             ).all():
-                if entry.teacher_id not in absent_ids and entry.teacher_id not in guard_slot_ids:
-                    ex_guard_ids.add(entry.teacher_id)
+                candidate_ids.add(entry.teacher_id)
+
+    ex_guard_ids = set()
+    for tid in candidate_ids:
+        if tid in absent_ids or tid in guard_slot_ids:
+            continue
+        other_entries = TeacherSchedule.query.filter_by(
+            teacher_id=tid,
+            day_of_week=day_idx,
+            slot_id=slot_id,
+            is_guard_slot=False,
+            school_year_id=year_id,
+        ).all()
+        still_teaching = any(
+            e.group_id is not None and e.group_id not in covered_group_ids
+            for e in other_entries
+        )
+        if not still_teaching:
+            ex_guard_ids.add(tid)
 
     # Pool de disponibilidad: profesores con periodo activo y clase asignada en este tramo
     availability_restrictions = {}

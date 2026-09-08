@@ -437,7 +437,9 @@ def task_attachment(task_id):
 def _default_group_for_absence(absence, year_id):
     """Grupo que le correspondería a esta ausencia según el horario fijo del
     profesor (el mismo cálculo que se usa para preseleccionar el grupo al
-    abrir el formulario de tareas)."""
+    abrir el formulario de tareas). Si el profesor tiene varios grupos a la
+    vez en ese tramo (desdoble/agrupamiento), devuelve el primero; para verlos
+    todos ver `_group_names_for_absence`."""
     schedule_entry = TeacherSchedule.query.filter_by(
         teacher_id=absence.teacher_id,
         day_of_week=absence.date.weekday(),
@@ -446,6 +448,14 @@ def _default_group_for_absence(absence, year_id):
         school_year_id=year_id,
     ).first()
     return schedule_entry.group if schedule_entry else None
+
+
+def _group_names_for_absence(absence, year_id):
+    """Nombres de todos los grupos afectados por esta ausencia en ese tramo
+    (puede haber varios por desdoble/agrupamiento), separados por coma."""
+    return TeacherSchedule.group_names_for(
+        absence.teacher_id, absence.date.weekday(), absence.slot_id, year_id
+    )
 
 
 @absences_bp.route("/<int:absence_id>/tareas", methods=["GET", "POST"])
@@ -472,6 +482,8 @@ def tasks(absence_id):
     groups = get_year_groups(_yid)
     default_group = _default_group_for_absence(absence, _yid)
     default_group_id = default_group.id if default_group else None
+    # Grupos afectados en este tramo (puede haber varios por desdoble/agrupamiento).
+    group_names = _group_names_for_absence(absence, _yid)
 
     # Otros tramos del mismo profesor ese día con un grupo resoluble, para
     # poder aplicarles la misma tarea de un solo golpe.
@@ -490,7 +502,7 @@ def tasks(absence_id):
         other_slots.append({
             "absence_id": other.id,
             "slot_label": slot_cfg.get("label", f"Tramo {other.slot_id}"),
-            "group_name": group.name,
+            "group_name": _group_names_for_absence(other, _yid),
         })
 
     if request.method == "POST":
@@ -527,7 +539,8 @@ def tasks(absence_id):
         return redirect(url_for("absences.tasks", absence_id=absence.id))
 
     return render_template("absences/tasks.html", absence=absence, groups=groups,
-                           default_group_id=default_group_id, other_slots=other_slots)
+                           default_group_id=default_group_id, other_slots=other_slots,
+                           group_names=group_names)
 
 
 @absences_bp.route("/tarea/<int:task_id>/editar", methods=["POST"])
@@ -614,14 +627,13 @@ def tasks_pdf(absence_id):
         is_guard_slot=False,
         school_year_id=get_current_school_year().id,
     ).first()
-    group = schedule_entry.group if schedule_entry else None
 
     return render_template(
         "absences/print_tasks.html",
         absence=absence,
         tasks=tasks,
         slot_label=slot_label,
-        group_name=group.name if group else "—",
+        group_name=_group_names_for_absence(absence, get_current_school_year().id),
         room_name=schedule_entry.room.name if schedule_entry and schedule_entry.room else "—",
         institute_name=_get_institute_name(),
         has_attachments=any(t.attachment for t in tasks),
@@ -643,6 +655,7 @@ def slot_pdf(date_str, slot_id):
     slot = next((s for s in slots if s["id"] == slot_id), None)
     slot_label = f"{slot['label']} ({slot['start']}-{slot['end']})" if slot else str(slot_id)
 
+    year_id = get_current_school_year().id
     entries = []
     for absence in absences:
         tasks = absence.tasks.all()
@@ -651,12 +664,11 @@ def slot_pdf(date_str, slot_id):
             day_of_week=target_date.weekday(),
             slot_id=slot_id,
             is_guard_slot=False,
-            school_year_id=get_current_school_year().id,
+            school_year_id=year_id,
         ).first()
-        group = entry.group if entry else None
         entries.append({
             "teacher_name": absence.teacher.full_name,
-            "group_name": group.name if group else "—",
+            "group_name": _group_names_for_absence(absence, year_id),
             "room_name": entry.room.name if entry and entry.room else "—",
             "tasks": tasks,
         })
@@ -693,8 +705,7 @@ def tasks_download(absence_id):
         is_guard_slot=False,
         school_year_id=get_current_school_year().id,
     ).first()
-    group = schedule_entry.group if schedule_entry else None
-    group_name = group.name if group else "-"
+    group_name = _group_names_for_absence(absence, get_current_school_year().id)
     room_name = schedule_entry.room.name if schedule_entry and schedule_entry.room else "-"
 
     upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
@@ -725,6 +736,7 @@ def slot_download(date_str, slot_id):
     slot = next((s for s in slots if s["id"] == slot_id), None)
     slot_label = f"{slot['label']} ({slot['start']}-{slot['end']})" if slot else str(slot_id)
 
+    year_id = get_current_school_year().id
     upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
     writer = PdfWriter()
 
@@ -734,10 +746,9 @@ def slot_download(date_str, slot_id):
             day_of_week=target_date.weekday(),
             slot_id=slot_id,
             is_guard_slot=False,
-            school_year_id=get_current_school_year().id,
+            school_year_id=year_id,
         ).first()
-        group = entry.group if entry else None
-        group_name = group.name if group else "-"
+        group_name = _group_names_for_absence(absence, year_id)
         room_name = entry.room.name if entry and entry.room else "-"
         _append_absence_pdf_page(writer, absence, slot_label, group_name, room_name, upload_dir, "El profesor/a no ha dejado tareas.")
 
@@ -762,6 +773,7 @@ def day_download(date_str):
         return redirect(url_for("dashboard.index"))
 
     slots_cfg = {s["id"]: s for s in current_app.config["TIME_SLOTS"]}
+    year_id = get_current_school_year().id
     upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'tasks')
     writer = PdfWriter()
 
@@ -773,10 +785,9 @@ def day_download(date_str):
             day_of_week=target_date.weekday(),
             slot_id=absence.slot_id,
             is_guard_slot=False,
-            school_year_id=get_current_school_year().id,
+            school_year_id=year_id,
         ).first()
-        group = entry.group if entry else None
-        group_name = group.name if group else "-"
+        group_name = _group_names_for_absence(absence, year_id)
         room_name = entry.room.name if entry and entry.room else "-"
         _append_absence_pdf_page(writer, absence, slot_label, group_name, room_name, upload_dir, "El profesor/a no ha dejado tareas.")
 

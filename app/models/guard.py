@@ -44,6 +44,28 @@ class Guard(db.Model):
         ).first()
         return entry.room if entry else None
 
+    @property
+    def groups(self):
+        """Todos los grupos que el profesor ausente tenía asignados en este
+        tramo: puede haber más de uno por desdoble/agrupamiento. Los alumnos
+        de todos ellos están en la misma aula y los cubre el mismo profesor
+        de guardia, así que hay una sola Guard pero puede afectar a varios
+        grupos a la vez."""
+        if not self.absence:
+            return [self.group] if self.group else []
+        from app.models.schedule import TeacherSchedule
+        from app.utils.school_year import get_current_school_year
+        year_id = get_current_school_year().id
+        groups = TeacherSchedule.groups_for(
+            self.absence.teacher_id, self.date.weekday(), self.slot_id, year_id
+        )
+        return groups or ([self.group] if self.group else [])
+
+    @property
+    def group_names(self):
+        groups = self.groups
+        return ", ".join(g.name for g in groups) if groups else "—"
+
 
 class GuardRecord(db.Model):
     """Registro de tiempo efectivo de un profesor en una guardia.

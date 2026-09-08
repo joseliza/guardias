@@ -28,3 +28,27 @@ class TeacherSchedule(db.Model):
     school_year = db.relationship("SchoolYear", foreign_keys=[school_year_id])
 
     __table_args__ = ()
+
+    @classmethod
+    def groups_for(cls, teacher_id, day_of_week, slot_id, school_year_id=None):
+        """Todos los grupos que el profesor tiene asignados en ese tramo (puede
+        haber más de uno por desdoble/agrupamiento: varias filas con el mismo
+        profesor/día/tramo). Excluye tramos de guardia oficial."""
+        q = cls.query.filter_by(
+            teacher_id=teacher_id, day_of_week=day_of_week, slot_id=slot_id,
+            is_guard_slot=False,
+        )
+        if school_year_id is not None:
+            q = q.filter_by(school_year_id=school_year_id)
+        groups = []
+        seen = set()
+        for e in q.all():
+            if e.group and e.group.id not in seen:
+                seen.add(e.group.id)
+                groups.append(e.group)
+        return groups
+
+    @classmethod
+    def group_names_for(cls, teacher_id, day_of_week, slot_id, school_year_id=None):
+        groups = cls.groups_for(teacher_id, day_of_week, slot_id, school_year_id)
+        return ", ".join(g.name for g in groups) if groups else "—"

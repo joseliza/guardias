@@ -205,7 +205,7 @@
             {% for guard in slot_guards %}
             {% set guard_absence = guard.absence %}
             <div class="guard-row" id="guard-{{ guard.id }}">
-              <span class="group-name">{{ guard.group.name if guard.group else '—' }}</span>
+              <span class="group-name">{{ guard.group_names }}</span>
 
               {% if guard.room %}
               <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle" style="font-size:.78rem;">
@@ -287,7 +287,7 @@
                 <div class="modal-content">
                   <div class="modal-header">
                     <h5 class="modal-title">
-                      {{ 'Reasignar' if guard.status == 'covered' else 'Asignar' }} – {{ guard.group.name if guard.group else '—' }}
+                      {{ 'Reasignar' if guard.status == 'covered' else 'Asignar' }} – {{ guard.group_names }}
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                   </div>
@@ -345,7 +345,7 @@
               <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                   <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-list-task"></i> Tareas – {{ guard.group.name if guard.group else '—' }}</h5>
+                    <h5 class="modal-title"><i class="bi bi-list-task"></i> Tareas – {{ guard.group_names }}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                   </div>
                   <div class="modal-body">

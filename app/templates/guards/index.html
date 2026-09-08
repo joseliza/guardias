@@ -23,7 +23,7 @@
         {% set slot = slots | selectattr('id','eq', g.slot_id) | first %}
         <tr>
           <td>{{ slot.label if slot else g.slot_id }}</td>
-          <td>{{ g.group.name if g.group else '—' }}</td>
+          <td>{{ g.group_names }}</td>
           <td><span class="badge bg-{{ 'success' if g.status=='covered' else 'danger' if g.status=='pending' else 'secondary' }}">{{ g.status }}</span></td>
           <td>
             {% for r in g.records %}

@@ -101,7 +101,11 @@ def index():
             school_year_id=year_id,
         ).first()
         group = entry.group if entry else None
-        absence_groups[a.id] = group.name if group else "—"
+        # Puede haber más de un grupo (desdoble/agrupamiento): se muestran
+        # todos, aunque la guardia sea una sola (misma aula, mismo profesor).
+        absence_groups[a.id] = TeacherSchedule.group_names_for(
+            a.teacher_id, day_idx, a.slot_id, year_id
+        )
         absence_rooms[a.id] = entry.room.name if entry and entry.room else None
         absence_support[a.id] = get_support_teachers(
             group.id if group else None, a.slot_id, target_date, a.teacher_id

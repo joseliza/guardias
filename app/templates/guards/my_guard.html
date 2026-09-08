@@ -48,11 +48,10 @@
     {% endif %}
 
     {% for guard in guards %}
-    {% set group = guard.group %}
     {% set absence = guard.absence %}
     <div class="p-3 border-bottom">
       <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-        <strong>{{ group.name if group else '—' }}</strong>
+        <strong>{{ guard.group_names }}</strong>
         {% if guard.room %}
         <span class="text-muted"><i class="bi bi-door-open"></i> {{ guard.room.name }}</span>
         {% endif %}

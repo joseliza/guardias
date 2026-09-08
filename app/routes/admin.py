@@ -2487,11 +2487,10 @@ def justification():
             q = q.filter(Absence.date <= today)
         all_absences = q.all()
         for a in all_absences:
-            entry = TeacherSchedule.query.filter_by(
-                teacher_id=a.teacher_id, day_of_week=a.date.weekday(),
-                slot_id=a.slot_id, is_guard_slot=False,
-            ).first()
-            absence_groups[a.id] = entry.group.name if entry and entry.group else "—"
+            # Puede haber más de un grupo (desdoble/agrupamiento): se muestran todos.
+            absence_groups[a.id] = TeacherSchedule.group_names_for(
+                a.teacher_id, a.date.weekday(), a.slot_id
+            )
             absences_by_date.setdefault(a.date, []).append(a)
 
     # Ausencias sin justificar para envío de correos (respeta filtro de fechas)

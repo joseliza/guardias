@@ -7,7 +7,7 @@
   <h4 class="mb-0"><i class="bi bi-clipboard-check"></i> Registrar mi guardia</h4>
   <a href="{{ back_url('dashboard.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Atrás</a>
 </div>
-<p class="text-muted mb-0">Tramo: <strong>{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</strong> — Grupo: <strong>{{ guard.group.name if guard.group else '—' }}</strong></p>
+<p class="text-muted mb-0">Tramo: <strong>{{ slot.label }} ({{ slot.start }}–{{ slot.end }})</strong> — Grupo: <strong>{{ guard.group_names }}</strong></p>
 </div>
 
 
